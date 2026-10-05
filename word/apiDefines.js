@@ -356,7 +356,51 @@ var c_oAscDocumentShortcutType = {
 	EditChart                     : 144,
 	InsertLineBreakMultilineForm  : 145,
 	MoveToNextPage                : 146,
-	MoveToPreviousPage            : 147
+	MoveToPreviousPage            : 147,
+	// Microsoft Word shortcuts (word/Editor/word-shortcuts.js)
+	IncreaseFontSizeByPoint       : 148,
+	DecreaseFontSizeByPoint       : 149,
+	ChangeCase                    : 150,
+	AllCaps                       : 151,
+	SmallCaps                     : 152,
+	SymbolFont                    : 153,
+	HangingIndent                 : 154,
+	RemoveHangingIndent           : 155,
+	ResetParagraph                : 156,
+	LineSpacingSingle             : 157,
+	LineSpacingDouble             : 158,
+	LineSpacingOneAndHalf         : 159,
+	ApplyNormalStyle              : 160,
+	PromoteHeading                : 161,
+	DemoteHeading                 : 162,
+	MoveParagraphUp               : 163,
+	MoveParagraphDown             : 164,
+	ToggleTrackRevisions          : 165,
+	InsertDateField               : 166,
+	InsertTimeField               : 167,
+	InsertPageField               : 168,
+	UnlinkField                   : 169,
+	NextField                     : 170,
+	PreviousField                 : 171,
+	ToggleFieldCode               : 172,
+	ToggleAllFieldCodes           : 173,
+	NextFootnote                  : 174,
+	PreviousFootnote              : 175,
+	OptionalHyphen                : 176,
+	ExtendSelection               : 177,
+	ShrinkSelection               : 178,
+	MoveToScreenTop               : 179,
+	MoveToScreenBottom            : 180,
+	SelectToWindowBottom          : 181,
+	SelectFloatingObject          : 182,
+	RepeatFind                    : 183,
+	ParagraphRtl                  : 184,
+	ParagraphLtr                  : 185,
+	InsertTableRowAbove           : 186,
+	InsertInvertedQuestionMark    : 187,
+	InsertInvertedExclamationMark : 188,
+	NextSpellingError             : 189,
+	SpellingAndGrammar            : 190
 };
 
 var c_oAscDocumentRefenceToType = {
@@ -536,6 +580,49 @@ prot['MoveToStartPreviousPage']       = prot.MoveToStartPreviousPage;
 prot['MoveToStartNextPage']           = prot.MoveToStartNextPage;
 prot['MoveToNextPage']                = prot.MoveToNextPage;
 prot['MoveToPreviousPage']            = prot.MoveToPreviousPage;
+prot['IncreaseFontSizeByPoint']         = prot.IncreaseFontSizeByPoint;
+prot['DecreaseFontSizeByPoint']         = prot.DecreaseFontSizeByPoint;
+prot['ChangeCase']                      = prot.ChangeCase;
+prot['AllCaps']                         = prot.AllCaps;
+prot['SmallCaps']                       = prot.SmallCaps;
+prot['SymbolFont']                      = prot.SymbolFont;
+prot['HangingIndent']                   = prot.HangingIndent;
+prot['RemoveHangingIndent']             = prot.RemoveHangingIndent;
+prot['ResetParagraph']                  = prot.ResetParagraph;
+prot['LineSpacingSingle']               = prot.LineSpacingSingle;
+prot['LineSpacingDouble']               = prot.LineSpacingDouble;
+prot['LineSpacingOneAndHalf']           = prot.LineSpacingOneAndHalf;
+prot['ApplyNormalStyle']                = prot.ApplyNormalStyle;
+prot['PromoteHeading']                  = prot.PromoteHeading;
+prot['DemoteHeading']                   = prot.DemoteHeading;
+prot['MoveParagraphUp']                 = prot.MoveParagraphUp;
+prot['MoveParagraphDown']               = prot.MoveParagraphDown;
+prot['ToggleTrackRevisions']            = prot.ToggleTrackRevisions;
+prot['InsertDateField']                 = prot.InsertDateField;
+prot['InsertTimeField']                 = prot.InsertTimeField;
+prot['InsertPageField']                 = prot.InsertPageField;
+prot['UnlinkField']                     = prot.UnlinkField;
+prot['NextField']                       = prot.NextField;
+prot['PreviousField']                   = prot.PreviousField;
+prot['ToggleFieldCode']                 = prot.ToggleFieldCode;
+prot['ToggleAllFieldCodes']             = prot.ToggleAllFieldCodes;
+prot['NextFootnote']                    = prot.NextFootnote;
+prot['PreviousFootnote']                = prot.PreviousFootnote;
+prot['OptionalHyphen']                  = prot.OptionalHyphen;
+prot['ExtendSelection']                 = prot.ExtendSelection;
+prot['ShrinkSelection']                 = prot.ShrinkSelection;
+prot['MoveToScreenTop']                 = prot.MoveToScreenTop;
+prot['MoveToScreenBottom']              = prot.MoveToScreenBottom;
+prot['SelectToWindowBottom']            = prot.SelectToWindowBottom;
+prot['SelectFloatingObject']            = prot.SelectFloatingObject;
+prot['RepeatFind']                      = prot.RepeatFind;
+prot['ParagraphRtl']                    = prot.ParagraphRtl;
+prot['ParagraphLtr']                    = prot.ParagraphLtr;
+prot['InsertTableRowAbove']             = prot.InsertTableRowAbove;
+prot['InsertInvertedQuestionMark']      = prot.InsertInvertedQuestionMark;
+prot['InsertInvertedExclamationMark']   = prot.InsertInvertedExclamationMark;
+prot['NextSpellingError']               = prot.NextSpellingError;
+prot['SpellingAndGrammar']              = prot.SpellingAndGrammar;
 prot['ScrollDown']                    = prot.ScrollDown;
 prot['ScrollUp']                      = prot.ScrollUp;
 prot['ZoomIn']                        = prot.ZoomIn;
