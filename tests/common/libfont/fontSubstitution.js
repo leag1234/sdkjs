@@ -104,6 +104,29 @@ $(function ()
 		});
 	});
 
+	QUnit.test("alternate name of the document font (w:altName), as Word", function (assert)
+	{
+		oApp.SetDocumentAltNames({"Marianne" : "Times New Roman", "Script cole" : "Courier New", "Loop A" : "Loop B", "Loop B" : "Loop A", "Bradley Hand ITC" : "Viner Hand ITC"});
+		try
+		{
+			withInstalled(["Carlito", "Liberation Serif", "Liberation Mono", "URW Gothic Ecole Metric"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Marianne"), "Liberation Serif", "alternate name, then its clone");
+				assert.strictEqual(oApp.GetSubstituteName("Script cole"), "URW Gothic Ecole Metric", "measured substitute before the alternate name");
+				assert.strictEqual(oApp.GetSubstituteName("Bradley Hand ITC"), "Bradley Hand ITC", "alternate name not installed: the font keeps its own dictionary data");
+				assert.strictEqual(oApp.GetSubstituteName("Loop A"), "Carlito", "alternate names not installed: unknown font rule");
+			});
+			withInstalled(["Times New Roman", "Marianne"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Marianne"), "Marianne", "installed font wins");
+			});
+		}
+		finally
+		{
+			oApp.SetDocumentAltNames({});
+		}
+	});
+
 	QUnit.test("known but missing font without substitute keeps the dictionary matching", function (assert)
 	{
 		withInstalled(["Carlito", "Liberation Sans"], function ()

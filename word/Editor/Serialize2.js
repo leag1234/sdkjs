@@ -75,7 +75,13 @@ var c_oSerTableTypes = {
 	CustomProperties: 18,
 	Glossary: 19,
 	Customs: 20,
-	OForm: 21
+	OForm: 21,
+	FontTable: 22
+};
+var c_oSerFontTableTypes = {
+	Font: 0,
+	Name: 1,
+	AltName: 2
 };
 var c_oSerSigTypes = {
     Version:0
@@ -8082,6 +8088,10 @@ function BinaryFileReader(doc, openParams)
 					this.Document.CustomProperties.fromStream(fileStream);
 					this.stream.FromFileStream(fileStream);
 					break;
+				case c_oSerTableTypes.FontTable:
+					this.stream.Seek2(mtiOffBits);
+					res = (new Binary_FontTableReader(this.oReadResult, this.stream)).Read();
+					break;
 				case c_oSerTableTypes.Customs:
 					this.stream.Seek2(mtiOffBits);
 					res = (new AscCommon.BinaryCustomsTableReader(this.Document.getCustomXmlManager(), this.stream)).Read();
@@ -8483,6 +8493,9 @@ function BinaryFileReader(doc, openParams)
 		if (this.oReadResult.DocumentContent.length > 0) {
 			this.Document.ReplaceContent(this.oReadResult.DocumentContent);
 			this.Document.CheckLastParagraphAfterLoad();
+		}
+		if (!this.oReadResult.bCopyPaste && AscFonts.g_fontApplication) {
+			AscFonts.g_fontApplication.SetDocumentAltNames(this.oReadResult.fontAltNames);
 		}
 		if(null !== this.oReadResult.defaultTabStop && this.oReadResult.defaultTabStop > 0) {
 			AscCommonWord.Default_Tab_Stop = this.oReadResult.defaultTabStop;
@@ -16410,6 +16423,38 @@ function Binary_CommentsTableReader(doc, oReadResult, stream, oComments)
         return res;
     };
 };
+/**
+ * Font table written by x2t (word/fontTable.xml): alternate names (w:altName) of the document fonts,
+ * stored in oReadResult.fontAltNames (font name => alternate name).
+ */
+function Binary_FontTableReader(oReadResult, stream)
+{
+	this.oReadResult = oReadResult;
+	this.stream      = stream;
+	this.bcr         = new Binary_CommonReader(this.stream);
+	this.Read = function()
+	{
+		let oThis = this;
+		return this.bcr.ReadTable(function(t, l){
+			if (c_oSerFontTableTypes.Font !== t)
+				return c_oSerConstants.ReadUnknown;
+
+			let font = {name : "", altName : ""};
+			let res = oThis.bcr.Read1(l, function(t, l){
+				if (c_oSerFontTableTypes.Name === t)
+					font.name = oThis.stream.GetString2LE(l);
+				else if (c_oSerFontTableTypes.AltName === t)
+					font.altName = oThis.stream.GetString2LE(l);
+				else
+					return c_oSerConstants.ReadUnknown;
+				return c_oSerConstants.ReadOk;
+			});
+			if (font.name && font.altName && font.name !== font.altName)
+				oThis.oReadResult.fontAltNames[font.name] = font.altName;
+			return res;
+		});
+	};
+}
 function Binary_SettingsTableReader(doc, oReadResult, stream)
 {
     this.Document = doc;
@@ -17446,6 +17491,7 @@ DocSaveParams.prototype.writeNestedReviewType = function(type, reviewInfo, fWrit
 function DocReadResult(doc) {
 	this.logicDocument = doc;
 	this.ImageMap = {};
+	this.fontAltNames = {};
 	this.oComments = {};
 	this.oDocumentComments = {};
 	this.oCommentsPlaces = {};

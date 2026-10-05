@@ -3001,24 +3001,53 @@
 			}
 		};
 
-		// Name to look for when "name" is not installed: first installed substitute of FD_Substitutes,
-		// or Word's default font for a font unknown to the font dictionary. Returns "name" otherwise.
-		this.GetSubstituteName = function(name)
+		// Alternate names of the fonts of the current document (w:altName of word/fontTable.xml).
+		this.DocumentAltNames = {};
+		this.SetDocumentAltNames = function(altNames)
 		{
-			if (!name || undefined !== AscFonts.g_map_font_index[name])
+			this.DocumentAltNames = altNames || {};
+			this.FontPickerMap = {};
+		};
+
+		// Installed font for "name": the font itself or the first installed font of FD_Substitutes; null if none.
+		this.GetInstalledSubstitute = function(name)
+		{
+			if (undefined !== AscFonts.g_map_font_index[name])
 				return name;
 
-			var oDictionary = this.g_fontDictionary;
-			var aSubstitutes = oDictionary.FD_Substitutes[name];
-			if (aSubstitutes)
+			var aSubstitutes = this.g_fontDictionary.FD_Substitutes[name];
+			for (var i = 0, nCount = aSubstitutes ? aSubstitutes.length : 0; i < nCount; ++i)
 			{
-				for (var i = 0, nCount = aSubstitutes.length; i < nCount; ++i)
-				{
-					if (undefined !== AscFonts.g_map_font_index[aSubstitutes[i]])
-						return aSubstitutes[i];
-				}
-				return name;
+				if (undefined !== AscFonts.g_map_font_index[aSubstitutes[i]])
+					return aSubstitutes[i];
 			}
+			return null;
+		};
+
+		// Name to look for when "name" is not installed: first installed substitute of FD_Substitutes,
+		// then the alternate name given by the document when it is installed (or has an installed substitute),
+		// as Word does, then Word's default font for a font unknown to the font dictionary. Returns "name"
+		// otherwise (selection by the dictionary data of "name").
+		this.GetSubstituteName = function(name)
+		{
+			if (!name)
+				return name;
+
+			var sInstalled = this.GetInstalledSubstitute(name);
+			if (sInstalled)
+				return sInstalled;
+
+			var sAltName = this.DocumentAltNames[name];
+			if (sAltName && sAltName !== name)
+			{
+				sInstalled = this.GetInstalledSubstitute(sAltName);
+				if (sInstalled)
+					return sInstalled;
+			}
+
+			var oDictionary = this.g_fontDictionary;
+			if (oDictionary.FD_Substitutes[name])
+				return name;
 
 			if (!/^[\x20-\x7E]+$/.test(name))
 				return name;
@@ -3031,7 +3060,7 @@
 			var sDefault = oDictionary.FD_UnknownFontSubstitute;
 			if (!sDefault || sDefault === name)
 				return name;
-			return this.GetSubstituteName(sDefault);
+			return this.GetInstalledSubstitute(sDefault) || sDefault;
 		};
 
 		this.GetFontFileWeb = function(name, lStyle)
