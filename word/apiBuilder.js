@@ -31717,13 +31717,30 @@
 			oDocument.TurnOff_Recalculate();
 		}
 	};
+	/**
+	 * With track changes on, records a change of paragraph, table or table row properties made
+	 * through the builder as a properties revision (as the editor does for the same change made
+	 * from the UI), and keeps a revision already present: the Api*Pr object holds a copy of the
+	 * properties without their PrChange, so setting it as is would drop the revision.
+	 */
+	function private_KeepPrChange(oElement, oNewPr)
+	{
+		oElement.private_AddPrChange();
+		if (oElement.HavePrChange() && !oNewPr.HavePrChange())
+		{
+			oNewPr = oNewPr.Copy();
+			oNewPr.PrChange   = oElement.Pr.PrChange;
+			oNewPr.ReviewInfo = oElement.Pr.ReviewInfo ? oElement.Pr.ReviewInfo.Copy() : undefined;
+		}
+		return oNewPr;
+	}
 	ApiParagraph.prototype.private_GetImpl = function()
 	{
 		return this.Paragraph;
 	};
 	ApiParagraph.prototype.OnChangeParaPr = function(oApiParaPr)
 	{
-		this.Paragraph.Set_Pr(oApiParaPr.ParaPr);
+		this.Paragraph.Set_Pr(private_KeepPrChange(this.Paragraph, oApiParaPr.ParaPr));
 		this.ParaPr = this.Paragraph.Pr.Copy();
 		oApiParaPr.ParaPr = this.Paragraph.Pr.Copy();
 	};
@@ -31795,7 +31812,7 @@
 	};
 	ApiTable.prototype.OnChangeTablePr = function(oApiTablePr)
 	{
-		this.Table.Set_Pr(oApiTablePr.TablePr);
+		this.Table.Set_Pr(private_KeepPrChange(this.Table, oApiTablePr.TablePr));
 		this.TablePr = this.Table.Pr.Copy();
 		oApiTablePr.TablePr = this.Table.Pr.Copy();
 	};
@@ -31926,7 +31943,7 @@
 	};
 	ApiTableRow.prototype.OnChangeTableRowPr = function(oApiTableRowPr)
 	{
-		this.Row.Set_Pr(oApiTableRowPr.RowPr);
+		this.Row.Set_Pr(private_KeepPrChange(this.Row, oApiTableRowPr.RowPr));
 		this.RowPr = this.Row.Pr.Copy();
 		oApiTableRowPr.RowPr = this.Row.Pr.Copy();
 	};

@@ -10121,7 +10121,19 @@ background-repeat: no-repeat;\
 		var oResult = {};
 		var oLogicDocument = this.WordControl.m_oLogicDocument;
 		var oTableId = oLogicDocument.GetTableId ? oLogicDocument.GetTableId() : null;
-		var oAllChanges = oLogicDocument.TrackRevisionsManager.Get_AllChanges();
+		// Undoing a row insertion or deletion does not recheck the table: its row changes would stay
+		// listed. Recheck the tables that have changes before reading them.
+		var oManager = oLogicDocument.TrackRevisionsManager;
+		if (oTableId)
+		{
+			for (var sId in oManager.Changes)
+			{
+				var oTable = oTableId.Get_ById(sId);
+				if (oTable && oTable instanceof AscWord.CTable && oTable.IsUseInDocument && oTable.IsUseInDocument())
+					oManager.CheckElement(oTable);
+			}
+		}
+		var oAllChanges = oManager.Get_AllChanges();
 		for (var ParaId in oAllChanges)
 		{
 			// The manager keeps the changes of elements removed from the document (e.g. by an undo):
