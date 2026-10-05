@@ -39,6 +39,7 @@ var EditorSkins = {
 
 		BackgroundColor           : "#EEEEEE",
 		PageOutline               : "#BBBEC2",
+		PageShadow                : "rgba(0,0,0,0)",
 
 		RulerDark                 : "#D9D9D9",
 		RulerLight                : "#FFFFFF",
@@ -189,6 +190,7 @@ var EditorSkins = {
 
 		BackgroundColor           : "#666666",
 		PageOutline               : "#BBBEC2",
+		PageShadow                : "rgba(0,0,0,0)",
 
 		RulerDark                 : "#373737",
 		RulerLight                : "#555555",
@@ -356,6 +358,7 @@ function updateGlobalSkinColors(theme)
 	var colorMap = {
 		BackgroundColor                : "canvas-background",
 		PageOutline                    : "canvas-page-border",
+		PageShadow                     : "canvas-page-shadow",
 
 		RulerDark                      : "canvas-ruler-margins-background",
 		RulerLight                     : "canvas-ruler-background",
