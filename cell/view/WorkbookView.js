@@ -104,6 +104,12 @@
 			this.header.editorBorder = this.getCColor(AscCommon.GlobalSkin.EditorBorder);
 			this.header.cornerColor = this.getCColor(AscCommon.GlobalSkin.SelectAllIcon);
 			this.header.cornerColorSheetView = this.getCColor(AscCommon.GlobalSkin.SheetViewSelectAllIcon);
+			this.updateSelectionColor();
+		};
+		// the theme may give the selection outline its accent colour (canvas-cell-selection-border)
+		this.updateSelectionColor = function () {
+			var c = AscCommon.GlobalSkin.CellSelectionBorder;
+			this.activeCellBorderColor = c ? this.getCColor(c) : new CColor(72, 121, 92);
 		};
 		this._generateStyle = function () {
 			return [// Header colors
@@ -119,7 +125,7 @@
 				}, { // kHeaderActive
 					background: this.getCColor(AscCommon.GlobalSkin.BackgroundActive),
 					border: this.getCColor(AscCommon.GlobalSkin.BorderActive),
-					color: this.getCColor(AscCommon.GlobalSkin.ColorActive),
+					color: this.getCColor(AscCommon.GlobalSkin.ColorActiveAccent || AscCommon.GlobalSkin.ColorActive),
 					backgroundDark: this.getCColor(AscCommon.GlobalSkin.SheetViewCellBackgroundPressed),
 					colorDark: this.getCColor(AscCommon.GlobalSkin.ColorDarkActive),
 					colorFiltering: this.getCColor(AscCommon.GlobalSkin.ColorFiltering),
@@ -152,6 +158,7 @@
 			}, padding: -1 /*px horizontal padding*/
 		};
 		this.activeCellBorderColor = new CColor(72, 121, 92);
+		this.updateSelectionColor();
 		this.activeCellBorderColor2 = new CColor(255, 255, 255, 1);
 		this.findFillColor = new CColor(255, 238, 128, 1);
 

@@ -179,7 +179,9 @@ var EditorSkins = {
 		EditorBorder             : "#cbcbcb",
 
 		SelectAllIcon            : "#999999",
-		SheetViewSelectAllIcon   : "#3D664E"
+		SheetViewSelectAllIcon   : "#3D664E",
+		ColorActiveAccent        : "",
+		CellSelectionBorder      : ""
 	},
 	"theme-dark" : {
 		Name                      : "theme-dark",
@@ -329,7 +331,9 @@ var EditorSkins = {
 		EditorBorder             : "#2a2a2a",
 
 		SelectAllIcon            : "#888888",
-		SheetViewSelectAllIcon   : "#3D664E"
+		SheetViewSelectAllIcon   : "#3D664E",
+		ColorActiveAccent        : "",
+		CellSelectionBorder      : ""
 	}
 };
 
@@ -468,7 +472,11 @@ function updateGlobalSkinColors(theme)
 		EditorBorder                    : "border-toolbar",
 
 		SelectAllIcon                   : "canvas-select-all-icon",
-		SheetViewSelectAllIcon          : "canvas-sheet-view-select-all-icon"
+		SheetViewSelectAllIcon          : "canvas-sheet-view-select-all-icon",
+		// optional theme tokens: header text of the selected rows/columns and the
+		// selection outline (default: the stock colours)
+		ColorActiveAccent               : "canvas-cell-title-text-selected",
+		CellSelectionBorder             : "canvas-cell-selection-border"
 	};
 
 	// корректируем цвета для старого хрома:
