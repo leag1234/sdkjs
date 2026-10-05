@@ -2098,6 +2098,35 @@ PreMoveState.prototype =
     }
 };
 
+/**
+ * Adds the top of the first line of every body paragraph shown on the page to the vertical
+ * snap positions of a drag (Word's alignment guides for paragraphs).
+ */
+function AddParagraphTopsToSnapArray(logicDocument, pageIndex, snapArray)
+{
+    if (!logicDocument || !logicDocument.Content || !logicDocument.Pages || !logicDocument.Pages[pageIndex])
+        return;
+    var page = logicDocument.Pages[pageIndex];
+    var start = page.Pos, end = page.EndPos;
+    if (!AscFormat.isRealNumber(start) || !AscFormat.isRealNumber(end))
+        return;
+    for (var index = start; index <= end && index < logicDocument.Content.length && snapArray.length < 200; ++index)
+    {
+        var element = logicDocument.Content[index];
+        if (!element || !element.IsParagraph || !element.IsParagraph())
+            continue;
+        for (var curPage = 0; curPage < element.Pages.length; ++curPage)
+        {
+            if (element.GetAbsolutePage(curPage) !== pageIndex)
+                continue;
+            var paraPage = element.Pages[curPage];
+            var line = element.Lines[paraPage.StartLine];
+            if (line && paraPage.EndLine >= paraPage.StartLine)
+                snapArray.push(paraPage.Y + line.Y - line.Metrics.Ascent);
+        }
+    }
+}
+
 function MoveState(drawingObjects, majorObject, startX, startY)
 {
     this.drawingObjects = drawingObjects;
@@ -2172,6 +2201,10 @@ MoveState.prototype =
             snapVerArray.push(page.Margins.Top);
             snapVerArray.push(page.Margins.Bottom);
             snapVerArray.push(page.Height/2);
+            // Word also aligns a dragged object with the top of the paragraphs of the page
+            AscFormat.ExecuteNoHistory(function () {
+                AddParagraphTopsToSnapArray(this.drawingObjects.document, pageIndex, snapVerArray);
+            }, this, []);
         }
         
         if(result_x === this.startX)

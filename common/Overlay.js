@@ -229,6 +229,30 @@
             this.Show();
         },
 
+        // Solid alignment guide between two points of the overlay (CSS pixels), like the
+        // green guides Word shows while an object is dragged
+        AlignmentGuide : function(x0, y0, x1, y1, color)
+        {
+            var rPR = AscCommon.AscBrowser.retinaPixelRatio;
+            var ctx = this.m_oContext;
+            var _old_global = ctx.globalAlpha;
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = Math.max(1, Math.round(rPR));
+            var indent = 0.5 * ctx.lineWidth;
+            x0 = ((x0 * rPR + indent) >> 0) + indent; x1 = ((x1 * rPR + indent) >> 0) + indent;
+            y0 = ((y0 * rPR + indent) >> 0) + indent; y1 = ((y1 * rPR + indent) >> 0) + indent;
+            this.CheckPoint(x0 - 1, y0 - 1);
+            this.CheckPoint(x1 + 1, y1 + 1);
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+            ctx.beginPath();
+            this.Show();
+            ctx.globalAlpha = _old_global;
+        },
+
         VertLine2 : function(position)
         {
             var rPR = AscCommon.AscBrowser.retinaPixelRatio;
