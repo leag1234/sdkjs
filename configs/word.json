@@ -345,6 +345,7 @@
 			"word/Editor/custom-xml/data-binding.js",
 			"word/Editor/Merge.js",
 			"word/Editor/Shortcuts.js",
+			"word/Editor/word-shortcuts.js",
 
 			"word/Editor/sections/document-sections.js",
 			"word/Editor/sections/footnote-pr.js",

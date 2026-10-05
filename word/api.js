@@ -3318,6 +3318,7 @@ background-repeat: no-repeat;\
 	};
 	asc_docs_api.prototype.asc_findText = function(oProps, isNext, callback)
 	{
+		this.lastFindProps = oProps; // Shift+F4 repeats the last search
 		var result = 0;
 		var CurMatchIdx = 0;
 		var isAsync = false;

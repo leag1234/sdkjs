@@ -304,6 +304,107 @@
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.ShowAll].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.ShowAll, keyCodes.Numpad8, true, true, false, false));
 	}
 
+	// Microsoft Word bindings (support.microsoft.com, "Keyboard shortcuts in Word"):
+	// the commands of word/Editor/word-shortcuts.js and the keys Word uses differently.
+	(function()
+	{
+		const T = Asc.c_oAscDocumentShortcutType;
+		const isMac = AscCommon.AscBrowser.isMacOs;
+		const KeySlash = 191;
+		function S(type, keyCode, ctrl, shift, alt, cmd)
+		{
+			return new AscShortcut(type, keyCode, !!ctrl, !!shift, !!alt, !!cmd);
+		}
+		function set(type, list)
+		{
+			c_oAscDefaultShortcuts[type] = list;
+			c_oAscUnlockedShortcutActionTypes[type] = true;
+		}
+		// [type, Windows/Linux keys, macOS keys]; a key is [keyCode, ctrl, shift, alt, cmd]
+		const bindings = [
+			[T.IncreaseFontSize,              [[keyCodes.Period, 1, 1]],                         [[keyCodes.Period, 0, 1, 0, 1]]],
+			[T.DecreaseFontSize,              [[keyCodes.Comma, 1, 1]],                          [[keyCodes.Comma, 0, 1, 0, 1]]],
+			[T.IncreaseFontSizeByPoint,       [[keyCodes.BracketRight, 1]],                      [[keyCodes.BracketRight, 0, 0, 0, 1]]],
+			[T.DecreaseFontSizeByPoint,       [[keyCodes.BracketLeft, 1]],                       [[keyCodes.BracketLeft, 0, 0, 0, 1]]],
+			[T.Subscript,                     [[keyCodes.KeyMinus, 1, 1]],                       [[keyCodes.KeyMinus, 0, 1, 0, 1]]],
+			[T.Superscript,                   [[keyCodes.KeyEqual, 1, 1]],                       [[keyCodes.KeyEqual, 0, 1, 0, 1]]],
+			[T.NonBreakingHyphen,             [[keyCodes.KeyMinus, 0, 1, 1]],                    [[keyCodes.KeyMinus, 0, 1, 1]]],
+			[T.EmDash,                        [[keyCodes.NumpadMinus, 1, 0, 1]],                 []],
+			[T.OptionalHyphen,                [[keyCodes.KeyMinus, 1, 0, 1]],                    [[keyCodes.KeyMinus, 0, 0, 1, 1]]],
+			[T.ApplyHeading1,                 [[keyCodes.Digit1, 1, 0, 1]],                      [[keyCodes.Digit1, 0, 0, 1, 1]]],
+			[T.ApplyHeading2,                 [[keyCodes.Digit2, 1, 0, 1]],                      [[keyCodes.Digit2, 0, 0, 1, 1]]],
+			[T.ApplyHeading3,                 [[keyCodes.Digit3, 1, 0, 1]],                      [[keyCodes.Digit3, 0, 0, 1, 1]]],
+			[T.Strikeout,                     [],                                                [[keyCodes.KeyX, 0, 1, 0, 1]]],
+			[T.InsertFootnoteNow,             [[keyCodes.KeyF, 1, 0, 1]],                        [[keyCodes.KeyF, 0, 0, 1, 1]]],
+			[T.InsertEndnoteNow,              [[keyCodes.KeyD, 1, 0, 1]],                        [[keyCodes.KeyE, 0, 0, 1, 1]]],
+			[T.EuroSign,                      [[keyCodes.KeyE, 1, 0, 1]],                        []],
+			[T.EditUndo,                      [[keyCodes.KeyZ, 1]],                              [[keyCodes.KeyZ, 0, 0, 0, 1], [keyCodes.F1]]],
+			[T.ShowAll,                       [[keyCodes.Digit8, 1, 1], [keyCodes.Numpad8, 1, 1]], [[keyCodes.Digit8, 0, 1, 0, 1], [keyCodes.Digit8, 0, 0, 0, 1]]],
+			[T.NonBreakingSpace,              [[keyCodes.Space, 1, 1]],                          [[keyCodes.Space, 0, 1, 0, 1], [keyCodes.Space, 0, 0, 1]]],
+			[T.Indent,                        [[keyCodes.KeyM, 1]],                              [[keyCodes.KeyM, 1, 1], [keyCodes.KeyM, 0, 0, 0, 1]]],
+			[T.UnIndent,                      [[keyCodes.KeyM, 1, 1]],                           [[keyCodes.KeyM, 0, 1, 0, 1]]],
+			[T.InsertPageNumber,              [[keyCodes.KeyP, 1, 1]],                           [[keyCodes.KeyP, 0, 1, 0, 1]]],
+			[T.ChangeCase,                    [[keyCodes.F3, 0, 1]],                             [[keyCodes.F3, 0, 1]]],
+			[T.AllCaps,                       [[keyCodes.KeyA, 1, 1]],                           [[keyCodes.KeyA, 0, 1, 0, 1]]],
+			[T.SmallCaps,                     [[keyCodes.KeyK, 1, 1]],                           [[keyCodes.KeyK, 0, 1, 0, 1]]],
+			[T.SymbolFont,                    [[keyCodes.KeyQ, 1, 1]],                           []],
+			[T.HangingIndent,                 [[keyCodes.KeyT, 1]],                              [[keyCodes.KeyT, 0, 0, 0, 1]]],
+			[T.RemoveHangingIndent,           [[keyCodes.KeyT, 1, 1]],                           [[keyCodes.KeyT, 0, 1, 0, 1]]],
+			[T.ResetParagraph,                [[keyCodes.KeyQ, 1]],                              []],
+			[T.LineSpacingSingle,             [[keyCodes.Digit1, 1]],                            [[keyCodes.Digit1, 0, 0, 0, 1]]],
+			[T.LineSpacingDouble,             [[keyCodes.Digit2, 1]],                            [[keyCodes.Digit2, 0, 0, 0, 1]]],
+			[T.LineSpacingOneAndHalf,         [[keyCodes.Digit5, 1]],                            [[keyCodes.Digit5, 0, 0, 0, 1]]],
+			[T.ApplyNormalStyle,              [[keyCodes.KeyN, 1, 1]],                           [[keyCodes.KeyN, 0, 1, 0, 1]]],
+			[T.PromoteHeading,                [[keyCodes.ArrowLeft, 0, 1, 1]],                   [[keyCodes.ArrowLeft, 1, 1]]],
+			[T.DemoteHeading,                 [[keyCodes.ArrowRight, 0, 1, 1]],                  [[keyCodes.ArrowRight, 1, 1]]],
+			[T.MoveParagraphUp,               [[keyCodes.ArrowUp, 0, 1, 1]],                     [[keyCodes.ArrowUp, 1, 1]]],
+			[T.MoveParagraphDown,             [[keyCodes.ArrowDown, 0, 1, 1]],                   [[keyCodes.ArrowDown, 1, 1]]],
+			[T.ToggleTrackRevisions,          [[keyCodes.KeyE, 1, 1]],                           [[keyCodes.KeyE, 0, 1, 0, 1]]],
+			[T.InsertDateField,               [[keyCodes.KeyD, 0, 1, 1]],                        [[keyCodes.KeyD, 1, 1]]],
+			[T.InsertTimeField,               [[keyCodes.KeyT, 0, 1, 1]],                        [[keyCodes.KeyT, 1, 1]]],
+			[T.InsertPageField,               [[keyCodes.KeyP, 0, 1, 1]],                        [[keyCodes.KeyP, 1, 1]]],
+			[T.UnlinkField,                   [[keyCodes.F9, 1, 1]],                             [[keyCodes.F9, 0, 1, 0, 1]]],
+			[T.NextField,                     [[keyCodes.F11], [keyCodes.F1, 0, 0, 1]],          []],
+			[T.PreviousField,                 [[keyCodes.F11, 0, 1], [keyCodes.F1, 0, 1, 1]],    []],
+			[T.ToggleFieldCode,               [[keyCodes.F9, 0, 1]],                             [[keyCodes.F9, 0, 1]]],
+			[T.ToggleAllFieldCodes,           [[keyCodes.F9, 0, 0, 1]],                          [[keyCodes.F9, 0, 0, 1]]],
+			[T.NextFootnote,                  [[keyCodes.Period, 0, 1, 1]],                      []],
+			[T.PreviousFootnote,              [[keyCodes.Comma, 0, 1, 1]],                       []],
+			[T.ExtendSelection,               [[keyCodes.F8]],                                   [[keyCodes.F8]]],
+			[T.ShrinkSelection,               [[keyCodes.F8, 0, 1]],                             [[keyCodes.F8, 0, 1]]],
+			[T.MoveToScreenTop,               [[keyCodes.PageUp, 1, 0, 1]],                      []],
+			[T.MoveToScreenBottom,            [[keyCodes.PageDown, 1, 0, 1]],                    []],
+			[T.SelectToWindowBottom,          [[keyCodes.PageDown, 1, 1, 1]],                    [[keyCodes.PageDown, 0, 1, 1, 1]]],
+			[T.SelectFloatingObject,          [[keyCodes.Digit5, 1, 0, 1]],                      []],
+			[T.RepeatFind,                    [[keyCodes.F4, 0, 1]],                             [[keyCodes.F4, 0, 1], [keyCodes.F4, 0, 1, 0, 1]]],
+			[T.ParagraphRtl,                  [],                                                [[keyCodes.ArrowLeft, 1, 0, 0, 1]]],
+			[T.ParagraphLtr,                  [],                                                [[keyCodes.ArrowRight, 1, 0, 0, 1]]],
+			[T.InsertTableRowAbove,           [],                                                [[keyCodes.KeyI, 1, 0, 0, 1]]],
+			[T.InsertInvertedQuestionMark,    [[KeySlash, 1, 1, 1]],                             []],
+			[T.InsertInvertedExclamationMark, [[keyCodes.Digit1, 1, 1, 1]],                      []],
+			[T.NextSpellingError,             [[keyCodes.F7, 0, 0, 1]],                          [[keyCodes.F7, 0, 0, 1]]],
+			[T.SpellingAndGrammar,            [[keyCodes.F7]],                                   [[keyCodes.F7], [keyCodes.KeyL, 0, 0, 1, 1]]]
+		];
+		for (let i = 0; i < bindings.length; ++i)
+		{
+			let type = bindings[i][0];
+			let keys = bindings[i][isMac ? 2 : 1];
+			set(type, keys.map(function(k) { return S(type, k[0], k[1], k[2], k[3], k[4]); }));
+		}
+		// Not Word: Alt+H is the Home tab KeyTip, Word inserts a comment with Ctrl+Alt+M
+		c_oAscDefaultShortcuts[T.OpenCommentField] = [isMac ? S(T.OpenCommentField, keyCodes.KeyA, 0, 0, 1, 1) : S(T.OpenCommentField, keyCodes.KeyM, 1, 0, 1)];
+		if (!isMac)
+		{
+			c_oAscDefaultShortcuts[T.MoveToStartPreviousPage] = [S(T.MoveToStartPreviousPage, keyCodes.PageUp, 0, 0, 1)];
+			c_oAscDefaultShortcuts[T.MoveToStartNextPage] = [S(T.MoveToStartNextPage, keyCodes.PageDown, 0, 0, 1)];
+		}
+		else
+		{
+			// F1 is Undo in Word for Mac
+			delete c_oAscDefaultShortcuts[T.OpenHelpMenu];
+		}
+	})();
+
 	if (window["AscDesktopEditor"]) {
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.NextFileTab] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.NextFileTab, keyCodes.Tab, true, false, false, false)];
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.PreviousFileTab] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.PreviousFileTab, keyCodes.Tab, true, true, false, false)];
@@ -611,7 +712,7 @@
 			case Asc.c_oAscDocumentShortcutType.MoveToPreviousPage:
 				return "MoveToPreviousPage";
 			default:
-				return null;
+				return getNameByEnumValue(type);
 		}
 	}
 
@@ -910,8 +1011,16 @@
 			case "MoveToPreviousPage":
 				return Asc.c_oAscDocumentShortcutType.MoveToPreviousPage;
 			default:
-				return null;
+				return Asc.c_oAscDocumentShortcutType.hasOwnProperty(str) ? Asc.c_oAscDocumentShortcutType[str] : null;
 		}
+	}
+
+	function getNameByEnumValue(type) {
+		for (let name in Asc.c_oAscDocumentShortcutType) {
+			if (Asc.c_oAscDocumentShortcutType.hasOwnProperty(name) && Asc.c_oAscDocumentShortcutType[name] === type)
+				return name;
+		}
+		return null;
 	}
 
 	window["Asc"]["c_oAscDefaultShortcuts"] = window["Asc"].c_oAscDefaultShortcuts = c_oAscDefaultShortcuts;
