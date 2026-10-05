@@ -1066,6 +1066,21 @@ CPage.prototype.Draw = function (context, xDst, yDst, wDst, hDst, api)
 	if (!g_page_outline_inner)
 		strokeColor = GlobalSkin.PageOutline;
 
+	// soft page shadow (theme token canvas-page-shadow, none by default): a plain
+	// rectangle drawn under the page, so the shadow is not computed from the page image
+	var pageShadow = GlobalSkin.PageShadow;
+	if (pageShadow && "rgba(0,0,0,0)" !== pageShadow && !(api && api.isDarkMode))
+	{
+		var shadowRatio = AscCommon.AscBrowser.retinaPixelRatio;
+		context.save();
+		context.shadowColor = pageShadow;
+		context.shadowBlur = 6 * shadowRatio;
+		context.shadowOffsetY = shadowRatio;
+		context.fillStyle = "#FFFFFF";
+		context.fillRect(xDst, yDst, wDst, hDst);
+		context.restore();
+	}
+
 	if (null != this.drawingPage.cachedImage)
 	{
 		// потом посмотреть на кусочную отрисовку
