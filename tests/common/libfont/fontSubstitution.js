@@ -25,7 +25,8 @@
 
 "use strict";
 
-// Font substitution (map.js, CApplicationFonts.GetSubstituteName).
+// Font substitution (map.js, CApplicationFonts.GetSubstituteName) and symbol-font
+// code-to-Unicode replacement (CheckReplaceGlyphsMap / GetReplaceGlyph).
 $(function ()
 {
 	const oApp = AscFonts.g_fontApplication;
@@ -64,6 +65,7 @@ $(function ()
 			assert.strictEqual(oApp.GetSubstituteName("Arial"), "Liberation Sans");
 			assert.strictEqual(oApp.GetSubstituteName("Georgia"), "Gelasio");
 			assert.strictEqual(oApp.GetSubstituteName("Century Gothic"), "URW Gothic");
+			assert.strictEqual(oApp.GetSubstituteName("Wingdings"), "Symbola");
 		});
 		withInstalled(["Comic Neue"], function ()
 		{
@@ -92,5 +94,41 @@ $(function ()
 			assert.strictEqual(oApp.GetSubstituteName("Tahoma"), "Tahoma", "selection by panose/metrics as before");
 			assert.strictEqual(oApp.GetSubstituteName("Book Antiqua"), "Book Antiqua", "listed substitute not installed");
 		});
+	});
+
+	QUnit.module("Symbol fonts");
+
+	function replace(sFont, sDst, nCode)
+	{
+		const oDst = {Name : sDst};
+		const oReplace = oApp.CheckReplaceGlyphsMap(sFont, oDst);
+		return oReplace ? oApp.GetReplaceGlyph(nCode, oReplace) : nCode;
+	}
+
+	QUnit.test("Wingdings codes become Unicode symbols on a substitute", function (assert)
+	{
+		assert.strictEqual(replace("Wingdings", "Symbola", 0xF04A), 0x263A, "w:sym F04A: smiley");
+		assert.strictEqual(replace("Wingdings", "Symbola", 0x4B), 0x1F610, "code 4B: neutral face");
+		assert.strictEqual(replace("Wingdings", "Symbola", 0x4C), 0x2639, "code 4C: frowning face");
+		assert.strictEqual(replace("Wingdings", "Symbola", 0xFC), 0x2713, "check mark");
+		assert.strictEqual(replace("Wingdings", "Symbola", 0x20), 0x20, "space unchanged");
+		assert.strictEqual(replace("Wingdings", "Symbola", 0x2192), 0x2192, "Unicode text unchanged");
+		assert.strictEqual(replace("Wingdings", "OpenSymbol", 0x6C), 0xE12C, "OpenSymbol keeps its own bullet glyph");
+		assert.strictEqual(replace("Wingdings", "OpenSymbol", 0x4A), 0x263A, "other codes mapped on OpenSymbol too");
+		assert.strictEqual(replace("Wingdings 2", "Symbola", 0x50), 0x1F5F8, "Wingdings 2 check mark");
+		assert.strictEqual(replace("Webdings", "Symbola", 0x61), 0x2714, "Webdings heavy check mark");
+	});
+
+	QUnit.test("installed symbol font is left alone", function (assert)
+	{
+		assert.strictEqual(replace("Wingdings", "Wingdings", 0xF04A), 0xF04A);
+		assert.strictEqual(replace("Symbol", "Symbol", 0xF061), 0xF061);
+	});
+
+	QUnit.test("Symbol codes become Unicode", function (assert)
+	{
+		assert.strictEqual(replace("Symbol", "Liberation Serif", 0xF061), 0x03B1, "alpha");
+		assert.strictEqual(replace("Symbol", "Liberation Serif", 0xB7), 0x2022, "bullet");
+		assert.strictEqual(replace("Symbol", "OpenSymbol", 0xB7), 0xE12C, "OpenSymbol bullet glyph");
 	});
 });
