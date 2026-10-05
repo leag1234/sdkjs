@@ -1094,6 +1094,24 @@ ParaDrawing.prototype.Set_Props = function(Props)
 		this.docPr.setTitle(Props.title);
 	}
 };
+/**
+ * Wrapping style as the interface names it (Asc.c_oAscWrapStyle2: in line, square, tight,
+ * through, top and bottom, behind or in front of the text).
+ */
+ParaDrawing.prototype.GetWrappingStyle = function()
+{
+	if (this.IsInline())
+		return c_oAscWrapStyle2.Inline;
+
+	switch (this.wrappingType)
+	{
+		case WRAPPING_TYPE_NONE: return this.behindDoc ? c_oAscWrapStyle2.Behind : c_oAscWrapStyle2.InFront;
+		case WRAPPING_TYPE_TIGHT: return c_oAscWrapStyle2.Tight;
+		case WRAPPING_TYPE_THROUGH: return c_oAscWrapStyle2.Through;
+		case WRAPPING_TYPE_TOP_AND_BOTTOM: return c_oAscWrapStyle2.TopAndBottom;
+	}
+	return c_oAscWrapStyle2.Square;
+};
 ParaDrawing.prototype.CheckFitToColumn = function()
 {
 	var oLogicDoc = this.document;
