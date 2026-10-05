@@ -7985,9 +7985,10 @@
 	};
 	
 	var trackRevisionBuffer = {
-		name : "",
-		userId : "",
-		isTrack : false
+		userName    : "",
+		userId      : "",
+		globalTrack : false,
+		localTrack  : null
 	};
 	/**
 	 * Enables or disables AI-assisted change tracking in the document.
@@ -8002,8 +8003,14 @@
 	{
 		if (isTrack)
 		{
-			trackRevisionBuffer.isTrack = this.Document.IsTrackRevisions();
+			// IsTrackRevisions() returns the local ("for me") flag whenever it is set, so turning on the global flag
+			// alone does nothing if the user switched tracking off locally. Keep both flags and force tracking on.
+			let localTrack = this.Document.GetLocalTrackRevisions();
+			trackRevisionBuffer.globalTrack = this.Document.GetGlobalTrackRevisions();
+			trackRevisionBuffer.localTrack  = (true === localTrack || false === localTrack) ? localTrack : null;
 			this.Document.SetGlobalTrackRevisions(true);
+			if (null !== trackRevisionBuffer.localTrack)
+				this.Document.SetLocalTrackRevisions(true);
 			
 			let userInfo = Asc.editor.DocInfo.get_UserInfo();
 			trackRevisionBuffer.userId   = userInfo.get_Id();
@@ -8017,7 +8024,10 @@
 		}
 		else
 		{
-			this.Document.SetGlobalTrackRevisions(trackRevisionBuffer.isTrack);
+			// Restore both flags exactly: restoring the effective value into the global flag would turn a local
+			// ("for me") tracking session into tracking for everyone.
+			this.Document.SetGlobalTrackRevisions(trackRevisionBuffer.globalTrack);
+			this.Document.SetLocalTrackRevisions(trackRevisionBuffer.localTrack);
 			let userInfo = Asc.editor.DocInfo.get_UserInfo();
 			userInfo.put_Id(trackRevisionBuffer.userId);
 			userInfo.put_FullName(trackRevisionBuffer.userName);
@@ -32302,7 +32312,7 @@
 			return Asc.editor.asc_GetLocalTrackRevisions();
 		};
 		
-		Api.asc_GetLocalTrackRevisions = Api["asc_SetLocalTrackRevisions"] = function(isTrack)
+		Api.asc_SetLocalTrackRevisions = Api["asc_SetLocalTrackRevisions"] = function(isTrack)
 		{
 			Asc.editor.asc_SetLocalTrackRevisions(isTrack);
 		};
