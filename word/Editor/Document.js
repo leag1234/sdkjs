@@ -11236,6 +11236,17 @@ CDocument.prototype.Internal_Content_Remove = function(Position, Count, isCorrec
 
 	return ChangePos;
 };
+/**
+ * The body of a Word document always ends with a paragraph: when a file ends with a table (files written by other
+ * tools), Word adds an empty paragraph after it, which takes room in the layout (it can start a new page).
+ * ReplaceContent does not correct the content, so do it here once the document is read.
+ */
+CDocument.prototype.CheckLastParagraphAfterLoad = function()
+{
+	let lastElement = this.Content[this.Content.length - 1];
+	if (lastElement && !lastElement.IsParagraph())
+		this.Internal_Content_Add(this.Content.length, new AscWord.Paragraph(), false);
+};
 CDocument.prototype.Clear_ContentChanges = function()
 {
 	this.m_oContentChanges.Clear();

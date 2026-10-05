@@ -8482,6 +8482,7 @@ function BinaryFileReader(doc, openParams)
 
 		if (this.oReadResult.DocumentContent.length > 0) {
 			this.Document.ReplaceContent(this.oReadResult.DocumentContent);
+			this.Document.CheckLastParagraphAfterLoad();
 		}
 		if(null !== this.oReadResult.defaultTabStop && this.oReadResult.defaultTabStop > 0) {
 			AscCommonWord.Default_Tab_Stop = this.oReadResult.defaultTabStop;
