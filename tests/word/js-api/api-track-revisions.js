@@ -101,6 +101,31 @@ $(function ()
 		logicDocument.SetLocalTrackRevisions(null);
 	});
 
+	QUnit.test("GetReviewReport ignores changes of elements no longer in the document", function (assert)
+	{
+		setupEditor();
+		editor.asc_GetTrackRevisionsReportByAuthors = AscCommon.DocumentEditorApi.prototype.asc_GetTrackRevisionsReportByAuthors.bind(editor);
+		let logicDocument = AscTest.GetLogicDocument();
+		let doc = AscTest.JsApi.GetDocument();
+		let count = function ()
+		{
+			let report = doc.GetReviewReport(), n = 0;
+			for (let author in report)
+				n += report[author].length;
+			return n;
+		};
+
+		logicDocument.SetLocalTrackRevisions(true);
+		let p = AscTest.JsApi.CreateParagraph();
+		p.AddText("tracked insertion");
+		doc.Push(p);
+		logicDocument.SetLocalTrackRevisions(null);
+		assert.ok(count() > 0, "the insertion is reported");
+
+		doc.RemoveElement(p.GetPosInParent());
+		assert.strictEqual(count(), 0, "nothing is reported once the paragraph left the document");
+	});
+
 	QUnit.test("SetAssistantTrackRevisions restores a local-only tracking session exactly", function (assert)
 	{
 		setupEditor();
