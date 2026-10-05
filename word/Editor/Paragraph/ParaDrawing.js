@@ -439,6 +439,7 @@ ParaDrawing.prototype.Get_Props = function(OtherProps)
 	Props.Internal_Position = this.Internal_Position;
 
 	Props.Locked        = this.Lock.Is_Locked();
+	Props.LockAnchor    = !!this.Locked;
 	var ParentParagraph = this.Get_ParentParagraph();
 	if (ParentParagraph && undefined !== ParentParagraph.Parent)
 	{
@@ -519,6 +520,9 @@ ParaDrawing.prototype.Get_Props = function(OtherProps)
 
 		if (false === OtherProps.Locked)
 			Props.Locked = false;
+
+		if (OtherProps.LockAnchor !== Props.LockAnchor)
+			Props.LockAnchor = undefined;
 
 		if (false === OtherProps.CanBeFlow || false === Props.CanBeFlow)
 			Props.CanBeFlow = false;
@@ -1035,6 +1039,9 @@ ParaDrawing.prototype.Set_Props = function(Props)
 
 	if (undefined != Props.AllowOverlap)
 		this.Set_AllowOverlap(Props.AllowOverlap);
+
+	if (undefined != Props.LockAnchor && !!Props.LockAnchor !== !!this.Locked)
+		this.Set_Locked(!!Props.LockAnchor);
 
 	if (undefined != Props.PositionH)
 	{
