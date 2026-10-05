@@ -88,6 +88,10 @@ $(function ()
 		assert.strictEqual(getParagraphRunReviewType(p, 0), reviewtype_Add, "new text is a tracked insertion");
 		assert.strictEqual(p.GetElement(0).Run.GetReviewInfo().GetUserName(), "Elixir AI", "the revision author is the assistant");
 
+		let assistantColor = AscCommon.getUserColorById("uid-Elixir AI", "Elixir AI", false, true);
+		assert.strictEqual(typeof assistantColor, "number", "the assistant color has a normal variant (asc_getUserColorById)");
+		assert.strictEqual(assistantColor, (8 << 16) | (145 << 8) | 178, "the assistant color is the one set by SetAssistantTrackRevisions");
+
 		doc.SetAssistantTrackRevisions(false);
 		assert.strictEqual(logicDocument.GetLocalTrackRevisions(), false, "local flag restored");
 		assert.strictEqual(logicDocument.GetGlobalTrackRevisions(), false, "global flag restored");
