@@ -13856,6 +13856,561 @@ background-repeat: no-repeat;\
 		}
 	};
 
+	/**
+	 * Styles gallery options:
+	 *  wordLike    - list the styles the way Word does (Quick Styles only, Heading 3-9 once the level
+	 *                above is used, Caption/TOC Heading/semi-hidden styles once used, custom styles last);
+	 *  previewText - text drawn in each style preview instead of the style name (e.g. "AaBbCcDd");
+	 *  width, height - size of each preview, in CSS pixels.
+	 * Takes effect on the next generation of the previews (see asc_UpdateStyleGallery).
+	 */
+	window["asc_docs_api"].prototype["asc_SetStyleGalleryOptions"] = function(options)
+	{
+		this.StyleGalleryOptions = {
+			wordLike    : !!(options && options["wordLike"]),
+			previewText : (options && options["previewText"]) ? ("" + options["previewText"]) : null
+		};
+		
+		// preview size in CSS pixels; also applies to an already created painter
+		if (options && options["width"] > 0 && options["height"] > 0)
+		{
+			this["asc_setParagraphStylesSizes"](options["width"], options["height"]);
+			if (this.stylePainter)
+			{
+				this.stylePainter.STYLE_THUMBNAIL_WIDTH  = options["width"];
+				this.stylePainter.STYLE_THUMBNAIL_HEIGHT = options["height"];
+			}
+		}
+	};
+	window["asc_docs_api"].prototype["asc_UpdateStyleGallery"] = function()
+	{
+		if (this.WordControl && this.WordControl.m_oLogicDocument)
+			this.GenerateStyles();
+	};
+	/**
+	 * Live preview of a style, as when hovering the Styles gallery of Word: sName is applied to the
+	 * selection inside a group action, so nothing is sent to co-authors or saved, and
+	 * asc_EndStylePreview() reverts it without leaving an undo/redo point.
+	 * @returns {boolean} whether the preview started
+	 */
+	window["asc_docs_api"].prototype["asc_StartStylePreview"] = function(sName)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		if (this.isStylePreview)
+			this["asc_EndStylePreview"]();
+
+		if (!logicDocument || !sName || this.isGroupActions() || this.isLongAction() || this.isViewMode
+			|| !logicDocument.CanEdit() || logicDocument.IsSelectionLocked(AscCommon.changestype_Paragraph_Properties, null, true))
+			return false;
+
+		this.isStylePreview = true;
+		this.startGroupActions();
+		this.executeGroupActions(function()
+		{
+			// put_Style without its lock request (the preview is never sent) and without interface
+			// events (the toolbar keeps showing the real formatting)
+			let isTurnedOff = logicDocument.TurnOff_InterfaceEvents();
+			logicDocument.StartAction(AscDFH.historydescription_Document_SetParagraphStyle, null, null, sName);
+			logicDocument.SetParagraphStyle(sName, true);
+			logicDocument.FinalizeAction();
+			if (isTurnedOff)
+				logicDocument.TurnOn_InterfaceEvents(false);
+		});
+		return true;
+	};
+	window["asc_docs_api"].prototype["asc_EndStylePreview"] = function()
+	{
+		if (!this.isStylePreview)
+			return;
+
+		this.isStylePreview = false;
+		this.cancelGroupActions();
+
+		let logicDocument = this.private_GetLogicDocument();
+		if (logicDocument && !this.isGroupActions())
+		{
+			logicDocument.UpdateInterface();
+			logicDocument.UpdateSelection();
+			logicDocument.GetSpellCheckManager().TurnOn();
+		}
+	};
+	window["asc_docs_api"].prototype["asc_IsStylePreview"] = function()
+	{
+		return !!this.isStylePreview;
+	};
+
+	//------------------------------------------------------------------------------------------------------------------
+	// Font dialog and style modification (Word-like Font, Modify Style dialogs)
+	//------------------------------------------------------------------------------------------------------------------
+	/**
+	 * Text properties as shown by a Font dialog. Values that differ inside the selection are undefined.
+	 * Lengths (Spacing, Position) are in millimetres; Color is an asc color (see asc_onTextColor).
+	 */
+	function private_FontPropsFromTextPr(textPr, isStyle)
+	{
+		let props = {};
+		if (!textPr)
+			return props;
+
+		// the selection reports its font in FontFamily (as for the toolbar), a compiled style in RFonts
+		let rFontName = textPr.RFonts && textPr.RFonts.Ascii ? textPr.RFonts.Ascii.Name : undefined;
+		props["FontName"]   = isStyle ? (rFontName || (textPr.FontFamily ? textPr.FontFamily.Name : undefined)) : (textPr.FontFamily ? textPr.FontFamily.Name : rFontName);
+		props["FontSize"]   = textPr.FontSize;
+		props["Bold"]       = textPr.Bold;
+		props["Italic"]     = textPr.Italic;
+		props["Underline"]  = textPr.Underline;
+		props["Strikeout"]  = textPr.Strikeout;
+		props["DStrikeout"] = textPr.DStrikeout;
+		props["VertAlign"]  = textPr.VertAlign;
+		props["Caps"]       = textPr.Caps;
+		props["SmallCaps"]  = textPr.SmallCaps;
+		props["Vanish"]     = textPr.Vanish;
+		props["Spacing"]    = textPr.Spacing;
+		props["Position"]   = textPr.Position;
+		props["Ligatures"]  = textPr.Ligatures;
+
+		if (textPr.Unifill && textPr.Unifill.fill && textPr.Unifill.fill.type === c_oAscFill.FILL_TYPE_SOLID && textPr.Unifill.fill.color)
+			props["Color"] = AscCommon.CreateAscColor(textPr.Unifill.fill.color);
+		else if (textPr.Color)
+			props["Color"] = AscCommon.CreateAscColorCustom(textPr.Color.r, textPr.Color.g, textPr.Color.b, textPr.Color.Auto);
+
+		return props;
+	}
+	/**
+	 * Writes Font dialog values into a CTextPr (only the keys present in props).
+	 */
+	function private_FontPropsToTextPr(props, textPr, isStyle)
+	{
+		if (undefined !== props["FontName"] && null !== props["FontName"])
+		{
+			textPr.RFonts.SetAll(props["FontName"], -1);
+			if (isStyle)
+			{
+				textPr.RFonts.AsciiTheme    = undefined;
+				textPr.RFonts.EastAsiaTheme = undefined;
+				textPr.RFonts.HAnsiTheme    = undefined;
+				textPr.RFonts.CSTheme       = undefined;
+			}
+			else
+			{
+				textPr.FontFamily = {Name : props["FontName"], Index : -1};
+			}
+		}
+
+		if (undefined !== props["FontSize"] && null !== props["FontSize"])
+		{
+			textPr.FontSize   = Math.max(1, Math.min(props["FontSize"], 1638));
+			textPr.FontSizeCS = textPr.FontSize;
+		}
+
+		var bools = ["Bold", "Italic", "Underline", "Caps", "SmallCaps", "Vanish"];
+		for (var i = 0; i < bools.length; ++i)
+		{
+			if (undefined !== props[bools[i]] && null !== props[bools[i]])
+				textPr[bools[i]] = !!props[bools[i]];
+		}
+		if (undefined !== props["Bold"] && null !== props["Bold"])
+			textPr.BoldCS = !!props["Bold"];
+		if (undefined !== props["Italic"] && null !== props["Italic"])
+			textPr.ItalicCS = !!props["Italic"];
+
+		// Word: strikethrough/double strikethrough and small caps/all caps exclude each other
+		if (true === props["Strikeout"])
+		{
+			textPr.Strikeout  = true;
+			textPr.DStrikeout = false;
+		}
+		else if (true === props["DStrikeout"])
+		{
+			textPr.Strikeout  = false;
+			textPr.DStrikeout = true;
+		}
+		else
+		{
+			if (false === props["Strikeout"])
+				textPr.Strikeout = false;
+			if (false === props["DStrikeout"])
+				textPr.DStrikeout = false;
+		}
+		if (true === props["SmallCaps"])
+			textPr.Caps = false;
+		else if (true === props["Caps"])
+			textPr.SmallCaps = false;
+
+		if (undefined !== props["VertAlign"] && null !== props["VertAlign"])
+			textPr.VertAlign = props["VertAlign"];
+		if (undefined !== props["Spacing"] && null !== props["Spacing"])
+			textPr.Spacing = props["Spacing"];
+		if (undefined !== props["Position"] && null !== props["Position"])
+			textPr.Position = props["Position"];
+		if (undefined !== props["Ligatures"] && null !== props["Ligatures"])
+			textPr.Ligatures = props["Ligatures"];
+
+		var color = props["Color"];
+		if (color)
+		{
+			if (true === color.Auto || (color.get_auto && color.get_auto()))
+			{
+				textPr.Color   = new AscCommonWord.CDocumentColor(0, 0, 0, true);
+				textPr.Unifill = undefined;
+			}
+			else if (color.asc_getType && color.asc_getType() === Asc.c_oAscColor.COLOR_TYPE_SRGB)
+			{
+				textPr.Color   = new AscCommonWord.CDocumentColor(color.r, color.g, color.b, false);
+				textPr.Unifill = undefined;
+			}
+			else
+			{
+				var unifill        = new AscFormat.CUniFill();
+				unifill.fill       = new AscFormat.CSolidFill();
+				unifill.fill.color = AscFormat.CorrectUniColor(color, unifill.fill.color, 1);
+				textPr.Unifill     = unifill;
+				textPr.Color       = undefined;
+			}
+		}
+		return textPr;
+	}
+	window["asc_docs_api"].prototype["asc_GetFontDialogProps"] = function()
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		return logicDocument ? private_FontPropsFromTextPr(logicDocument.GetCalculatedTextPr()) : {};
+	};
+	/**
+	 * Applies the values of a Font dialog to the selection, as one undo step.
+	 */
+	window["asc_docs_api"].prototype["asc_SetFontDialogProps"] = function(props)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		if (!logicDocument || !props)
+			return;
+
+		let _t = this;
+		let fontName = props["FontName"];
+		if (fontName)
+		{
+			let fontInfo = AscFonts.g_fontApplication.GetFontInfo(fontName);
+			this.asyncMethodCallback = function()
+			{
+				_t["asc_SetFontDialogProps"](props);
+			};
+			let isAsync = AscCommon.g_font_loader.LoadFont(fontInfo);
+			if (false !== isAsync)
+				return;
+			this.asyncMethodCallback = undefined;
+		}
+
+		if (logicDocument.IsSelectionLocked(AscCommon.changestype_Paragraph_TextProperties))
+			return;
+
+		logicDocument.StartAction(AscDFH.historydescription_Document_SetTextFontName);
+		let textPr = private_FontPropsToTextPr(props, new AscCommonWord.CTextPr(), false);
+		logicDocument.AddToParagraph(new AscCommonWord.ParaTextPr(textPr));
+		logicDocument.Recalculate();
+		logicDocument.UpdateInterface();
+		logicDocument.FinalizeAction();
+	};
+	/**
+	 * Description of a style for a Modify Style dialog: name, type, based on, next, whether it is a
+	 * built-in style, and its effective text (Font dialog format) and paragraph properties.
+	 */
+	window["asc_docs_api"].prototype["asc_GetStyleForModify"] = function(styleName)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		if (!logicDocument)
+			return null;
+
+		let styles  = logicDocument.GetStyles();
+		let styleId = styles.GetStyleIdByName(styleName);
+		let style   = styleId ? styles.Get(styleId) : null;
+		if (!style)
+			return null;
+
+		let type = style.GetType();
+		let pr   = styles.Get_Pr(styleId, type);
+		let theme = logicDocument.GetTheme();
+		let textPr = pr.TextPr.Copy();
+		if (theme)
+			textPr.ReplaceThemeFonts(theme.themeElements.fontScheme);
+
+		let paraPr  = pr.ParaPr;
+		let basedOn = style.GetBasedOn() ? styles.Get(style.GetBasedOn()) : null;
+		let next    = style.GetNext() ? styles.Get(style.GetNext()) : null;
+		return {
+			"Name"      : style.GetName(),
+			"Type"      : type,
+			"BasedOn"   : basedOn ? basedOn.GetName() : null,
+			"Next"      : next ? next.GetName() : null,
+			"IsDefault" : styles.IsStyleDefaultById(styleId),
+			"QFormat"   : true === style.GetQFormat(),
+			"TextPr"    : private_FontPropsFromTextPr(textPr, true),
+			"ParaPr"    : paraPr ? {
+				"Jc"        : paraPr.Jc,
+				"Line"      : paraPr.Spacing ? paraPr.Spacing.Line : undefined,
+				"LineRule"  : paraPr.Spacing ? paraPr.Spacing.LineRule : undefined,
+				"Before"    : paraPr.Spacing ? paraPr.Spacing.Before : undefined,
+				"After"     : paraPr.Spacing ? paraPr.Spacing.After : undefined,
+				"IndLeft"   : paraPr.Ind ? paraPr.Ind.Left : undefined,
+				"FirstLine" : paraPr.Ind ? paraPr.Ind.FirstLine : undefined
+			} : null
+		};
+	};
+	/**
+	 * Modifies a style (Word's Modify Style dialog) without applying it to the selection.
+	 * data: {Name, BasedOn, Next, QFormat, TextPr: Font dialog values, ParaPr: {Jc, Line, LineRule, Before,
+	 * After, IndLeft, FirstLine}}; only the given keys change. One undo step.
+	 * @returns {boolean}
+	 */
+	window["asc_docs_api"].prototype["asc_ModifyStyle"] = function(styleName, data)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		if (!logicDocument || !data)
+			return false;
+
+		let styles  = logicDocument.GetStyles();
+		let styleId = styles.GetStyleIdByName(styleName);
+		let style   = styleId ? styles.Get(styleId) : null;
+		if (!style || logicDocument.IsSelectionLocked(AscCommon.changestype_Document_Styles))
+			return false;
+
+		let textData = data["TextPr"];
+		let fontName = textData ? textData["FontName"] : null;
+		if (fontName)
+		{
+			let _t = this;
+			this.asyncMethodCallback = function()
+			{
+				_t["asc_ModifyStyle"](styleName, data);
+			};
+			if (false !== AscCommon.g_font_loader.LoadFont(AscFonts.g_fontApplication.GetFontInfo(fontName)))
+				return true;
+			this.asyncMethodCallback = undefined;
+		}
+
+		logicDocument.StartAction(AscDFH.historydescription_Document_AddNewStyle);
+
+		if (textData)
+			style.Set_TextPr(private_FontPropsToTextPr(textData, style.GetTextPr().Copy(), true));
+
+		let paraData = data["ParaPr"];
+		if (paraData)
+		{
+			let paraPr = style.GetParaPr().Copy();
+			if (undefined !== paraData["Jc"])
+				paraPr.Jc = paraData["Jc"];
+			if (undefined !== paraData["Line"] || undefined !== paraData["Before"] || undefined !== paraData["After"])
+			{
+				paraPr.Spacing = paraPr.Spacing ? paraPr.Spacing.Copy() : new AscWord.ParaSpacing();
+				if (undefined !== paraData["Line"])
+				{
+					paraPr.Spacing.Line     = paraData["Line"];
+					paraPr.Spacing.LineRule = undefined !== paraData["LineRule"] ? paraData["LineRule"] : Asc.linerule_Auto;
+				}
+				if (undefined !== paraData["Before"])
+					paraPr.Spacing.Before = paraData["Before"];
+				if (undefined !== paraData["After"])
+					paraPr.Spacing.After = paraData["After"];
+			}
+			if (undefined !== paraData["IndLeft"] || undefined !== paraData["FirstLine"])
+			{
+				paraPr.Ind = paraPr.Ind ? paraPr.Ind.Copy() : new AscWord.CParaInd();
+				if (undefined !== paraData["IndLeft"])
+					paraPr.Ind.Left = paraData["IndLeft"];
+				if (undefined !== paraData["FirstLine"])
+					paraPr.Ind.FirstLine = paraData["FirstLine"];
+			}
+			style.Set_ParaPr(paraPr, true);
+		}
+
+		if (undefined !== data["BasedOn"])
+		{
+			let basedOnId = data["BasedOn"] ? styles.GetStyleIdByName(data["BasedOn"]) : null;
+			// no cycle: the new parent must not be based on this style
+			let check = basedOnId, guard = 0;
+			while (check && check !== styleId && guard++ < 100)
+				check = styles.Get(check) ? styles.Get(check).GetBasedOn() : null;
+			if (check !== styleId && styleId !== styles.Get_Default_Paragraph())
+				style.Set_BasedOn(basedOnId);
+		}
+		if (undefined !== data["Next"])
+			style.Set_Next(data["Next"] ? styles.GetStyleIdByName(data["Next"]) : null);
+		if (undefined !== data["QFormat"])
+			style.Set_QFormat(!!data["QFormat"]);
+		if (data["Name"] && data["Name"] !== style.GetName() && !styles.IsStyleDefaultById(styleId) && null === styles.GetStyleIdByName(data["Name"]))
+			style.Set_Name(data["Name"]);
+
+		style.GetRelatedParagraphs().forEach(function(paragraph)
+		{
+			paragraph.RecalcCompiledPr();
+		});
+
+		logicDocument.Recalculate();
+		logicDocument.UpdateInterface();
+		logicDocument.FinalizeAction();
+		return true;
+	};
+
+	/**
+	 * Draws the preview of a Font dialog: text (or "AaBbYyZz") with the given Font dialog values,
+	 * centred in a canvas inside the element divId, between two base lines as Word does.
+	 */
+	window["asc_docs_api"].prototype["asc_DrawFontDialogPreview"] = function(divId, props, text)
+	{
+		let div = document.getElementById(divId);
+		let logicDocument = this.private_GetLogicDocument();
+		if (!div || !logicDocument)
+			return;
+
+		props = props || {};
+		let _t = this;
+		if (props["FontName"])
+		{
+			let fontInfo = AscFonts.g_fontApplication.GetFontInfo(props["FontName"]);
+			if (fontInfo && false !== AscCommon.g_font_loader.LoadFont(fontInfo, function()
+				{
+					_t.sync_EndAction(Asc.c_oAscAsyncActionType.Information, Asc.c_oAscAsyncAction.LoadFont);
+					_t["asc_DrawFontDialogPreview"](divId, props, text);
+				}, null))
+				return;
+		}
+
+		let canvas = div.getElementsByTagName("canvas")[0];
+		if (!canvas)
+		{
+			canvas = document.createElement("canvas");
+			div.appendChild(canvas);
+		}
+		let wCss = div.clientWidth || 300, hCss = div.clientHeight || 60;
+		canvas.style.width  = wCss + "px";
+		canvas.style.height = hCss + "px";
+		AscCommon.calculateCanvasSize(canvas);
+
+		let wPx = canvas.width, hPx = canvas.height;
+		let ctx = canvas.getContext("2d");
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.fillStyle = "#FFFFFF";
+		ctx.fillRect(0, 0, wPx, hPx);
+
+		let isViewMode = this.isViewMode;
+		this.isViewMode = true;
+		AscCommon.History.TurnOff();
+		try
+		{
+			let par    = new AscWord.Paragraph(logicDocument);
+			let textPr = private_FontPropsToTextPr(props, new AscCommonWord.CTextPr(), false);
+			let size   = Math.min(Math.max(props["FontSize"] || 11, 4), 48);
+			textPr.FontSize   = (AscCommon.AscBrowser.convertToRetinaValue(size * 2, true) >> 0) * 0.5;
+			textPr.FontSizeCS = textPr.FontSize;
+			if (undefined !== textPr.Spacing)
+				textPr.Spacing = AscCommon.AscBrowser.convertToRetinaValue(textPr.Spacing, true);
+			if (undefined !== textPr.Position)
+				textPr.Position = AscCommon.AscBrowser.convertToRetinaValue(textPr.Position, true);
+			textPr.Vanish = false;
+
+			par.MoveCursorToStartPos();
+			par.Pr = new AscCommonWord.CParaPr();
+			let run = new AscWord.Run(par);
+			run.Set_Pr(textPr);
+			run.AddText(text ? ("" + text).substr(0, 64) : "AaBbYyZz");
+			par.AddToContent(0, run);
+			par.Reset(0, 0, 1000, 1000, 0, 0, 1);
+			par.Recalculate_Page(0);
+
+			let baseLine = par.Lines[0].Y;
+			let bounds   = par.Get_PageBounds(0);
+			let textW    = par.Lines[0].Ranges[0].W * AscCommon.g_dKoef_mm_to_pix;
+			let textH    = (bounds.Bottom - bounds.Top) * AscCommon.g_dKoef_mm_to_pix;
+			let yBase    = (((hPx + textH) / 2) - (textH - baseLine * AscCommon.g_dKoef_mm_to_pix)) >> 0;
+
+			// base line on both sides, as in the Font dialog of Word
+			ctx.strokeStyle = "#a0a0a0";
+			ctx.lineWidth   = 1;
+			ctx.beginPath();
+			let lineW = Math.max(0, ((wPx - textW) / 2 - 8) >> 0);
+			ctx.moveTo(4, yBase + 0.5);
+			ctx.lineTo(4 + lineW, yBase + 0.5);
+			ctx.moveTo(wPx - 4 - lineW, yBase + 0.5);
+			ctx.lineTo(wPx - 4, yBase + 0.5);
+			ctx.stroke();
+
+			let graphics = new AscCommon.CGraphics();
+			graphics.init(ctx, wPx, hPx, wPx * AscCommon.g_dKoef_pix_to_mm, hPx * AscCommon.g_dKoef_pix_to_mm);
+			graphics.m_oFontManager = AscCommon.g_fontManager;
+			graphics.m_oCoordTransform.tx = Math.max(0, (wPx - textW) / 2) >> 0;
+			graphics.m_oCoordTransform.ty = (yBase - baseLine * AscCommon.g_dKoef_mm_to_pix) >> 0;
+			graphics.transform(1, 0, 0, 1, 0, 0);
+
+			let showMarks = this.ShowParaMarks;
+			this.ShowParaMarks = false;
+			par.Draw(0, graphics);
+			this.ShowParaMarks = showMarks;
+		}
+		finally
+		{
+			AscCommon.History.TurnOn();
+			this.isViewMode = isViewMode;
+		}
+	};
+
+	/**
+	 * Theme fonts of the document, for the "Theme Fonts" section of a font list.
+	 * @returns {?{major: string, minor: string}}
+	 */
+	window["asc_docs_api"].prototype["asc_GetThemeFontNames"] = function()
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		let theme = logicDocument ? logicDocument.GetTheme() : null;
+		let fontScheme = theme && theme.themeElements ? theme.themeElements.fontScheme : null;
+		if (!fontScheme || !fontScheme.majorFont || !fontScheme.minorFont)
+			return null;
+
+		let major = fontScheme.majorFont.latin, minor = fontScheme.minorFont.latin;
+		let subst = function(name)
+		{
+			let info = name ? AscFonts.g_fontApplication.GetFontInfoName(name) : null;
+			return info && info !== name ? info : null;
+		};
+		// the substitutes are the fonts used when the theme fonts are not installed (Calibri: Carlito)
+		return {"major" : major, "minor" : minor, "majorSubst" : subst(major), "minorSubst" : subst(minor)};
+	};
+	/**
+	 * Applies the theme heading (isMajor) or body font to the selection as a theme reference
+	 * (+Headings / +Body), so the text follows a later change of theme fonts, as in Word.
+	 */
+	window["asc_docs_api"].prototype["asc_SetThemeFont"] = function(isMajor)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		let names = this["asc_GetThemeFontNames"]();
+		if (!logicDocument || !names)
+			return;
+
+		let _t = this;
+		let fontInfo = AscFonts.g_fontApplication.GetFontInfo(isMajor ? names["major"] : names["minor"]);
+		this.asyncMethodCallback = function()
+		{
+			_t["asc_SetThemeFont"](isMajor);
+		};
+		if (fontInfo && false !== AscCommon.g_font_loader.LoadFont(fontInfo))
+			return;
+		this.asyncMethodCallback = undefined;
+
+		if (logicDocument.IsSelectionLocked(AscCommon.changestype_Paragraph_TextProperties))
+			return;
+
+		let prefix = isMajor ? "major" : "minor";
+		logicDocument.StartAction(AscDFH.historydescription_Document_SetTextFontName);
+		logicDocument.AddToParagraph(new AscCommonWord.ParaTextPr({
+			RFonts : {
+				AsciiTheme    : prefix + "HAnsi",
+				EastAsiaTheme : prefix + "EastAsia",
+				HAnsiTheme    : prefix + "HAnsi",
+				CSTheme       : prefix + "Bidi"
+			}
+		}));
+		logicDocument.Recalculate();
+		logicDocument.UpdateInterface();
+		logicDocument.FinalizeAction();
+	};
+
 	asc_docs_api.prototype.SetDrawImagePlaceContents = function(id, props)
 	{
 		if (this.WordControl.m_oDrawingDocument)

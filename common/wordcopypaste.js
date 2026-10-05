@@ -3451,7 +3451,7 @@ PasteProcessor.prototype =
 			}
 			else
 			{
-				props = [sProps.sourceformatting/*, sProps.mergeFormatting*/, sProps.keepTextOnly];
+				props = [sProps.sourceformatting, sProps.mergeFormatting, sProps.keepTextOnly];
 			}
 
 			if (specialPasteHelper.specialPasteData && specialPasteHelper.specialPasteData.images && specialPasteHelper.specialPasteData.images.length && !(window["Asc"]["editor"] && window["Asc"]["editor"].isChartEditor)) {
@@ -3613,13 +3613,15 @@ PasteProcessor.prototype =
 			}
 			case Asc.c_oSpecialPasteProps.mergeFormatting:
 			{
-				//ms почему-то при merge игнорирует заливку текста
+				// Word's Merge Formatting: the pasted text takes the formatting of the destination
+				// paragraph and text, and keeps only its emphasis (see _specialPasteParagraphContentConvert)
 				if(pasteIntoParagraphPr)
 				{
-					paragraph.Pr.Merge(pasteIntoParagraphPr);
-					if(paragraph.TextPr)
+					paragraph.Set_Pr(pasteIntoParagraphPr.Copy());
+
+					if(paragraph.TextPr && pasteIntoParaRunPr)
 					{
-						paragraph.TextPr.Value.Merge(pasteIntoParaRunPr);
+						paragraph.TextPr.Value = pasteIntoParaRunPr.Copy();
 					}
 				}
 				this._specialPasteParagraphContentConvert(paragraph.Content, pasteIntoParaRunPr);
@@ -3730,18 +3732,35 @@ PasteProcessor.prototype =
 			}
 			case Asc.c_oSpecialPasteProps.mergeFormatting:
 			{
-				//ms почему-то при merge игнорирует заливку текста
-				if(pasteIntoParaRunPr)
+				// destination text formatting, source emphasis (bold, italic, underline, strikethrough,
+				// superscript/subscript), as Word does
+				var mergeRun = function(run)
 				{
-					for(var i = 0; i < paragraphContent.length; i++)
+					if (!run || !run.Pr || !run.Set_Pr)
+						return;
+
+					var srcPr = run.Pr;
+					var newPr = pasteIntoParaRunPr ? pasteIntoParaRunPr.Copy() : new CTextPr();
+					var keep  = ["Bold", "BoldCS", "Italic", "ItalicCS", "Underline", "Strikeout", "DStrikeout", "VertAlign"];
+					for (var k = 0; k < keep.length; ++k)
 					{
-						var elem = paragraphContent[i];
-						if(pasteIntoParaRunPr && elem.Pr)
-						{
-							elem.Pr.Merge(pasteIntoParaRunPr);
-						}
+						if (undefined !== srcPr[keep[k]])
+							newPr[keep[k]] = srcPr[keep[k]];
 					}
-				}
+					run.Set_Pr(newPr);
+				};
+				var mergeContent = function(content)
+				{
+					for(var i = 0; content && i < content.length; i++)
+					{
+						var elem = content[i];
+						if (para_Run === elem.Type)
+							mergeRun(elem);
+						else if (elem.Content && (para_Hyperlink === elem.Type || para_Field === elem.Type || para_InlineLevelSdt === elem.Type))
+							mergeContent(elem.Content);
+					}
+				};
+				mergeContent(paragraphContent);
 
 				break;
 			}
