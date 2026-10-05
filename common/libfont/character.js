@@ -125,6 +125,14 @@
 			if (undefined === _char || 0 == _char)
 				return "";
 
+			// Private Use Area code points mean something only in the font that defines them
+			// (Word stores symbol-font characters there, e.g. U+F0B7, the Symbol bullet, which
+			// is drawn with the symbol font): another font is never the right fallback, so do
+			// not pick one - picking it made every document with standard bullets download a
+			// Korean font (NanumBarunGothic, 2 x 4 MB) at open.
+			if ((_char >= 0xE000 && _char <= 0xF8FF) || _char >= 0xF0000)
+				return "";
+
 			if (this.LastRange)
 			{
 				if (this.LastRange.Start <= _char && _char <= this.LastRange.End)

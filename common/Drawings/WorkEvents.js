@@ -802,6 +802,7 @@
 			this.isUseRequestAnimationFrame = false;
 
 		this.requestAnimationOldTime = -1;
+		this.isUrgent = false;
 
 		this.engine = null;
 		this.step = null;
@@ -844,12 +845,26 @@
 	PaintMessageLoop.prototype._animation = function()
 	{
 		var now = Date.now();
-		if (!this.isUseInterval || -1 === this.requestAnimationOldTime || (now >= (this.requestAnimationOldTime + this.interval)) || (now < this.requestAnimationOldTime))
+		if (!this.isUseInterval || this.isUrgent || -1 === this.requestAnimationOldTime || (now >= (this.requestAnimationOldTime + this.interval)) || (now < this.requestAnimationOldTime))
 		{
+			this.isUrgent = false;
 			this.requestAnimationOldTime = now;
 			this.engine();
 		}
 		this.id = this.requestAnimationFrame.call(window, this.step);
+	};
+
+	// Run the engine on the next animation frame instead of waiting for the end of the current
+	// interval (up to 40 ms): called when user input needs a repaint, so that typed text, caret
+	// moves and scrolling are painted in the next frame. Idle polling keeps its interval.
+	PaintMessageLoop.prototype.requestUrgent = function()
+	{
+		this.isUrgent = true;
+		if (!this.isUseRequestAnimationFrame && null !== this.id)
+		{
+			clearTimeout(this.id);
+			this.id = setTimeout(this.step, 0);
+		}
 	};
 
 	PaintMessageLoop.prototype._timer = function()
