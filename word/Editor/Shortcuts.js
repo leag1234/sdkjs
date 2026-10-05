@@ -146,9 +146,6 @@
 	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.ResetChar] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.ResetChar, keyCodes.Space, true, false, false, false)];
 	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.IncreaseFontSize] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.IncreaseFontSize, keyCodes.BracketRight, true, false, false, false)];
 	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.DecreaseFontSize] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.DecreaseFontSize, keyCodes.BracketLeft, true, false, false, false)];
-	// Word: Ctrl+Shift+> / Ctrl+Shift+< grow and shrink the font to the next size of the list
-	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.IncreaseFontSize].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.IncreaseFontSize, keyCodes.Period, true, true, false, false));
-	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.DecreaseFontSize].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.DecreaseFontSize, keyCodes.Comma, true, true, false, false));
 	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.CenterPara] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.CenterPara, keyCodes.KeyE, true, false, false, false)];
 	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.JustifyPara] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.JustifyPara, keyCodes.KeyJ, true, false, false, false)];
 	c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.RightPara] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.RightPara, keyCodes.KeyR, true, false, false, false)];
@@ -253,8 +250,6 @@
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.ResetChar].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.ResetChar, keyCodes.Space, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.IncreaseFontSize].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.IncreaseFontSize, keyCodes.BracketRight, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.DecreaseFontSize].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.DecreaseFontSize, keyCodes.BracketLeft, false, false, false, true));
-		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.IncreaseFontSize].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.IncreaseFontSize, keyCodes.Period, false, true, false, true));
-		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.DecreaseFontSize].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.DecreaseFontSize, keyCodes.Comma, false, true, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.CenterPara].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.CenterPara, keyCodes.KeyE, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.JustifyPara].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.JustifyPara, keyCodes.KeyJ, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.RightPara].push(new AscShortcut(Asc.c_oAscDocumentShortcutType.RightPara, keyCodes.KeyR, false, false, false, true));
