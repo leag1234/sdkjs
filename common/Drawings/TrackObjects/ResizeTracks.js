@@ -160,6 +160,24 @@ SHAPE_EXT["actionButtonHome"] = 1042416/36000;
 
 var MIN_SHAPE_SIZE = 1.27;//размер меньше которого нельзя уменшить автофигуру или картинку по горизонтали или вертикали
 
+/**
+ * Whether a corner resize keeps the aspect ratio. Shift keeps it, and so does the "lock
+ * aspect ratio" of the object (pictures by default). In the document editor, Shift frees a
+ * locked picture instead, so that it can be distorted without opening the Layout dialog.
+ */
+function IsResizeKeepAspect(originalObject, ShiftKey, isLine)
+{
+	if (window.AscAlwaysSaveAspectOnResizeTrack === true && !isLine)
+		return true;
+	var isCrop = (originalObject.isCrop || !!originalObject.cropObject);
+	var locked = !isCrop && originalObject.getNoChangeAspect();
+	if (locked && ShiftKey === true && !isCrop
+		&& Asc.editor && Asc.editor.isDocumentEditor
+		&& originalObject.getObjectType && originalObject.getObjectType() === AscDFH.historyitem_type_ImageShape)
+		return false;
+	return ShiftKey === true || locked;
+}
+
 function CreatePenBrushForChartTrack()
 {
     return AscFormat.ExecuteNoHistory(function()
@@ -651,7 +669,7 @@ function ResizeTrackShapeImage(originalObject, cardDirection, drawingsController
                }
            }
             var isCrop = (this.originalObject.isCrop || !!this.originalObject.cropObject);
-            if((ShiftKey === true || (window.AscAlwaysSaveAspectOnResizeTrack === true && !this.isLine) || (!isCrop && this.originalObject.getNoChangeAspect())) && this.bAspect === true)
+            if(IsResizeKeepAspect(this.originalObject, ShiftKey, this.isLine) && this.bAspect === true)
             {
                 var _new_aspect = this.aspect*(Math.abs(kd1/ kd2));
 
@@ -1016,7 +1034,7 @@ function ResizeTrackShapeImage(originalObject, cardDirection, drawingsController
             var _abs_height, _abs_width;
 
             var isCrop = (this.originalObject.isCrop || !!this.originalObject.cropObject);
-            if((ShiftKey === true || window.AscAlwaysSaveAspectOnResizeTrack === true || (!isCrop && this.originalObject.getNoChangeAspect())) && this.bAspect === true)
+            if(IsResizeKeepAspect(this.originalObject, ShiftKey, false) && this.bAspect === true)
             {
                 var _new_aspect = this.aspect*(Math.abs(kd1/ kd2));
 
@@ -1737,7 +1755,7 @@ function ResizeTrackGroup(originalObject, cardDirection, parentTrack)
             var _temp;
 
             var isCrop = (this.originalObject.isCrop || !!this.originalObject.cropObject);
-            if((ShiftKey === true || window.AscAlwaysSaveAspectOnResizeTrack === true || (!isCrop && this.originalObject.getNoChangeAspect())) && this.bAspect === true)
+            if(IsResizeKeepAspect(this.originalObject, ShiftKey, false) && this.bAspect === true)
             {
                 var _new_aspect = this.aspect*(Math.abs(kd1/ kd2));
 
@@ -2058,7 +2076,7 @@ function ResizeTrackGroup(originalObject, cardDirection, parentTrack)
             var _abs_height, _abs_width;
 
             var isCrop = (this.originalObject.isCrop || !!this.originalObject.cropObject);
-            if((ShiftKey === true || window.AscAlwaysSaveAspectOnResizeTrack === true || (!isCrop && this.originalObject.getNoChangeAspect())) && this.bAspect === true)
+            if(IsResizeKeepAspect(this.originalObject, ShiftKey, false) && this.bAspect === true)
             {
                 var _new_aspect = this.aspect*(Math.abs(kd1/ kd2));
 
