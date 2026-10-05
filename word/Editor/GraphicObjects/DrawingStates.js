@@ -1830,6 +1830,7 @@ RotateState.prototype =
                             }
 
                             let aDrawingsToSelect = [];
+                            let aDropped = [];
                             for(i = 0; i < aDrawings.length; ++i)
                             {
                                 bounds = aBounds[i];
@@ -1877,12 +1878,18 @@ RotateState.prototype =
                                         this.drawingObjects.selection.cropSelection = originalCopy.GraphicObj;
                                     }
                                     aDrawingsToSelect.push({drawing: originalCopy.GraphicObj, pageIndex: pageIndex});
+                                    if (!(oTrack.originalObject && oTrack.originalObject.isCrop))
+                                        aDropped.push({drawing: originalCopy, page: AscFormat.isRealNumber(oTrack.pageIndex) ? oTrack.pageIndex : pageIndex, x: bounds.posX, y: bounds.posY});
                                 }
                                 else
                                 {
                                     if(true !== oTrack.bTextWarp && !(oTrack.originalObject && oTrack.originalObject.isCrop))
                                     {
                                         original.Set_XY(bounds.posX, bounds.posY, aParentParagraphs[i], original.GraphicObj.selectStartPage, bMoveState)
+                                        // a moved or resized object keeps the place given by the mouse (not after a rotation:
+                                        // its bounds are not those of the unrotated frame)
+                                        if (bMoveState || (this instanceof ResizeState && AscFormat.checkNormalRotate(original.getXfrmRot())))
+                                            aDropped.push({drawing: original, page: bMoveState && AscFormat.isRealNumber(oTrack.pageIndex) ? oTrack.pageIndex : original.GraphicObj.selectStartPage, x: bounds.posX, y: bounds.posY});
                                     }
                                     if(bMoveState)
                                     {
@@ -1891,6 +1898,7 @@ RotateState.prototype =
                                 }
                                 this.drawingObjects.document.Recalculate(true);
                             }
+                            CorrectDroppedDrawings(this.drawingObjects.document, aDropped);
                             for(let drawingIdx = 0; drawingIdx < aDrawingsToSelect.length; ++drawingIdx)
                             {
                                 let oSelectInfo = aDrawingsToSelect[drawingIdx];
@@ -2124,6 +2132,91 @@ function AddParagraphTopsToSnapArray(logicDocument, pageIndex, snapArray)
             if (line && paraPage.EndLine >= paraPage.StartLine)
                 snapArray.push(paraPage.Y + line.Y - line.Metrics.Ascent);
         }
+    }
+}
+
+/**
+ * A dropped (or resized) object must land where the user dropped it, as in Word. Its offset is computed
+ * from the layout before the drop, but taking the object out of its old place and wrapping the
+ * text around it at the new one moves the paragraph it is anchored to, and the object with it
+ * (by up to the height of the object). After the recalculation, shift the offset by the
+ * remaining difference and recalculate again (a few rounds: the text may rewrap each time).
+ * Objects that ended on another page (their paragraph moved there) are left to the anchor rules.
+ */
+function CorrectDroppedDrawings(logicDocument, dropped)
+{
+    if (!logicDocument || !dropped || !dropped.length)
+        return;
+
+    // only what the anchor explains is corrected: an object kept inside the page (dropped
+    // across its edge) stays where the page limits put it
+    var fitsPage = function(item, drawing)
+    {
+        var limits = logicDocument.Get_PageLimits ? logicDocument.Get_PageLimits(item.page) : null;
+        if (!limits)
+            return {x : true, y : true};
+        var w = drawing.getXfrmExtX(), h = drawing.getXfrmExtY();
+        return {
+            x : item.x >= limits.X - 0.01 && item.x + w <= limits.XLimit + 0.01,
+            y : item.y >= limits.Y - 0.01 && item.y + h <= limits.YLimit + 0.01
+        };
+    };
+
+    for (var iteration = 0; iteration < 3; ++iteration)
+    {
+        var isChanged = false;
+        for (var index = 0; index < dropped.length; ++index)
+        {
+            var item    = dropped[index];
+            var drawing = item.drawing;
+            if (item.done || !drawing || drawing.IsInline() || !drawing.IsUseInDocument() || drawing.PageNum !== item.page)
+                continue;
+
+            var scale = drawing.GetScaleCoefficient ? drawing.GetScaleCoefficient() : 1;
+            if (!scale)
+                scale = 1;
+
+            var fits = fitsPage(item, drawing);
+            var dx = fits.x ? item.x - drawing.X : 0;
+            var dy = fits.y ? item.y - drawing.Y : 0;
+            var error = Math.abs(dx) + Math.abs(dy);
+
+            // a correction that does not bring the object closer is undone and not retried
+            if (undefined !== item.error && error > item.error - 0.01)
+            {
+                drawing.Set_PositionH(item.posH.RelativeFrom, item.posH.Align, item.posH.Value, item.posH.Percent);
+                drawing.Set_PositionV(item.posV.RelativeFrom, item.posV.Align, item.posV.Value, item.posV.Percent);
+                item.done = true;
+                isChanged = true;
+                continue;
+            }
+            item.error = error;
+            if (error < 0.02)
+            {
+                item.done = true;
+                continue;
+            }
+
+            var posV = drawing.PositionV, posH = drawing.PositionH;
+            item.posV = {RelativeFrom : posV.RelativeFrom, Align : posV.Align, Value : posV.Value, Percent : posV.Percent};
+            item.posH = {RelativeFrom : posH.RelativeFrom, Align : posH.Align, Value : posH.Value, Percent : posH.Percent};
+
+            if (Math.abs(dy) > 0.01 && !posV.Align && !posV.Percent && AscFormat.isRealNumber(posV.Value))
+            {
+                drawing.Set_PositionV(posV.RelativeFrom, false, posV.Value + dy / scale, false);
+                isChanged = true;
+            }
+            if (Math.abs(dx) > 0.01 && !posH.Align && !posH.Percent && AscFormat.isRealNumber(posH.Value))
+            {
+                drawing.Set_PositionH(posH.RelativeFrom, false, posH.Value + dx / scale, false);
+                isChanged = true;
+            }
+        }
+
+        if (!isChanged)
+            break;
+
+        logicDocument.Recalculate(true);
     }
 }
 
