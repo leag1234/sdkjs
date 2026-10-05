@@ -11175,9 +11175,11 @@
 	}
 	function setUserColorById(userId, light, dark)
 	{
+		// Same shape as CUserCacheColor: callers ask for the Normal variant too (e.g. asc_getUserColorById)
 		g_oUserColorById[userId] = {
-			Light : new CColor(light.r, light.g, light.b, 255),
-			Dark : new CColor(dark.r, dark.g, dark.b, 255),
+			Light  : new CColor(light.r, light.g, light.b, 255),
+			Dark   : new CColor(dark.r, dark.g, dark.b, 255),
+			Normal : new CColor(light.r, light.g, light.b, 255)
 		};
 	}
 	function getUserColorById(userId, userName, isDark, isNumericValue)

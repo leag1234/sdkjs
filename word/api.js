@@ -10116,9 +10116,17 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype.asc_GetTrackRevisionsReportByAuthors= function()
 	{
 		var oResult = {};
-		var oAllChanges = this.WordControl.m_oLogicDocument.TrackRevisionsManager.Get_AllChanges();
+		var oLogicDocument = this.WordControl.m_oLogicDocument;
+		var oTableId = oLogicDocument.GetTableId ? oLogicDocument.GetTableId() : null;
+		var oAllChanges = oLogicDocument.TrackRevisionsManager.Get_AllChanges();
 		for (var ParaId in oAllChanges)
 		{
+			// The manager keeps the changes of elements removed from the document (e.g. by an undo):
+			// skip them, as CTrackRevisionsManager.Have_Changes does.
+			var oElement = oTableId ? oTableId.Get_ById(ParaId) : null;
+			if (oTableId && (!oElement || !oElement.IsUseInDocument || !oElement.IsUseInDocument()))
+				continue;
+
 			var arrChanges = oAllChanges[ParaId];
 			for (var nIndex = 0, nCount = arrChanges.length; nIndex < nCount; ++nIndex)
 			{
