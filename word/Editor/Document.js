@@ -8556,6 +8556,14 @@ CDocument.prototype.OnKeyDown = function(e)
     var bRetValue        = keydownresult_PreventNothing;
     const bIsMacOs       = AscCommon.AscBrowser.isMacOs;
 
+	// Word keyboard mechanics: extend-selection mode, accent prefixes, tables (word-shortcuts.js)
+	let wordKeyResult = this.handleWordKeyDown ? this.handleWordKeyDown(e) : undefined;
+	if (undefined !== wordKeyResult)
+	{
+		this.UpdateSelection();
+		return wordKeyResult;
+	}
+
     let shortcutType = this.Api.getShortcut(e);
 	if (this.executeShortcut(shortcutType))
 	{
@@ -9933,6 +9941,11 @@ CDocument.prototype.executeShortcut = function(type)
 		}
 		default:
 		{
+			if (this.executeWordShortcut && this.executeWordShortcut(type))
+			{
+				result = true;
+				break;
+			}
 			let customShortcut = this.Api.getCustomShortcutAction(type);
 			if (customShortcut && AscCommon.c_oAscCustomShortcutType.Symbol === customShortcut.Type)
 			{
@@ -9990,6 +10003,9 @@ CDocument.prototype.EnterText = function(value)
 		return false;
 
 	let codePoints = typeof(value) === "string" ? value.codePointsArray() : value;
+
+	if (this.WordPendingAccent && this.composeWordAccent)
+		codePoints = this.composeWordAccent(codePoints);
 
 	if (!this.private_CheckForbiddenPlaceOnTextAdd(codePoints))
 		return true;

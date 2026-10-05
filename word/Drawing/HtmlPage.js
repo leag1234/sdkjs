@@ -2693,6 +2693,7 @@ function CEditorPage(api)
 		oWordControl.bIsUseKeyPress      = ((_ret_mouseDown & keydownresult_PreventKeyPress) != 0) ? false : true;
 
 		oWordControl.EndUpdateOverlay();
+		oWordControl.paintMessageLoop.requestUrgent(); // caret moves, deletions: next frame
 
 		if ((_ret_mouseDown & keydownresult_PreventDefault) != 0)// || (true === global_keyboardEvent.AltKey && !AscBrowser.isMacOs))
 		{
@@ -2780,6 +2781,7 @@ function CEditorPage(api)
 		oWordControl.StartUpdateOverlay();
 		var retValue = oWordControl.m_oLogicDocument.OnKeyPress(global_keyboardEvent);
 		oWordControl.EndUpdateOverlay();
+		oWordControl.paintMessageLoop.requestUrgent(); // caret and text in the next frame
 		if (true === retValue)
 			e.preventDefault();
 	};
@@ -3709,6 +3711,7 @@ function CEditorPage(api)
 
 		this.OnCalculatePagesPlace();
 		this.m_bIsScroll = true;
+		this.paintMessageLoop.requestUrgent();
 	};
 
 	///

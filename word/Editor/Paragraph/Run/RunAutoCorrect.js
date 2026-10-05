@@ -38,6 +38,10 @@
 	const AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE    = 0x00000010;
 	const AUTOCORRECT_FLAGS_NUMBERING                = 0x00000020;
 	const AUTOCORRECT_FLAGS_DOUBLE_SPACE_WITH_PERIOD = 0x00000040;
+	const AUTOCORRECT_FLAGS_SYMBOLS                  = 0x00000080;
+
+	// Word's default AutoCorrect entries for symbols: (c) (r) (tm) (e)
+	const AUTOCORRECT_SYMBOLS = [["(tm", 0x2122], ["(c", 0x00A9], ["(r", 0x00AE], ["(e", 0x20AC]];
 	
 	const ALLOWED_SYMBOLS_DOUBLE_SPACE_TO_PERIOD = {
 		0x0022 : 1, // "
@@ -146,6 +150,9 @@
 			return this.private_Return();
 
 		if (!this.private_ProcessAutoCorrect(AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH, this.private_ProcessHyphenWithDashAutoCorrect))
+			return this.private_Return();
+
+		if (!this.private_ProcessAutoCorrect(AUTOCORRECT_FLAGS_SYMBOLS, this.private_ProcessSymbolsAutoCorrect))
 			return this.private_Return();
 
 		if (!this.private_CollectTextBefore())
@@ -554,6 +561,63 @@
 	 * Производим автозамену замены двух дефисов длинным тире
 	 * @returns {boolean}
 	 */
+	/**
+	 * (c), (r), (tm), (e) are replaced with ©, ®, ™, € when ")" is typed, as Word does
+	 * @returns {boolean}
+	 */
+	CRunAutoCorrect.prototype.private_ProcessSymbolsAutoCorrect = function()
+	{
+		let oDocument  = this.Document;
+		let oParagraph = this.Paragraph;
+		let oRunItem   = this.RunItem;
+		let oRun       = this.Run;
+
+		if (!(para_Text === oRunItem.Type && 0x29 === oRunItem.Value))
+			return false;
+
+		let oRunElementsBefore = new CParagraphRunElements(this.ContentPos, 3, null, false);
+		oRunElementsBefore.SetBreakOnMath(true);
+		oRunElementsBefore.SetSaveContentPositions(true);
+		oParagraph.GetPrevRunElements(oRunElementsBefore);
+
+		let arrElements = oRunElementsBefore.GetElements();
+		let sText = "";
+		for (let nIndex = 0; nIndex < arrElements.length; ++nIndex)
+		{
+			if (para_Text !== arrElements[nIndex].Type)
+				break;
+			sText = String.fromCodePoint(arrElements[nIndex].Value) + sText;
+		}
+		sText = sText.toLowerCase();
+
+		for (let nIndex = 0; nIndex < AUTOCORRECT_SYMBOLS.length; ++nIndex)
+		{
+			let sSource = AUTOCORRECT_SYMBOLS[nIndex][0];
+			if (sText.length < sSource.length || sText.substring(sText.length - sSource.length) !== sSource)
+				continue;
+
+			if (this.private_IsDocumentLocked())
+				return false;
+
+			oDocument.StartAction(AscDFH.historydescription_Document_AutoCorrectCommon);
+
+			let oSymbol = new AscWord.CRunText(AUTOCORRECT_SYMBOLS[nIndex][1]);
+			oRun.AddToContent(this.Pos + 1, oSymbol);
+			oRun.RemoveFromContent(this.Pos, 1);
+
+			let arrPositions = oRunElementsBefore.GetContentPositions();
+			for (let nPos = 0; nPos < sSource.length; ++nPos)
+				oParagraph.RemoveRunElement(arrPositions[nPos]);
+
+			oDocument.Recalculate();
+			oDocument.FinalizeAction();
+
+			this.RunItem = oSymbol;
+			return true;
+		}
+
+		return false;
+	};
 	CRunAutoCorrect.prototype.private_ProcessHyphenWithDashAutoCorrect = function()
 	{
 		let oDocument   = this.Document;
@@ -1447,6 +1511,7 @@
 	window['AscWord'].AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE    = AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE;
 	window['AscWord'].AUTOCORRECT_FLAGS_NUMBERING                = AUTOCORRECT_FLAGS_NUMBERING;
 	window['AscWord'].AUTOCORRECT_FLAGS_DOUBLE_SPACE_WITH_PERIOD = AUTOCORRECT_FLAGS_DOUBLE_SPACE_WITH_PERIOD;
+	window['AscWord'].AUTOCORRECT_FLAGS_SYMBOLS                  = AUTOCORRECT_FLAGS_SYMBOLS;
 
 })(window);
 

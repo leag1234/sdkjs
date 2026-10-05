@@ -208,6 +208,7 @@
 		this.CtrlKey  = false;                        // нажата ли кнопка ctrl
 		this.ShiftKey = false;                        // нажата ли кнопка shift
 		this.MacCmdKey = false;
+		this.MacCtrlKey = false;
 		this.AltGr    = false;
 
 		this.Sender = null;                         // от какого html элемента пришел евент
@@ -230,6 +231,9 @@
 	};
 	CKeyboardEvent.prototype.IsShortcutCtrl = function()
 	{
+		// macOS: with Cmd held, only the real Control key counts (Control+Cmd+Left, Cmd+Option+1)
+		if (this.MacCmdKey)
+			return !!this.MacCtrlKey;
 		return (this.CtrlKey && !this.MacCmdKey || (this.AltKey && this.AltGr));
 	};
 	CKeyboardEvent.prototype.IsCmd = function()
@@ -259,6 +263,7 @@
 		global_keyboardEvent.AltGr = AscCommon.getAltGr(e);
 		global_keyboardEvent.CtrlKey = !global_keyboardEvent.AltGr && (e.metaKey || e.ctrlKey);
         global_keyboardEvent.MacCmdKey = AscCommon.AscBrowser.isMacOs && e.metaKey;
+		global_keyboardEvent.MacCtrlKey = AscCommon.AscBrowser.isMacOs && e.ctrlKey;
 
 		global_keyboardEvent.ShiftKey = e.shiftKey;
 
@@ -282,9 +287,13 @@
 
 		global_keyboardEvent.ShiftKey = e.shiftKey;
 
-		global_keyboardEvent.AltGr = (global_keyboardEvent.CtrlKey && global_keyboardEvent.AltKey) ? true : false;
+		global_keyboardEvent.MacCtrlKey = AscCommon.AscBrowser.isMacOs && e.ctrlKey;
 
-		if (global_keyboardEvent.CtrlKey && global_keyboardEvent.AltKey)
+		// macOS: Cmd+Option is not AltGr (only Control+Option can be)
+		let isCtrlForAltGr = AscCommon.AscBrowser.isMacOs ? e.ctrlKey : global_keyboardEvent.CtrlKey;
+		global_keyboardEvent.AltGr = (isCtrlForAltGr && global_keyboardEvent.AltKey) ? true : false;
+
+		if (global_keyboardEvent.AltGr)
 			global_keyboardEvent.CtrlKey = false;
 	}
 
@@ -793,6 +802,7 @@
 			this.isUseRequestAnimationFrame = false;
 
 		this.requestAnimationOldTime = -1;
+		this.isUrgent = false;
 
 		this.engine = null;
 		this.step = null;
@@ -835,12 +845,26 @@
 	PaintMessageLoop.prototype._animation = function()
 	{
 		var now = Date.now();
-		if (!this.isUseInterval || -1 === this.requestAnimationOldTime || (now >= (this.requestAnimationOldTime + this.interval)) || (now < this.requestAnimationOldTime))
+		if (!this.isUseInterval || this.isUrgent || -1 === this.requestAnimationOldTime || (now >= (this.requestAnimationOldTime + this.interval)) || (now < this.requestAnimationOldTime))
 		{
+			this.isUrgent = false;
 			this.requestAnimationOldTime = now;
 			this.engine();
 		}
 		this.id = this.requestAnimationFrame.call(window, this.step);
+	};
+
+	// Run the engine on the next animation frame instead of waiting for the end of the current
+	// interval (up to 40 ms): called when user input needs a repaint, so that typed text, caret
+	// moves and scrolling are painted in the next frame. Idle polling keeps its interval.
+	PaintMessageLoop.prototype.requestUrgent = function()
+	{
+		this.isUrgent = true;
+		if (!this.isUseRequestAnimationFrame && null !== this.id)
+		{
+			clearTimeout(this.id);
+			this.id = setTimeout(this.step, 0);
+		}
 	};
 
 	PaintMessageLoop.prototype._timer = function()
