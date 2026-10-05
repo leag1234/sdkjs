@@ -14351,6 +14351,66 @@ background-repeat: no-repeat;\
 		}
 	};
 
+	/**
+	 * Theme fonts of the document, for the "Theme Fonts" section of a font list.
+	 * @returns {?{major: string, minor: string}}
+	 */
+	window["asc_docs_api"].prototype["asc_GetThemeFontNames"] = function()
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		let theme = logicDocument ? logicDocument.GetTheme() : null;
+		let fontScheme = theme && theme.themeElements ? theme.themeElements.fontScheme : null;
+		if (!fontScheme || !fontScheme.majorFont || !fontScheme.minorFont)
+			return null;
+
+		let major = fontScheme.majorFont.latin, minor = fontScheme.minorFont.latin;
+		let subst = function(name)
+		{
+			let info = name ? AscFonts.g_fontApplication.GetFontInfoName(name) : null;
+			return info && info !== name ? info : null;
+		};
+		// the substitutes are the fonts used when the theme fonts are not installed (Calibri: Carlito)
+		return {"major" : major, "minor" : minor, "majorSubst" : subst(major), "minorSubst" : subst(minor)};
+	};
+	/**
+	 * Applies the theme heading (isMajor) or body font to the selection as a theme reference
+	 * (+Headings / +Body), so the text follows a later change of theme fonts, as in Word.
+	 */
+	window["asc_docs_api"].prototype["asc_SetThemeFont"] = function(isMajor)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		let names = this["asc_GetThemeFontNames"]();
+		if (!logicDocument || !names)
+			return;
+
+		let _t = this;
+		let fontInfo = AscFonts.g_fontApplication.GetFontInfo(isMajor ? names["major"] : names["minor"]);
+		this.asyncMethodCallback = function()
+		{
+			_t["asc_SetThemeFont"](isMajor);
+		};
+		if (fontInfo && false !== AscCommon.g_font_loader.LoadFont(fontInfo))
+			return;
+		this.asyncMethodCallback = undefined;
+
+		if (logicDocument.IsSelectionLocked(AscCommon.changestype_Paragraph_TextProperties))
+			return;
+
+		let prefix = isMajor ? "major" : "minor";
+		logicDocument.StartAction(AscDFH.historydescription_Document_SetTextFontName);
+		logicDocument.AddToParagraph(new AscCommonWord.ParaTextPr({
+			RFonts : {
+				AsciiTheme    : prefix + "HAnsi",
+				EastAsiaTheme : prefix + "EastAsia",
+				HAnsiTheme    : prefix + "HAnsi",
+				CSTheme       : prefix + "Bidi"
+			}
+		}));
+		logicDocument.Recalculate();
+		logicDocument.UpdateInterface();
+		logicDocument.FinalizeAction();
+	};
+
 	asc_docs_api.prototype.SetDrawImagePlaceContents = function(id, props)
 	{
 		if (this.WordControl.m_oDrawingDocument)
