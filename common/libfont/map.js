@@ -153,6 +153,36 @@
 			]
 		};
 
+		// Substitutes for fonts that are not installed, in order of preference: the first installed one is used.
+		// An installed font with the requested name always wins (real font > metric-compatible clone > closest free font).
+		// Metric-compatible clones have the same advance widths (and line height) as the original, so the layout,
+		// line breaks and pagination stay those of Word.
+		this.FD_Substitutes = {
+			"Calibri"           : ["Carlito"],
+			"Calibri Light"     : ["Carlito"],
+			"Cambria"           : ["Caladea"],
+			"Arial"             : ["Liberation Sans", "Arimo"],
+			"Helvetica"         : ["Liberation Sans", "Arimo"],
+			"Arial Narrow"      : ["Liberation Sans Narrow"],
+			"Times New Roman"   : ["Liberation Serif", "Tinos"],
+			"Times"             : ["Liberation Serif", "Tinos"],
+			"Courier New"       : ["Liberation Mono", "Cousine"],
+			"Courier"           : ["Liberation Mono", "Cousine"],
+			"Georgia"           : ["Gelasio"],
+			"Century Gothic"    : ["URW Gothic"],
+			"Comic Sans MS"     : ["Comic Relief", "Comic Neue"],
+			"Arial Black"       : ["Archivo Black"],
+			"Segoe UI"          : ["Selawik"],
+			"Book Antiqua"      : ["Palatino Linotype", "Palatino", "P052"],
+			"Palatino Linotype" : ["Palatino", "P052"],
+			"Palatino"          : ["P052"],
+			"Verdana"           : ["DejaVu Sans"],
+			"Segoe UI Symbol"   : ["Segoe UI Emoji", "Symbola"]
+		};
+		// Word replaces a font it knows nothing about (not installed, not in its font dictionary, no usable
+		// alternate name) by its default font Calibri; so do we, instead of the closest font by panose.
+		this.FD_UnknownFontSubstitute = "Calibri";
+
 		this.MainUnicodeRanges = {
 			"48" : 3000,
 			"49" : 3000,
@@ -2905,7 +2935,7 @@
 			else
 			{
 				var oSelect = new CFontSelectFormat();
-				oSelect.wsName = name;
+				oSelect.wsName = this.GetSubstituteName(name);
 				oSelect.bItalic = false;
 				oSelect.bBold = false;
 
@@ -2913,6 +2943,39 @@
 				this.FontPickerMap[_key] = _font;
 				return _font;
 			}
+		};
+
+		// Name to look for when "name" is not installed: first installed substitute of FD_Substitutes,
+		// or Word's default font for a font unknown to the font dictionary. Returns "name" otherwise.
+		this.GetSubstituteName = function(name)
+		{
+			if (!name || undefined !== AscFonts.g_map_font_index[name])
+				return name;
+
+			var oDictionary = this.g_fontDictionary;
+			var aSubstitutes = oDictionary.FD_Substitutes[name];
+			if (aSubstitutes)
+			{
+				for (var i = 0, nCount = aSubstitutes.length; i < nCount; ++i)
+				{
+					if (undefined !== AscFonts.g_map_font_index[aSubstitutes[i]])
+						return aSubstitutes[i];
+				}
+				return name;
+			}
+
+			if (!/^[\x20-\x7E]+$/.test(name))
+				return name;
+
+			var oTest = new CFontSelectFormat();
+			oTest.wsName = name;
+			if (oDictionary.CorrectParamsFromDictionary(oTest))
+				return name;
+
+			var sDefault = oDictionary.FD_UnknownFontSubstitute;
+			if (!sDefault || sDefault === name)
+				return name;
+			return this.GetSubstituteName(sDefault);
 		};
 
 		this.GetFontFileWeb = function(name, lStyle)
@@ -2925,7 +2988,7 @@
 			else
 			{
 				var oSelect = new CFontSelectFormat();
-				oSelect.wsName = name;
+				oSelect.wsName = this.GetSubstituteName(name);
 
 				var _font = this.GetFontIndex(oSelect, true);
 				this.FontPickerMap[name] = _font;
