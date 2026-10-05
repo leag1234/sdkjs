@@ -6131,7 +6131,7 @@ background-repeat: no-repeat;\
 		let _image = this.ImageLoader.LoadImage(url, 1);
 		if (null != _image)
 		{
-			let ColumnSize = this.WordControl.m_oLogicDocument.GetColumnSize();
+			let ColumnSize = this.WordControl.m_oLogicDocument.GetInlineObjectMaxSize();
 
 			let _w = Math.max(1, ColumnSize.W);
 			let _h = Math.max(1, ColumnSize.H);
@@ -6139,8 +6139,9 @@ background-repeat: no-repeat;\
 			{
 				let __w = Math.max((_image.Image.width * AscCommon.g_dKoef_pix_to_mm), 1);
 				let __h = Math.max((_image.Image.height * AscCommon.g_dKoef_pix_to_mm), 1);
-				_w      = Math.max(5, Math.min(_w, __w));
-				_h      = Math.max(5, Math.min((_w * __h / __w)));
+				let fit = this.WordControl.m_oLogicDocument.FitInlineObjectSize(__w, __h);
+				_w      = fit.W;
+				_h      = fit.H;
 			}
 
 			let src = _image.src;
@@ -6188,7 +6189,7 @@ background-repeat: no-repeat;\
 			this.sync_StartAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.LoadImage);
 			this.asyncImageEndLoaded2 = function(_image)
 			{
-				let ColumnSize = this.WordControl.m_oLogicDocument.GetColumnSize();
+				let ColumnSize = this.WordControl.m_oLogicDocument.GetInlineObjectMaxSize();
 
 				let _w = Math.max(1, ColumnSize.W);
 				let _h = Math.max(1, ColumnSize.H);
@@ -6196,8 +6197,9 @@ background-repeat: no-repeat;\
 				{
 					let __w = Math.max((_image.Image.width * AscCommon.g_dKoef_pix_to_mm), 1);
 					let __h = Math.max((_image.Image.height * AscCommon.g_dKoef_pix_to_mm), 1);
-					_w      = Math.max(5, Math.min(_w, __w));
-					_h      = Math.max(5, Math.min((_w * __h / __w)));
+					let fit = this.WordControl.m_oLogicDocument.FitInlineObjectSize(__w, __h);
+					_w      = fit.W;
+					_h      = fit.H;
 				}
 				let src = _image.src;
 
@@ -14879,6 +14881,77 @@ background-repeat: no-repeat;\
 		return [[oPos0.X, oPos0.Y], [oPos1.X, oPos1.Y], [oPos2.X, oPos2.Y], [oPos3.X, oPos3.Y]];
 	};
 
+	/**
+	 * Layout of the selected picture or shape, for the Layout Options button and the anchor
+	 * marker of the interface (like Word): its bounds in pixels of the document view
+	 * (#id_viewer), its wrapping style (Asc.c_oAscWrapStyle2), "move with text", the lock of
+	 * its anchor, and the position of the paragraph it is anchored to (start of its first
+	 * line on the page of the drawing). null unless exactly one drawing of the document is
+	 * selected.
+	 */
+	asc_docs_api.prototype.asc_GetSelectedDrawingLayout = function()
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		if (!logicDocument || !logicDocument.DrawingObjects || !logicDocument.GetDrawingDocument())
+			return null;
+
+		let drawingObjects = logicDocument.DrawingObjects;
+		let selected = drawingObjects.getSelectedObjects();
+		if (!selected || 1 !== selected.length || !selected[0].parent || !(selected[0].parent instanceof AscWord.ParaDrawing))
+			return null;
+
+		let shape   = selected[0];
+		let drawing = shape.parent;
+		if (!drawing.IsUseInDocument() || !shape.bounds)
+			return null;
+
+		let drawingDocument = logicDocument.GetDrawingDocument();
+		let page = AscFormat.isRealNumber(shape.selectStartPage) && shape.selectStartPage >= 0 ? shape.selectStartPage : drawing.PageNum;
+		let lt   = drawingDocument.ConvertCoordsToCursor(shape.bounds.l, shape.bounds.t, page);
+		let rb   = drawingDocument.ConvertCoordsToCursor(shape.bounds.r, shape.bounds.b, page);
+		if (lt.Error || rb.Error)
+			return null;
+
+		let isInline = drawing.IsInline();
+		let wrap     = drawing.GetWrappingStyle();
+
+		let anchor = null;
+		let paragraph = isInline ? null : drawing.GetParagraph();
+		if (paragraph && paragraph.Pages.length > 0)
+		{
+			let pageIndex = 0;
+			for (let index = 0; index < paragraph.Pages.length; ++index)
+			{
+				if (paragraph.GetAbsolutePage(index) === drawing.PageNum)
+				{
+					pageIndex = index;
+					break;
+				}
+			}
+			let paraPage = paragraph.Pages[pageIndex];
+			let line     = paragraph.Lines[paraPage.StartLine];
+			let lineTop  = line ? paraPage.Y + line.Y - line.Metrics.Ascent : paraPage.Bounds.Top;
+			let pos      = drawingDocument.ConvertCoordsToCursor(paraPage.X, lineTop, paragraph.GetAbsolutePage(pageIndex));
+			if (!pos.Error)
+				anchor = {"x" : pos.X, "y" : pos.Y, "page" : paragraph.GetAbsolutePage(pageIndex)};
+		}
+
+		let relV = drawing.PositionV.RelativeFrom;
+		return {
+			"left"         : lt.X,
+			"top"          : lt.Y,
+			"right"        : rb.X,
+			"bottom"       : rb.Y,
+			"page"         : page,
+			"inline"       : isInline,
+			"wrap"         : wrap,
+			"moveWithText" : !isInline && (Asc.c_oAscRelativeFromV.Paragraph === relV || Asc.c_oAscRelativeFromV.Line === relV),
+			"lockAnchor"   : !!drawing.Locked,
+			"tracking"     : !!(drawingObjects.arrTrackObjects && drawingObjects.arrTrackObjects.length),
+			"anchor"       : anchor
+		};
+	};
+
 	asc_docs_api.prototype.asc_canEditGeometry = function ()
 	{
 		var document = this.private_GetLogicDocument();
@@ -16279,6 +16352,7 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_ConvertTableToText']                    = asc_docs_api.prototype.asc_ConvertTableToText;
 
 	asc_docs_api.prototype['asc_GetSelectionBounds']                    = asc_docs_api.prototype.asc_GetSelectionBounds;
+	asc_docs_api.prototype['asc_GetSelectedDrawingLayout']              = asc_docs_api.prototype.asc_GetSelectedDrawingLayout;
 
 
 	// mobile

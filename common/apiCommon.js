@@ -5193,6 +5193,7 @@ function (window, undefined) {
 			this.Paddings = (undefined != obj.Paddings) ? new asc_CPaddings(obj.Paddings) : undefined;
 			this.Position = (undefined != obj.Position) ? new CPosition(obj.Position) : undefined;
 			this.AllowOverlap = (undefined != obj.AllowOverlap) ? obj.AllowOverlap : undefined;
+			this.LockAnchor = (undefined != obj.LockAnchor) ? obj.LockAnchor : undefined;
 			this.PositionH = (undefined != obj.PositionH) ? new CImagePositionH(obj.PositionH) : undefined;
 			this.PositionV = (undefined != obj.PositionV) ? new CImagePositionV(obj.PositionV) : undefined;
 
@@ -5357,6 +5358,13 @@ function (window, undefined) {
 	};
 	asc_CImgProperty.prototype.asc_putAllowOverlap = function (v) {
 		this.AllowOverlap = v;
+	};
+	// "Lock anchor" of Word's Layout dialog: the anchor stays on its paragraph when the object is moved
+	asc_CImgProperty.prototype.asc_getLockAnchor = function () {
+		return this.LockAnchor;
+	};
+	asc_CImgProperty.prototype.asc_putLockAnchor = function (v) {
+		this.LockAnchor = v;
 	}; // Возвращается объект класса CPosition
 	asc_CImgProperty.prototype.asc_getPosition = function () {
 		return this.Position;
@@ -9187,6 +9195,8 @@ function (window, undefined) {
 	prot["put_Paddings"] = prot["asc_putPaddings"] = prot.asc_putPaddings;
 	prot["get_AllowOverlap"] = prot["asc_getAllowOverlap"] = prot.asc_getAllowOverlap;
 	prot["put_AllowOverlap"] = prot["asc_putAllowOverlap"] = prot.asc_putAllowOverlap;
+	prot["get_LockAnchor"] = prot["asc_getLockAnchor"] = prot.asc_getLockAnchor;
+	prot["put_LockAnchor"] = prot["asc_putLockAnchor"] = prot.asc_putLockAnchor;
 	prot["get_Position"] = prot["asc_getPosition"] = prot.asc_getPosition;
 	prot["put_Position"] = prot["asc_putPosition"] = prot.asc_putPosition;
 	prot["get_PositionH"] = prot["asc_getPositionH"] = prot.asc_getPositionH;

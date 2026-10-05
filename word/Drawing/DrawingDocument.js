@@ -37,6 +37,8 @@ var global_mouseEvent = AscCommon.global_mouseEvent;
 var History = AscCommon.History;
 var global_MatrixTransformer = AscCommon.global_MatrixTransformer;
 var g_dKoef_pix_to_mm = AscCommon.g_dKoef_pix_to_mm;
+// Colour of the alignment guides shown while an object is dragged (Word draws them green)
+var ALIGNMENT_GUIDE_COLOR = "#00B050";
 var g_dKoef_mm_to_pix = AscCommon.g_dKoef_mm_to_pix;
 
 // columns ---
@@ -5680,13 +5682,11 @@ function CDrawingDocument()
 			return;
 		}
 
-		var _pos = this.ConvertCoordsToCursor4(xPos, 0, pageNum);
-		if (_pos.Error === false)
-		{
-			this.m_oWordControl.m_oOverlayApi.DashLineColor = "#C8C8C8";
-			this.m_oWordControl.m_oOverlayApi.VertLine2(_pos.X);
-			this.m_oWordControl.m_oOverlayApi.DashLineColor = "#000000";
-		}
+		var _page = this.m_arrPages[pageNum];
+		var _pos0 = this.ConvertCoordsToCursor4(xPos, 0, pageNum, true);
+		var _pos1 = _page ? this.ConvertCoordsToCursor4(xPos, _page.height_mm, pageNum, true) : _pos0;
+		if (_pos0.Error === false && _pos1.Error === false)
+			this.m_oWordControl.m_oOverlayApi.AlignmentGuide(_pos0.X, _pos0.Y, _pos1.X, _pos1.Y, ALIGNMENT_GUIDE_COLOR);
 	};
 
 	this.DrawHorAnchor = function (pageNum, yPos, bIsFromDrawings)
@@ -5700,13 +5700,11 @@ function CDrawingDocument()
 			return;
 		}
 
-		var _pos = this.ConvertCoordsToCursor4(0, yPos, pageNum);
-		if (_pos.Error === false)
-		{
-			this.m_oWordControl.m_oOverlayApi.DashLineColor = "#C8C8C8";
-			this.m_oWordControl.m_oOverlayApi.HorLine2(_pos.Y);
-			this.m_oWordControl.m_oOverlayApi.DashLineColor = "#000000";
-		}
+		var _page = this.m_arrPages[pageNum];
+		var _pos0 = this.ConvertCoordsToCursor4(0, yPos, pageNum, true);
+		var _pos1 = _page ? this.ConvertCoordsToCursor4(_page.width_mm, yPos, pageNum, true) : _pos0;
+		if (_pos0.Error === false && _pos1.Error === false)
+			this.m_oWordControl.m_oOverlayApi.AlignmentGuide(_pos0.X, _pos0.Y, _pos1.X, _pos1.Y, ALIGNMENT_GUIDE_COLOR);
 	};
 
 	this.DrawHorVerAnchor = function ()

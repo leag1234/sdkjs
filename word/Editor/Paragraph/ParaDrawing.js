@@ -439,6 +439,7 @@ ParaDrawing.prototype.Get_Props = function(OtherProps)
 	Props.Internal_Position = this.Internal_Position;
 
 	Props.Locked        = this.Lock.Is_Locked();
+	Props.LockAnchor    = !!this.Locked;
 	var ParentParagraph = this.Get_ParentParagraph();
 	if (ParentParagraph && undefined !== ParentParagraph.Parent)
 	{
@@ -519,6 +520,9 @@ ParaDrawing.prototype.Get_Props = function(OtherProps)
 
 		if (false === OtherProps.Locked)
 			Props.Locked = false;
+
+		if (OtherProps.LockAnchor !== Props.LockAnchor)
+			Props.LockAnchor = undefined;
 
 		if (false === OtherProps.CanBeFlow || false === Props.CanBeFlow)
 			Props.CanBeFlow = false;
@@ -1036,6 +1040,9 @@ ParaDrawing.prototype.Set_Props = function(Props)
 	if (undefined != Props.AllowOverlap)
 		this.Set_AllowOverlap(Props.AllowOverlap);
 
+	if (undefined != Props.LockAnchor && !!Props.LockAnchor !== !!this.Locked)
+		this.Set_Locked(!!Props.LockAnchor);
+
 	if (undefined != Props.PositionH)
 	{
 		this.Set_PositionH(Props.PositionH.RelativeFrom, Props.PositionH.UseAlign, ( true === Props.PositionH.UseAlign ? Props.PositionH.Align : Props.PositionH.Value ), Props.PositionH.Percent);
@@ -1093,6 +1100,24 @@ ParaDrawing.prototype.Set_Props = function(Props)
 	if(undefined != Props.title){
 		this.docPr.setTitle(Props.title);
 	}
+};
+/**
+ * Wrapping style as the interface names it (Asc.c_oAscWrapStyle2: in line, square, tight,
+ * through, top and bottom, behind or in front of the text).
+ */
+ParaDrawing.prototype.GetWrappingStyle = function()
+{
+	if (this.IsInline())
+		return c_oAscWrapStyle2.Inline;
+
+	switch (this.wrappingType)
+	{
+		case WRAPPING_TYPE_NONE: return this.behindDoc ? c_oAscWrapStyle2.Behind : c_oAscWrapStyle2.InFront;
+		case WRAPPING_TYPE_TIGHT: return c_oAscWrapStyle2.Tight;
+		case WRAPPING_TYPE_THROUGH: return c_oAscWrapStyle2.Through;
+		case WRAPPING_TYPE_TOP_AND_BOTTOM: return c_oAscWrapStyle2.TopAndBottom;
+	}
+	return c_oAscWrapStyle2.Square;
 };
 ParaDrawing.prototype.CheckFitToColumn = function()
 {
