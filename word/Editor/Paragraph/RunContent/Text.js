@@ -601,6 +601,10 @@
 			|| 63 === this.Value)
 			return AscWord.AUTOCORRECT_FLAGS_ALL;
 
+		// 41 ): (c), (r), (tm), (e)
+		if (41 === this.Value)
+			return AscWord.AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE | AscWord.AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH | AscWord.AUTOCORRECT_FLAGS_SYMBOLS;
+
 		// /,\,@  - исключения, на них мы не должны стартовать атозамену первой буквы предложения
 		if ((this.IsPunctuation() || this.IsNumber()) && 92 !== this.Value && 47 !== this.Value && 64 !== this.Value)
 			return AscWord.AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE | AscWord.AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH;
