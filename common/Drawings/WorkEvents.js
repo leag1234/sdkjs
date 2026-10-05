@@ -208,6 +208,7 @@
 		this.CtrlKey  = false;                        // нажата ли кнопка ctrl
 		this.ShiftKey = false;                        // нажата ли кнопка shift
 		this.MacCmdKey = false;
+		this.MacCtrlKey = false;
 		this.AltGr    = false;
 
 		this.Sender = null;                         // от какого html элемента пришел евент
@@ -230,6 +231,9 @@
 	};
 	CKeyboardEvent.prototype.IsShortcutCtrl = function()
 	{
+		// macOS: with Cmd held, only the real Control key counts (Control+Cmd+Left, Cmd+Option+1)
+		if (this.MacCmdKey)
+			return !!this.MacCtrlKey;
 		return (this.CtrlKey && !this.MacCmdKey || (this.AltKey && this.AltGr));
 	};
 	CKeyboardEvent.prototype.IsCmd = function()
@@ -259,6 +263,7 @@
 		global_keyboardEvent.AltGr = AscCommon.getAltGr(e);
 		global_keyboardEvent.CtrlKey = !global_keyboardEvent.AltGr && (e.metaKey || e.ctrlKey);
         global_keyboardEvent.MacCmdKey = AscCommon.AscBrowser.isMacOs && e.metaKey;
+		global_keyboardEvent.MacCtrlKey = AscCommon.AscBrowser.isMacOs && e.ctrlKey;
 
 		global_keyboardEvent.ShiftKey = e.shiftKey;
 
@@ -282,9 +287,13 @@
 
 		global_keyboardEvent.ShiftKey = e.shiftKey;
 
-		global_keyboardEvent.AltGr = (global_keyboardEvent.CtrlKey && global_keyboardEvent.AltKey) ? true : false;
+		global_keyboardEvent.MacCtrlKey = AscCommon.AscBrowser.isMacOs && e.ctrlKey;
 
-		if (global_keyboardEvent.CtrlKey && global_keyboardEvent.AltKey)
+		// macOS: Cmd+Option is not AltGr (only Control+Option can be)
+		let isCtrlForAltGr = AscCommon.AscBrowser.isMacOs ? e.ctrlKey : global_keyboardEvent.CtrlKey;
+		global_keyboardEvent.AltGr = (isCtrlForAltGr && global_keyboardEvent.AltKey) ? true : false;
+
+		if (global_keyboardEvent.AltGr)
 			global_keyboardEvent.CtrlKey = false;
 	}
 
