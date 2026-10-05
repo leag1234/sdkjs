@@ -14583,6 +14583,41 @@ CDocument.prototype.Get_SectionPageNumInfo2 = function(Page_abs)
 
 	return {FirstPage : _FP, CurPage : _CP, SectIndex : startSectIndex};
 };
+/**
+ * Does Word print (and export to PDF) an empty page before the given page?
+ * Word keeps odd page numbers on right-hand pages when printing: it inserts an empty page before a section that
+ * starts on a new page when
+ *  - the section break is "odd page" (resp. "even page") and the previous page number is odd (resp. even);
+ *  - headers and footers differ on odd and even pages (evenAndOddHeaders) and the first page number of the section
+ *    has the same parity as the previous page number (for instance numbering restarted at 1 after page 1).
+ * Such pages are not part of the layout (Word does not show them in the print layout view either).
+ * @param {number} nPageAbs
+ * @returns {boolean}
+ */
+CDocument.prototype.IsPrintBlankPageBefore = function(nPageAbs)
+{
+	if (nPageAbs <= 0 || nPageAbs >= this.Pages.length || !this.Pages[nPageAbs] || !this.Pages[nPageAbs - 1])
+		return false;
+
+	let sectPr     = this.Pages[nPageAbs].GetSectPr();
+	let prevSectPr = this.Pages[nPageAbs - 1].GetSectPr();
+	if (!sectPr || !prevSectPr || sectPr === prevSectPr)
+		return false;
+
+	let breakType = sectPr.Get_Type();
+	if (c_oAscSectionBreakType.Continuous === breakType || c_oAscSectionBreakType.Column === breakType)
+		return false;
+
+	let prevNum = this.Get_SectionPageNumInfo2(nPageAbs - 1).CurPage;
+	let curNum  = this.Get_SectionPageNumInfo2(nPageAbs).CurPage;
+
+	if (c_oAscSectionBreakType.OddPage === breakType)
+		return 1 === Math.abs(prevNum % 2);
+	if (c_oAscSectionBreakType.EvenPage === breakType)
+		return 0 === prevNum % 2;
+
+	return (true === EvenAndOddHeaders && 0 === (curNum - prevNum) % 2);
+};
 CDocument.prototype.Get_SectionHdrFtr = function(nPageAbs, isFirst, isEven)
 {
 	return this.Layout.GetSectionHdrFtr(nPageAbs, isFirst, isEven);

@@ -13766,10 +13766,19 @@ background-repeat: no-repeat;\
 		let nativeOptions = options ? options["nativeOptions"] : undefined;
 		let pages = nativeOptions ? AscCommon.getNativePrintRanges(nativeOptions["pages"], nativeOptions["currentPage"], pagescount) : undefined;
 
+		let oLogicDocument = this.WordControl.m_oLogicDocument;
 		for (var i = 0; i < pagescount; i++)
 		{
 			if (pages !== undefined && !pages[i])
 				continue;
+
+			// empty page printed by Word to keep odd page numbers on right-hand pages
+			if (pages === undefined && oLogicDocument && oLogicDocument.IsPrintBlankPageBefore(i))
+			{
+				let page = this.WordControl.m_oDrawingDocument.m_arrPages[i];
+				_renderer.BeginPage(page.width_mm, page.height_mm);
+				_renderer.EndPage();
+			}
 			this["asc_nativePrint"](_renderer, i, options);
 		}
 
