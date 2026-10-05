@@ -199,20 +199,30 @@
 			"Times"             : ["Liberation Serif", "Tinos"],
 			"Courier New"       : ["Liberation Mono", "Cousine"],
 			"Courier"           : ["Liberation Mono", "Cousine"],
-			"Georgia"           : ["Gelasio"],
-			"Century Gothic"    : ["URW Gothic"],
-			"Comic Sans MS"     : ["Comic Relief", "Comic Neue"],
-			"Arial Black"       : ["Archivo Black"],
+			"Georgia"           : ["Gelasio Metric", "Gelasio"],
+			"Century Gothic"    : ["URW Gothic Metric", "URW Gothic"],
+			"Comic Sans MS"     : ["Comic Relief Metric", "Comic Relief", "Comic Neue"],
+			"Arial Black"       : ["Archivo Black Metric", "Archivo Black"],
 			"Segoe UI"          : ["Selawik"],
 			"Book Antiqua"      : ["Palatino Linotype", "Palatino", "P052"],
 			"Palatino Linotype" : ["Palatino", "P052"],
 			"Palatino"          : ["P052"],
 			"Verdana"           : ["DejaVu Sans"],
+			"Aptos"             : ["Roboto Metric"],
+			"Aptos Display"     : ["Roboto Metric"],
 			"Segoe UI Symbol"   : ["Segoe UI Emoji", "Symbola"],
-			"Wingdings"         : ["Symbola"],
-			"Wingdings 2"       : ["Symbola"],
-			"Wingdings 3"       : ["Symbola"],
-			"Webdings"          : ["Symbola"]
+			// French school fonts that cannot be redistributed: closest free fonts by measured advance widths,
+			// with the vertical metrics of the original (Word desktop renderings with the fonts installed)
+			"Script cole"              : ["URW Gothic Ecole Metric"],
+			"Script École"             : ["URW Gothic Ecole Metric"],
+			"Script Ecole"             : ["URW Gothic Ecole Metric"],
+			"Scriptcole"               : ["URW Gothic Ecole Metric"],
+			"KG Primary Penmanship"    : ["Caveat Penmanship Metric"],
+			"KG Primary Penmanship 2"  : ["Neucha Penmanship Metric"],
+			"Wingdings"         : ["Elixir Symbols", "Symbola"],
+			"Wingdings 2"       : ["Elixir Symbols", "Symbola"],
+			"Wingdings 3"       : ["Elixir Symbols", "Symbola"],
+			"Webdings"          : ["Elixir Symbols", "Symbola"]
 		};
 		// Word replaces a font it knows nothing about (not installed, not in its font dictionary, no usable
 		// alternate name) by its default font Calibri; so do we, instead of the closest font by panose.

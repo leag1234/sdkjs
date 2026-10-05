@@ -58,18 +58,35 @@ $(function ()
 
 	QUnit.test("metric-compatible clone when the font is missing", function (assert)
 	{
-		withInstalled(["Carlito", "Caladea", "Liberation Sans", "Gelasio", "URW Gothic", "Symbola"], function ()
+		withInstalled(["Carlito", "Caladea", "Liberation Sans", "Gelasio Metric", "Gelasio", "Symbola"], function ()
 		{
 			assert.strictEqual(oApp.GetSubstituteName("Calibri"), "Carlito");
 			assert.strictEqual(oApp.GetSubstituteName("Cambria"), "Caladea");
 			assert.strictEqual(oApp.GetSubstituteName("Arial"), "Liberation Sans");
-			assert.strictEqual(oApp.GetSubstituteName("Georgia"), "Gelasio");
-			assert.strictEqual(oApp.GetSubstituteName("Century Gothic"), "URW Gothic");
+			assert.strictEqual(oApp.GetSubstituteName("Georgia"), "Gelasio Metric", "first installed substitute in order");
 			assert.strictEqual(oApp.GetSubstituteName("Wingdings"), "Symbola");
 		});
-		withInstalled(["Comic Neue"], function ()
+		withInstalled(["Elixir Symbols", "Symbola"], function ()
 		{
-			assert.strictEqual(oApp.GetSubstituteName("Comic Sans MS"), "Comic Neue", "first installed substitute in order");
+			assert.strictEqual(oApp.GetSubstituteName("Wingdings"), "Elixir Symbols", "symbol font with Wingdings metrics first");
+			assert.strictEqual(oApp.GetSubstituteName("Webdings"), "Elixir Symbols");
+		});
+		withInstalled(["Gelasio"], function ()
+		{
+			assert.strictEqual(oApp.GetSubstituteName("Georgia"), "Gelasio", "next substitute in order");
+		});
+	});
+
+	QUnit.test("school fonts that cannot be shipped use their measured substitute", function (assert)
+	{
+		withInstalled(["Carlito", "URW Gothic Ecole Metric"], function ()
+		{
+			assert.strictEqual(oApp.GetSubstituteName("Script cole"), "URW Gothic Ecole Metric", "Script École");
+			assert.strictEqual(oApp.GetSubstituteName("KG Primary Penmanship"), "KG Primary Penmanship", "substitute not installed: name kept");
+		});
+		withInstalled(["Script cole", "URW Gothic Ecole Metric"], function ()
+		{
+			assert.strictEqual(oApp.GetSubstituteName("Script cole"), "Script cole", "installed school font wins");
 		});
 	});
 
