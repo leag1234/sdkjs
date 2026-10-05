@@ -16911,6 +16911,45 @@ CDocument.prototype.GetColumnSize = function()
 {
 	return this.Controller.GetColumnSize();
 };
+/**
+ * Largest size of an inline object inserted at the cursor: the width the current paragraph
+ * can give it (its column, table cell, header or footer, minus the paragraph indents) and the
+ * height of the column. Word fits a new picture into this space, so that inserting it never
+ * widens a table column nor overflows the margins.
+ * @returns {{W: number, H: number}}
+ */
+CDocument.prototype.GetInlineObjectMaxSize = function()
+{
+	let size = this.GetColumnSize();
+	let W = size.W, H = size.H;
+	let paragraph = this.GetCurrentParagraph(true);
+	if (paragraph && paragraph.IsParagraph && paragraph.IsParagraph() && paragraph.Pages.length > 0
+		&& AscFormat.isRealNumber(paragraph.X) && AscFormat.isRealNumber(paragraph.XLimit))
+	{
+		let ind = paragraph.Get_CompiledPr2(false).ParaPr.Ind;
+		let paraW = paragraph.XLimit - paragraph.X - Math.max(0, ind.Left || 0) - Math.max(0, ind.Right || 0);
+		if (paraW > 1 && (paraW < W || W <= 0))
+			W = paraW;
+		if (paragraph.IsTableCellContent && paragraph.IsTableCellContent() && AscFormat.isRealNumber(paragraph.YLimit)
+			&& paragraph.YLimit - paragraph.Y > 1 && (paragraph.YLimit - paragraph.Y < H || H <= 0))
+			H = Math.min(H > 0 ? H : Infinity, paragraph.YLimit - paragraph.Y);
+	}
+	return {W : W, H : H};
+};
+/**
+ * Size of a new inline picture of natural size (w, h) in mm: unchanged when it fits the space
+ * of GetInlineObjectMaxSize, otherwise scaled down proportionally to fit both dimensions.
+ */
+CDocument.prototype.FitInlineObjectSize = function(w, h)
+{
+	let max = this.GetInlineObjectMaxSize();
+	let scale = 1;
+	if (max.W > 0 && w > max.W)
+		scale = Math.min(scale, max.W / w);
+	if (max.H > 0 && h > max.H)
+		scale = Math.min(scale, max.H / h);
+	return {W : Math.max(5, w * scale), H : Math.max(5, h * scale)};
+};
 CDocument.prototype.private_OnSelectionEnd = function()
 {
 	this.sendEvent("asc_onSelectionEnd");
@@ -19507,8 +19546,9 @@ CDocument.prototype.controller_AddImages = function(aImages)
 			{
 				var __w = Math.max((_image.Image.width * AscCommon.g_dKoef_pix_to_mm), 1);
 				var __h = Math.max((_image.Image.height * AscCommon.g_dKoef_pix_to_mm), 1);
-				W      = Math.max(5, Math.min(W, __w));
-				H      = Math.max(5, Math.min((W * __h / __w)));
+				var fit = this.FitInlineObjectSize(__w, __h);
+				W      = fit.W;
+				H      = fit.H;
 				Drawing   = new ParaDrawing(W, H, null, this.DrawingDocument, this, null);
 				var Image = this.DrawingObjects.createImage(_image.src, 0, 0, W, H);
 				Image.setParent(Drawing);

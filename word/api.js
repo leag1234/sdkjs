@@ -6131,7 +6131,7 @@ background-repeat: no-repeat;\
 		let _image = this.ImageLoader.LoadImage(url, 1);
 		if (null != _image)
 		{
-			let ColumnSize = this.WordControl.m_oLogicDocument.GetColumnSize();
+			let ColumnSize = this.WordControl.m_oLogicDocument.GetInlineObjectMaxSize();
 
 			let _w = Math.max(1, ColumnSize.W);
 			let _h = Math.max(1, ColumnSize.H);
@@ -6139,8 +6139,9 @@ background-repeat: no-repeat;\
 			{
 				let __w = Math.max((_image.Image.width * AscCommon.g_dKoef_pix_to_mm), 1);
 				let __h = Math.max((_image.Image.height * AscCommon.g_dKoef_pix_to_mm), 1);
-				_w      = Math.max(5, Math.min(_w, __w));
-				_h      = Math.max(5, Math.min((_w * __h / __w)));
+				let fit = this.WordControl.m_oLogicDocument.FitInlineObjectSize(__w, __h);
+				_w      = fit.W;
+				_h      = fit.H;
 			}
 
 			let src = _image.src;
@@ -6188,7 +6189,7 @@ background-repeat: no-repeat;\
 			this.sync_StartAction(c_oAscAsyncActionType.BlockInteraction, c_oAscAsyncAction.LoadImage);
 			this.asyncImageEndLoaded2 = function(_image)
 			{
-				let ColumnSize = this.WordControl.m_oLogicDocument.GetColumnSize();
+				let ColumnSize = this.WordControl.m_oLogicDocument.GetInlineObjectMaxSize();
 
 				let _w = Math.max(1, ColumnSize.W);
 				let _h = Math.max(1, ColumnSize.H);
@@ -6196,8 +6197,9 @@ background-repeat: no-repeat;\
 				{
 					let __w = Math.max((_image.Image.width * AscCommon.g_dKoef_pix_to_mm), 1);
 					let __h = Math.max((_image.Image.height * AscCommon.g_dKoef_pix_to_mm), 1);
-					_w      = Math.max(5, Math.min(_w, __w));
-					_h      = Math.max(5, Math.min((_w * __h / __w)));
+					let fit = this.WordControl.m_oLogicDocument.FitInlineObjectSize(__w, __h);
+					_w      = fit.W;
+					_h      = fit.H;
 				}
 				let src = _image.src;
 

@@ -13420,8 +13420,8 @@ PasteProcessor.prototype =
 
 	fitPictureSizeToPage: function (nWidth, nHeight) {
 		if (this.apiEditor && this.apiEditor.isDocumentEditor) {
-			if (this.oLogicDocument && this.oLogicDocument.GetColumnSize) {
-				var oColumnSize = this.oLogicDocument.GetColumnSize();
+			if (this.oLogicDocument && this.oLogicDocument.GetInlineObjectMaxSize) {
+				var oColumnSize = this.oLogicDocument.GetInlineObjectMaxSize();
 				if (oColumnSize) {
 					if (nWidth > oColumnSize.W || nHeight > oColumnSize.H) {
 						if (oColumnSize.W > 0 && oColumnSize.H > 0) {
