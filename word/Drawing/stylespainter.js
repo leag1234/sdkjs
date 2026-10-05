@@ -135,11 +135,15 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 		if (!this.styleManager.Style)
 			return;
 		
+		let galleryOptions = _api.StyleGalleryOptions;
+		this.isWordGallery = !!(galleryOptions && galleryOptions.wordLike);
+		let usedStyles = this.isWordGallery ? this.GetUsedParagraphStyles(_api) : null;
+		
 		this.styles = [];
 		for (let i in this.styleManager.Style)
 		{
 			let style = this.styleManager.Style[i];
-			if (style.IsExpressStyle(this.styleManager))
+			if (this.isWordGallery ? this.IsWordGalleryStyle(style, usedStyles) : style.IsExpressStyle(this.styleManager))
 				this.styles.push(this.styleManager.Style[i]);
 		}
 		
@@ -176,12 +180,13 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 		if (null != this.docStyles)
 			_count_doc = this.docStyles.length;
 		
+		var _t = this;
 		var aPriorityStyles = [];
 		var fAddToPriorityStyles = function (style)
 		{
 			var index = style.uiPriority;
 			if (null == index)
-				index = 0;
+				index = (_t.isWordGallery && "Normal" !== style.name) ? 99 : 0;
 			var aSubArray = aPriorityStyles[index];
 			if (null == aSubArray)
 			{
@@ -195,14 +200,14 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 		for (var i = 0; i < _count_doc; i++)
 		{
 			var style = this.docStyles[i];
-			_map_document[style.Name] = 1;
+			_map_document[style.name] = 1;
 			fAddToPriorityStyles(style);
 		}
 		
 		for (var i = 0; i < _count_default; i++)
 		{
 			var style = this.defaultStyles[i];
-			if (null == _map_document[style.Name])
+			if (null == _map_document[style.name])
 				fAddToPriorityStyles(style);
 		}
 		
@@ -210,14 +215,11 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 		for (var index in aPriorityStyles)
 		{
 			var aSubArray = aPriorityStyles[index];
+			// CStyleImage keeps the name in "name". Names read from a file may be lower case
+			// ("heading 1"): compare without case, and numbers by value (Heading 1..9 in order)
 			aSubArray.sort(function (a, b)
 			{
-				if (a.Name < b.Name)
-					return -1;
-				else if (a.Name > b.Name)
-					return 1;
-				else
-					return 0;
+				return ("" + a.name).localeCompare("" + b.name, undefined, {numeric : true, sensitivity : "base"});
 			});
 			for (var i = 0, length = aSubArray.length; i < length; ++i)
 			{
@@ -299,8 +301,9 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 		}
 		
 		var _dr_style  = this.styleManager.Get_Pr(styleId, AscWord.styletype_Paragraph);
-		_dr_style.Name = styleName;
-		_dr_style.Id   = styleId;
+		_dr_style.Name      = styleName;
+		_dr_style.Id        = styleId;
+		_dr_style.StyleType = style.GetType();
 		
 		this.drawStyle(this.api, this.graphics, _dr_style, this.styleManager.IsStyleDefaultByName(styleName) ? AscCommon.translateManager.getValue(styleName) : styleName);
 		return new AscCommon.CStyleImage(styleName, AscCommon.c_oAscStyleImage.Document, this.canvas.toDataURL("image/png"), uiPriority);
@@ -420,11 +423,16 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 			
 			var par = new AscWord.Paragraph(_dc, false);
 			var run = new ParaRun(par, false);
-			run.AddText(styleName);
+			var previewText = this.api && this.api.StyleGalleryOptions ? this.api.StyleGalleryOptions.previewText : null;
+			run.AddText(previewText ? previewText : styleName);
 			
 			_dc.Internal_Content_Add(0, par, false);
 			par.Add_ToContent(0, run);
-			par.Style_Add(style.Id, false);
+			// a character style formats the run, not the paragraph
+			if (AscWord.styletype_Character === style.StyleType)
+				run.Set_RStyle(style.Id);
+			else
+				par.Style_Add(style.Id, false);
 			par.Set_Tabs(new CParaTabs());
 			
 			let isRtl = this.api.isRtlInterface;
@@ -530,6 +538,57 @@ CStylesPainter.prototype.get_MergedStyles = function ()
 			
 			graphics.restore();
 		}
+	};
+	/**
+	 * Paragraph styles used in the document, by id and by simplified name ("heading1")
+	 */
+	StylePreviewGenerator.prototype.GetUsedParagraphStyles = function(_api)
+	{
+		let used = {ids : {}, names : {}};
+		let logicDocument = _api.getLogicDocument();
+		if (!logicDocument)
+			return used;
+		
+		let paragraphs = logicDocument.GetAllParagraphs({All : true});
+		for (let i = 0; i < paragraphs.length; ++i)
+		{
+			let styleId = paragraphs[i].Style_Get();
+			if (!styleId || used.ids[styleId])
+				continue;
+			
+			used.ids[styleId] = true;
+			let style = this.styleManager.Get(styleId);
+			if (style)
+				used.names[style.GetName().toLowerCase().replace(/\s/g, "")] = true;
+		}
+		return used;
+	};
+	/**
+	 * Which styles Word shows in its Styles gallery: Quick Styles (qFormat) only, Heading 3-9 once
+	 * the heading level above is used, and the styles hidden until used (semiHidden, Caption,
+	 * TOC Heading) once they are used.
+	 */
+	StylePreviewGenerator.prototype.IsWordGalleryStyle = function(style, used)
+	{
+		if (true !== style.GetQFormat() || true === style.GetHidden())
+			return false;
+		
+		let type = style.GetType();
+		if (AscWord.styletype_Paragraph !== type && AscWord.styletype_Character !== type)
+			return false;
+		
+		let name    = style.GetName().toLowerCase().replace(/\s/g, "");
+		let heading = name.match(/^heading([1-9])$/);
+		if (heading)
+		{
+			let level = heading[1] | 0;
+			return (level <= 2 || !!used.names[name] || !!used.names["heading" + (level - 1)]);
+		}
+		
+		if (true === style.GetSemiHidden() || "caption" === name || "tocheading" === name)
+			return !!used.ids[style.GetId()];
+		
+		return true;
 	};
 	StylePreviewGenerator.prototype.GenerateDefaultStyles = function ()
 	{

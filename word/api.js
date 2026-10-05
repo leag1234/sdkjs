@@ -13856,6 +13856,89 @@ background-repeat: no-repeat;\
 		}
 	};
 
+	/**
+	 * Styles gallery options:
+	 *  wordLike    - list the styles the way Word does (Quick Styles only, Heading 3-9 once the level
+	 *                above is used, Caption/TOC Heading/semi-hidden styles once used, custom styles last);
+	 *  previewText - text drawn in each style preview instead of the style name (e.g. "AaBbCcDd");
+	 *  width, height - size of each preview, in CSS pixels.
+	 * Takes effect on the next generation of the previews (see asc_UpdateStyleGallery).
+	 */
+	window["asc_docs_api"].prototype["asc_SetStyleGalleryOptions"] = function(options)
+	{
+		this.StyleGalleryOptions = {
+			wordLike    : !!(options && options["wordLike"]),
+			previewText : (options && options["previewText"]) ? ("" + options["previewText"]) : null
+		};
+		
+		// preview size in CSS pixels; also applies to an already created painter
+		if (options && options["width"] > 0 && options["height"] > 0)
+		{
+			this["asc_setParagraphStylesSizes"](options["width"], options["height"]);
+			if (this.stylePainter)
+			{
+				this.stylePainter.STYLE_THUMBNAIL_WIDTH  = options["width"];
+				this.stylePainter.STYLE_THUMBNAIL_HEIGHT = options["height"];
+			}
+		}
+	};
+	window["asc_docs_api"].prototype["asc_UpdateStyleGallery"] = function()
+	{
+		if (this.WordControl && this.WordControl.m_oLogicDocument)
+			this.GenerateStyles();
+	};
+	/**
+	 * Live preview of a style, as when hovering the Styles gallery of Word: sName is applied to the
+	 * selection inside a group action, so nothing is sent to co-authors or saved, and
+	 * asc_EndStylePreview() reverts it without leaving an undo/redo point.
+	 * @returns {boolean} whether the preview started
+	 */
+	window["asc_docs_api"].prototype["asc_StartStylePreview"] = function(sName)
+	{
+		let logicDocument = this.private_GetLogicDocument();
+		if (this.isStylePreview)
+			this["asc_EndStylePreview"]();
+
+		if (!logicDocument || !sName || this.isGroupActions() || this.isLongAction() || this.isViewMode
+			|| !logicDocument.CanEdit() || logicDocument.IsSelectionLocked(AscCommon.changestype_Paragraph_Properties, null, true))
+			return false;
+
+		this.isStylePreview = true;
+		this.startGroupActions();
+		this.executeGroupActions(function()
+		{
+			// put_Style without its lock request (the preview is never sent) and without interface
+			// events (the toolbar keeps showing the real formatting)
+			let isTurnedOff = logicDocument.TurnOff_InterfaceEvents();
+			logicDocument.StartAction(AscDFH.historydescription_Document_SetParagraphStyle, null, null, sName);
+			logicDocument.SetParagraphStyle(sName, true);
+			logicDocument.FinalizeAction();
+			if (isTurnedOff)
+				logicDocument.TurnOn_InterfaceEvents(false);
+		});
+		return true;
+	};
+	window["asc_docs_api"].prototype["asc_EndStylePreview"] = function()
+	{
+		if (!this.isStylePreview)
+			return;
+
+		this.isStylePreview = false;
+		this.cancelGroupActions();
+
+		let logicDocument = this.private_GetLogicDocument();
+		if (logicDocument && !this.isGroupActions())
+		{
+			logicDocument.UpdateInterface();
+			logicDocument.UpdateSelection();
+			logicDocument.GetSpellCheckManager().TurnOn();
+		}
+	};
+	window["asc_docs_api"].prototype["asc_IsStylePreview"] = function()
+	{
+		return !!this.isStylePreview;
+	};
+
 	asc_docs_api.prototype.SetDrawImagePlaceContents = function(id, props)
 	{
 		if (this.WordControl.m_oDrawingDocument)
