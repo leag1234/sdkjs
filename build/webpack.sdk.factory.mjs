@@ -19,12 +19,12 @@
  *   BUILD_ROOT        override deploy root; defaults to ../deploy/sdkjs
  *   SDK_PLATFORM      '' | 'desktop' | 'mobile'
  *   SDK_ADDONS        path.delimiter-separated list of addon directories
- *   COMPANY_NAME      default 'Euro-Office'
+ *   COMPANY_NAME      default 'ElixirOffice'
  *   PRODUCT_VERSION   default '0.0.0'
  *   BUILD_NUMBER      default '0'
  *   BETA              default 'false'
  *   APP_COPYRIGHT     default 'Copyright (C) Ascensio System SIA 2012-2025 …; Euro-Office contributors 2026 - …'
- *   PUBLISHER_URL     default 'https://github.com/Euro-Office/'
+ *   PUBLISHER_URL     default 'https://github.com/elixiroffice/'
  *   NODE_ENV          'production' (default) | 'development'
  *   SDK_SOURCE_MAPS   '1' to emit source maps for a production build too
  *                      (development builds always get them regardless)
@@ -172,12 +172,12 @@ export function sdkConfig(moduleName) {
     const platform  = process.env.SDK_PLATFORM || '';
     const addonDirs = parseAddonDirs();
 
-    const companyName  = process.env.COMPANY_NAME     || 'Euro-Office';
+    const companyName  = process.env.COMPANY_NAME     || 'ElixirOffice';
     const version      = process.env.PRODUCT_VERSION  || '0.0.0';
     const buildNumber  = process.env.BUILD_NUMBER      || '0';
     const beta         = process.env.BETA              || 'false';
 
-    // Matches the Euro-Office rebrand defaults main() picked up independently
+    // Matches the ElixirOffice rebrand defaults main() picked up independently
     // (see build/Gruntfile.js history) after this migration branched off it.
     // Defaults come from env.cjs so this cache.version salt can't drift from
     // buildLicenseHeader()'s own copy of the same strings (used for the banner).

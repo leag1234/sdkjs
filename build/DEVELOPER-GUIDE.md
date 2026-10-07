@@ -244,7 +244,7 @@ as-authored. `webpack.sdk.factory.mjs` also sets no explicit `target`, and
 its own implicit target resolution.
 
 **Resolved: ES6+ is safe.** Desktop pins CEF 107 (Chromium 107, October
-2022 — ES2022-capable; see `Euro-Office/desktop-apps/win-linux/defaults.pri`).
+2022 — ES2022-capable; see `ElixirOffice/desktop-apps/win-linux/defaults.pri`).
 Mobile floor is iOS 17/Safari 17 → ES2022 per `web-apps/build/browser-floor.mjs`
 / `browser-floor.manifest.mjs`, with Android WebView tracking current Chrome
 regardless of OS version — `web-apps` commit `7ebda70613` ("centralise browser

@@ -39,7 +39,7 @@ function resolveBuildRoot(buildDir, env) {
 function defaultAppCopyright() {
     return `Copyright (C) Ascensio System SIA 2012-2025. All rights reserved; Euro-Office contributors 2026 - ${new Date().getFullYear()}`;
 }
-const DEFAULT_PUBLISHER_URL = 'https://github.com/Euro-Office/';
+const DEFAULT_PUBLISHER_URL = 'https://github.com/elixiroffice/';
 
 // Reads build/license.header and substitutes the @@AppCopyright/@@PublisherUrl/
 // @@Version/@@Build placeholders. Shared by webpack.sdk.factory.mjs (banner

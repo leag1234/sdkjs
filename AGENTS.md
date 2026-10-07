@@ -1,6 +1,6 @@
-# sdkjs — Euro-Office JavaScript SDK
+# sdkjs — ElixirOffice JavaScript SDK
 
-Guidance for AI agents working in **sdkjs** — the Euro-Office JavaScript SDK for the document
+Guidance for AI agents working in **sdkjs** — the ElixirOffice JavaScript SDK for the document
 editors. This is the canonical instruction file; `CLAUDE.md` points here.
 
 ## What this repo is

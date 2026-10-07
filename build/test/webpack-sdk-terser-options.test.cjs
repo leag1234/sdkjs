@@ -116,7 +116,7 @@ test('sdkConfig: DROP_CONSOLE is opt-in, not the default, for non-desktop/mobile
 // pipeline emitted the LaTeX symbol table's astral keys as bare identifiers
 // (the reverse map in word/Math/NamesOfLiterals.js), and that V8 rejected the
 // whole bundle with "SyntaxError: Invalid or unexpected token" -- aborting x2t
-// on first start and making Euro-Office 9.3.4 unusable. ASCII-only output is
+// on first start and making ElixirOffice 9.3.4 unusable. ASCII-only output is
 // the invariant the previous Closure Compiler build provided implicitly.
 
 for (const platform of ['', 'desktop', 'mobile']) {

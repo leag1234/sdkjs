@@ -6,7 +6,7 @@
 
 'use strict';
 
-// Full grunt-free build pipeline for Euro Office sdkjs.
+// Full grunt-free build pipeline for ElixirOffice sdkjs.
 //
 // Usage (from sdkjs/build/):
 //   PRODUCT_VERSION=9.2.1 BUILD_ROOT=/path/to/deploy node scripts/build-pipeline.cjs
@@ -315,7 +315,7 @@ async function main() {
     const wallStart = Date.now();
 
     process.stdout.write([
-        BOLD('Euro Office sdkjs build pipeline'),
+        BOLD('ElixirOffice sdkjs build pipeline'),
         `  BUILD_ROOT        ${BUILD_ROOT}`,
         `  PRODUCT_VERSION   ${PRODUCT_VERSION}`,
         `  BUILD_NUMBER      ${BUILD_NUMBER}`,

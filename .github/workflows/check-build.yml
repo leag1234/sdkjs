@@ -53,14 +53,14 @@ jobs:
         uses: actions/checkout@v7
         continue-on-error: true
         with:
-          repository: Euro-Office/sdkjs-forms
+          repository: ElixirOffice/sdkjs-forms
           path: sdkjs-forms
           ref: ${{ github.ref }}
       - name: check out repository sdkjs-forms master branch
         if: steps.sdkjs-forms.outcome != 'success'
         uses: actions/checkout@v7
         with:
-          repository: Euro-Office/sdkjs-forms
+          repository: ElixirOffice/sdkjs-forms
           path: sdkjs-forms
           ref: master
 
@@ -102,14 +102,14 @@ jobs:
         uses: actions/checkout@v7
         continue-on-error: true
         with:
-          repository: Euro-Office/sdkjs-forms
+          repository: ElixirOffice/sdkjs-forms
           path: sdkjs-forms
           ref: ${{ github.ref }}
       - name: check out repository sdkjs-forms master branch
         if: steps.sdkjs-forms.outcome != 'success'
         uses: actions/checkout@v7
         with:
-          repository: Euro-Office/sdkjs-forms
+          repository: ElixirOffice/sdkjs-forms
           path: sdkjs-forms
           ref: master
 

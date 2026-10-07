@@ -1,10 +1,10 @@
 [![License](https://img.shields.io/badge/License-GNU%20AGPL%20V3-green.svg?style=flat)](https://www.gnu.org/licenses/agpl-3.0.en.html)
 
-# 🧩 Euro-Office JavaScript SDK (SDKJS)
+# 🧩 ElixirOffice JavaScript SDK (SDKJS)
 
-SDKJS is the official JavaScript Software Development Kit (SDK) for Euro-Office document editing components.
+SDKJS is the official JavaScript Software Development Kit (SDK) for ElixirOffice document editing components.
 
-JavaScript SDK provides the necessary **client-side APIs** for integrating and customizing the Euro-Office editors. It also includes an **implementation layer** for the Office JavaScript APIs, enabling advanced document manipulation and integration operations.
+JavaScript SDK provides the necessary **client-side APIs** for integrating and customizing the ElixirOffice editors. It also includes an **implementation layer** for the Office JavaScript APIs, enabling advanced document manipulation and integration operations.
 
 ## 📁 Repository Structure Overview
 
@@ -29,7 +29,7 @@ The directory layout below helps developers quickly navigate and understand SDKJ
 
 The test suites are QUnit pages run in headless Chromium via `node-qunit-puppeteer`.
 They load the SDK from a `develop` build, so build that first, then run the suite.
-The forms / oform suites need the [`sdkjs-forms`](https://github.com/Euro-Office/sdkjs-forms)
+The forms / oform suites need the [`sdkjs-forms`](https://github.com/elixiroffice/sdkjs-forms)
 repository checked out as a sibling of this one (`../sdkjs-forms`).
 
 ```bash
@@ -52,4 +52,4 @@ Suites that cannot pass in the standard build yet are listed (with reasons) in
 
 ## 📜 License
 
-**SDKJS** is licensed under the **GNU Affero General Public License (AGPL) v3.0**. For full details, refer to the [LICENSE](https://github.com/Euro-Office/sdkjs/blob/main/LICENSE.txt) file.
+**SDKJS** is licensed under the **GNU Affero General Public License (AGPL) v3.0**. For full details, refer to the [LICENSE](https://github.com/elixiroffice/sdkjs/blob/main/LICENSE.txt) file.
