@@ -7190,6 +7190,8 @@ background-repeat: no-repeat;\
     {
         if (window["AscDesktopEditor"])
             window["AscDesktopEditor"]["SpellCheck"]("{\"type\":\"clear\"}");
+        else
+            AscWord.CDocumentSpellChecker.ClearUserDictionary();
     };
 
 	asc_docs_api.prototype.asc_setDefaultLanguage = function(Lang)

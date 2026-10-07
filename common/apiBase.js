@@ -2455,9 +2455,25 @@
 
 			this._spellCheckRestart(word);
 		}
+		else if (word)
+		{
+			// the browser has no system dictionary: a user dictionary kept in this browser, applied to this document at once
+			let oLogicDocument = this.WordControl && this.WordControl.m_oLogicDocument;
+			let oSpelling      = oLogicDocument && oLogicDocument.Spelling;
+			if (oSpelling && typeof AscWord !== "undefined" && AscWord.CDocumentSpellChecker)
+			{
+				let arrSpellings = AscWord.CDocumentSpellChecker.AddToUserDictionary(word);
+				for (let i = 0; i < arrSpellings.length; ++i)
+					oSpelling.AddToIgnore(arrSpellings[i]);
+
+				oLogicDocument.DrawingDocument.ClearCachePages();
+				oLogicDocument.DrawingDocument.FirePaint();
+			}
+		}
     };
     baseEditorsApi.prototype.asc_spellCheckClearDictionary       = function()
     {
+		(typeof AscWord !== "undefined") && AscWord.CDocumentSpellChecker && AscWord.CDocumentSpellChecker.ClearUserDictionary();
     };
 	baseEditorsApi.prototype.asc_restartCheckSpelling            = function()
 	{

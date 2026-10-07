@@ -55,7 +55,67 @@
 
 		// Заполним начальный список исключений
 		this.Words = DOCUMENT_SPELLING_EXCEPTIONAL_WORDS;
+
+		// the browser has no system dictionary: the words of "Add to Dictionary" are kept in the user dictionary
+		this.LoadUserDictionary();
 	}
+
+	const USER_DICTIONARY_KEY = "elixir-user-dictionary";
+
+	/** @returns {string[]} the words of the user dictionary (kept in this browser) */
+	CDocumentSpellChecker.GetUserDictionary = function()
+	{
+		try
+		{
+			let arrWords = JSON.parse(window.localStorage.getItem(USER_DICTIONARY_KEY));
+			return Array.isArray(arrWords) ? arrWords.filter(function(w) { return typeof w === "string"; }) : [];
+		}
+		catch (e)
+		{
+			return [];
+		}
+	};
+	/**
+	 * Adds a word to the user dictionary; a lower-case word is accepted capitalized too (start of a sentence)
+	 * @returns {string[]} the spellings that are now accepted
+	 */
+	CDocumentSpellChecker.AddToUserDictionary = function(sWord)
+	{
+		let arrSpellings = [sWord];
+		if (sWord.length > 1 && sWord === sWord.toLowerCase())
+			arrSpellings.push(sWord.charAt(0).toUpperCase() + sWord.slice(1));
+
+		let arrWords = CDocumentSpellChecker.GetUserDictionary();
+		for (let i = 0; i < arrSpellings.length; ++i)
+		{
+			if (-1 === arrWords.indexOf(arrSpellings[i]))
+				arrWords.push(arrSpellings[i]);
+		}
+		try
+		{
+			window.localStorage.setItem(USER_DICTIONARY_KEY, JSON.stringify(arrWords));
+		}
+		catch (e)
+		{
+		}
+		return arrSpellings;
+	};
+	CDocumentSpellChecker.ClearUserDictionary = function()
+	{
+		try
+		{
+			window.localStorage.removeItem(USER_DICTIONARY_KEY);
+		}
+		catch (e)
+		{
+		}
+	};
+	CDocumentSpellChecker.prototype.LoadUserDictionary = function()
+	{
+		let arrWords = CDocumentSpellChecker.GetUserDictionary();
+		for (let i = 0; i < arrWords.length; ++i)
+			this.Words[arrWords[i]] = true;
+	};
 
 	CDocumentSpellChecker.prototype.TurnOff = function()
 	{
