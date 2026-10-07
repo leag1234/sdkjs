@@ -400,7 +400,8 @@ var c_oAscDocumentShortcutType = {
 	InsertInvertedQuestionMark    : 187,
 	InsertInvertedExclamationMark : 188,
 	NextSpellingError             : 189,
-	SpellingAndGrammar            : 190
+	SpellingAndGrammar            : 190,
+	RepeatCommand                 : 191
 };
 
 var c_oAscDocumentRefenceToType = {
@@ -623,6 +624,7 @@ prot['InsertInvertedQuestionMark']      = prot.InsertInvertedQuestionMark;
 prot['InsertInvertedExclamationMark']   = prot.InsertInvertedExclamationMark;
 prot['NextSpellingError']               = prot.NextSpellingError;
 prot['SpellingAndGrammar']              = prot.SpellingAndGrammar;
+prot['RepeatCommand']                   = prot.RepeatCommand;
 prot['ScrollDown']                    = prot.ScrollDown;
 prot['ScrollUp']                      = prot.ScrollUp;
 prot['ZoomIn']                        = prot.ZoomIn;

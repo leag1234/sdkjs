@@ -383,7 +383,8 @@
 			[T.InsertInvertedQuestionMark,    [[KeySlash, 1, 1, 1]],                             []],
 			[T.InsertInvertedExclamationMark, [[keyCodes.Digit1, 1, 1, 1]],                      []],
 			[T.NextSpellingError,             [[keyCodes.F7, 0, 0, 1]],                          [[keyCodes.F7, 0, 0, 1]]],
-			[T.SpellingAndGrammar,            [[keyCodes.F7]],                                   [[keyCodes.F7], [keyCodes.KeyL, 0, 0, 1, 1]]]
+			[T.SpellingAndGrammar,            [[keyCodes.F7]],                                   [[keyCodes.F7], [keyCodes.KeyL, 0, 0, 1, 1]]],
+			[T.RepeatCommand,                 [[keyCodes.F4]],                                   [[keyCodes.F4]]]
 		];
 		for (let i = 0; i < bindings.length; ++i)
 		{

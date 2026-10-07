@@ -346,6 +346,7 @@
 			"word/Editor/Merge.js",
 			"word/Editor/Shortcuts.js",
 			"word/Editor/word-shortcuts.js",
+			"word/Editor/repeat-command.js",
 
 			"word/Editor/sections/document-sections.js",
 			"word/Editor/sections/footnote-pr.js",
