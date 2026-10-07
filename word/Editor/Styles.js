@@ -13932,7 +13932,8 @@ CTextPr.prototype.Write_ToBinary = function(Writer)
 
 	if (undefined != this.Underline)
 	{
-		Writer.WriteBool(this.Underline);
+		// 0 none, 1 single, else an Asc.UnderlineType (double, words only)
+		Writer.WriteByte("number" === typeof this.Underline ? this.Underline : (this.Underline ? 1 : 0));
 		Flags |= 4;
 	}
 
@@ -14137,7 +14138,10 @@ CTextPr.prototype.Read_FromBinary = function(Reader)
 
 	// Underline
 	if (Flags & 4)
-		this.Underline = Reader.GetBool();
+	{
+		let underline = Reader.GetUChar();
+		this.Underline = underline > 1 ? underline : 1 === underline;
+	}
 
 	// Strikeout
 	if (Flags & 8)

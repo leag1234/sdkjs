@@ -222,9 +222,11 @@
 		let endX   = this.X + element.GetWidthVisible();
 		switch (element.Type)
 		{
+			case para_Tab:
+				if (Asc.UnderlineType.Words === this.underlineType)
+					break;
 			case para_PageNum:
 			case para_PageCount:
-			case para_Tab:
 			case para_Text:
 			case para_Sym:
 			case para_FootnoteReference:
@@ -249,7 +251,8 @@
 				if (this.Spaces > 0 || this.ulTrailSpace)
 				{
 					--this.Spaces;
-					this.addLines(startX, endX, undefined, oTextDrawerInfo);
+					// words only underline: no line under the spaces
+					this.addLines(startX, endX, undefined, oTextDrawerInfo, Asc.UnderlineType.Words === this.underlineType);
 				}
 				break;
 			case para_Drawing:
@@ -460,6 +463,7 @@
 		this.updateReviewState(run);
 		
 		this.isUnderline  = textPr.Underline;
+		this.underlineType = "number" === typeof textPr.Underline ? textPr.Underline : -1;
 		this.isStrikeout  = textPr.Strikeout;
 		this.isDStrikeout = textPr.DStrikeout;
 		
@@ -648,7 +652,7 @@
 	 * @param endX {number}
 	 * @param drawStrikeout {boolean}
 	 */
-	ParagraphLineDrawState.prototype.addLines = function(startX, endX, drawStrikeout, oTextDrawerInfo)
+	ParagraphLineDrawState.prototype.addLines = function(startX, endX, drawStrikeout, oTextDrawerInfo, noUnderline)
 	{
 		if (endX - startX < 0.001)
 			return;
@@ -682,9 +686,12 @@
 			else
 				this.Underline.Add(startX, endX, this.reviewColor, oTextDrawerInfo);
 		}
-		else if (this.isUnderline)
+		else if (this.isUnderline && !noUnderline)
 		{
-			this.Underline.Add(startX, endX, this.color, oTextDrawerInfo, this.textPr);
+			if (Asc.UnderlineType.Double === this.underlineType)
+				this.DUnderline.Add(startX, endX, this.color, oTextDrawerInfo, this.textPr);
+			else
+				this.Underline.Add(startX, endX, this.color, oTextDrawerInfo, this.textPr);
 		}
 	};
 	ParagraphLineDrawState.prototype.addCompositeInputLine = function(element, run, inRunPos)

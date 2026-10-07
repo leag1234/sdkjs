@@ -37,6 +37,7 @@ AscDFH.changesFactory[AscDFH.historyitem_TextPr_RStyle]                = CChange
 AscDFH.changesFactory[AscDFH.historyitem_TextPr_Spacing]               = CChangesParaTextPrSpacing;
 AscDFH.changesFactory[AscDFH.historyitem_TextPr_DStrikeout]            = CChangesParaTextPrDStrikeout;
 AscDFH.changesFactory[AscDFH.historyitem_TextPr_Caps]                  = CChangesParaTextPrCaps;
+AscDFH.changesFactory[AscDFH.historyitem_TextPr_Vanish]                = CChangesParaTextPrVanish;
 AscDFH.changesFactory[AscDFH.historyitem_TextPr_SmallCaps]             = CChangesParaTextPrSmallCaps;
 AscDFH.changesFactory[AscDFH.historyitem_TextPr_Position]              = CChangesParaTextPrPosition;
 AscDFH.changesFactory[AscDFH.historyitem_TextPr_Value]                 = CChangesParaTextPrValue;
@@ -114,6 +115,10 @@ AscDFH.changesRelationMap[AscDFH.historyitem_TextPr_Caps]            = [
 	AscDFH.historyitem_TextPr_Caps,
 	AscDFH.historyitem_TextPr_Value
 ];
+AscDFH.changesRelationMap[AscDFH.historyitem_TextPr_Vanish]          = [
+	AscDFH.historyitem_TextPr_Vanish,
+	AscDFH.historyitem_TextPr_Value
+];
 AscDFH.changesRelationMap[AscDFH.historyitem_TextPr_SmallCaps]       = [
 	AscDFH.historyitem_TextPr_SmallCaps,
 	AscDFH.historyitem_TextPr_Value
@@ -135,6 +140,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_TextPr_Value]           = [
 	AscDFH.historyitem_TextPr_Spacing,
 	AscDFH.historyitem_TextPr_DStrikeout,
 	AscDFH.historyitem_TextPr_Caps,
+	AscDFH.historyitem_TextPr_Vanish,
 	AscDFH.historyitem_TextPr_SmallCaps,
 	AscDFH.historyitem_TextPr_Position,
 	AscDFH.historyitem_TextPr_Value,
@@ -373,13 +379,13 @@ CChangesParaTextPrStrikeout.prototype.private_SetValue = function(Value)
 CChangesParaTextPrStrikeout.prototype.Merge = private_ParaTextPrChangesOnMergeValue;
 /**
  * @constructor
- * @extends {AscDFH.CChangesBaseBoolProperty}
+ * @extends {AscDFH.CChangesBaseUnderlineProperty}
  */
 function CChangesParaTextPrUnderline(Class, Old, New, Color)
 {
-	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+	AscDFH.CChangesBaseUnderlineProperty.call(this, Class, Old, New, Color);
 }
-CChangesParaTextPrUnderline.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesParaTextPrUnderline.prototype = Object.create(AscDFH.CChangesBaseUnderlineProperty.prototype);
 CChangesParaTextPrUnderline.prototype.constructor = CChangesParaTextPrUnderline;
 CChangesParaTextPrUnderline.prototype.Type = AscDFH.historyitem_TextPr_Underline;
 CChangesParaTextPrUnderline.prototype.private_SetValue = function(Value)
@@ -669,6 +675,22 @@ CChangesParaTextPrCaps.prototype.Merge = private_ParaTextPrChangesOnMergeValue;
  * @constructor
  * @extends {AscDFH.CChangesBaseBoolProperty}
  */
+function CChangesParaTextPrVanish(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+}
+CChangesParaTextPrVanish.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesParaTextPrVanish.prototype.constructor = CChangesParaTextPrVanish;
+CChangesParaTextPrVanish.prototype.Type = AscDFH.historyitem_TextPr_Vanish;
+CChangesParaTextPrVanish.prototype.private_SetValue = function(Value)
+{
+	this.Class.Value.Vanish = Value;
+};
+CChangesParaTextPrVanish.prototype.Merge = private_ParaTextPrChangesOnMergeValue;
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
 function CChangesParaTextPrSmallCaps(Class, Old, New, Color)
 {
 	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
@@ -791,6 +813,11 @@ CChangesParaTextPrValue.prototype.Merge = function(oChange)
 		case AscDFH.historyitem_TextPr_Caps:
 		{
 			this.New.Caps = oChange.New;
+			break;
+		}
+		case AscDFH.historyitem_TextPr_Vanish:
+		{
+			this.New.Vanish = oChange.New;
 			break;
 		}
 		case AscDFH.historyitem_TextPr_SmallCaps:

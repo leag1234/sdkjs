@@ -4709,6 +4709,10 @@ background-repeat: no-repeat;\
 			isShow = false;
 
 		this.ShowParaMarks = isShow;
+		// hidden text is shown with the formatting marks: it changes the layout
+		let logicDocument = this.WordControl.m_oLogicDocument;
+		if (logicDocument && logicDocument.refreshHiddenText)
+			logicDocument.refreshHiddenText();
 		this.WordControl.OnRePaintAttack();
 
 		if (true === this.isMarkerFormat)
@@ -14033,6 +14037,9 @@ background-repeat: no-repeat;\
 			if (undefined !== props[bools[i]] && null !== props[bools[i]])
 				textPr[bools[i]] = !!props[bools[i]];
 		}
+		// double and words-only underline are numbers of Asc.UnderlineType
+		if (Asc.UnderlineType.Double === props["Underline"] || Asc.UnderlineType.Words === props["Underline"])
+			textPr.Underline = props["Underline"];
 		if (undefined !== props["Bold"] && null !== props["Bold"])
 			textPr.BoldCS = !!props["Bold"];
 		if (undefined !== props["Italic"] && null !== props["Italic"])

@@ -1994,6 +1994,7 @@
 	window['AscDFH'].historyitem_TextPr_Spacing               = window['AscDFH'].historyitem_type_TextPr | 10;
 	window['AscDFH'].historyitem_TextPr_DStrikeout            = window['AscDFH'].historyitem_type_TextPr | 11;
 	window['AscDFH'].historyitem_TextPr_Caps                  = window['AscDFH'].historyitem_type_TextPr | 12;
+	window['AscDFH'].historyitem_TextPr_Vanish                = window['AscDFH'].historyitem_type_TextPr | 38;
 	window['AscDFH'].historyitem_TextPr_SmallCaps             = window['AscDFH'].historyitem_type_TextPr | 13;
 	window['AscDFH'].historyitem_TextPr_Position              = window['AscDFH'].historyitem_type_TextPr | 14;
 	window['AscDFH'].historyitem_TextPr_Value                 = window['AscDFH'].historyitem_type_TextPr | 15;
@@ -2260,6 +2261,7 @@
 	window['AscDFH'].historyitem_ParaRun_Spacing               = window['AscDFH'].historyitem_type_ParaRun | 13;
 	window['AscDFH'].historyitem_ParaRun_DStrikeout            = window['AscDFH'].historyitem_type_ParaRun | 14;
 	window['AscDFH'].historyitem_ParaRun_Caps                  = window['AscDFH'].historyitem_type_ParaRun | 15;
+	window['AscDFH'].historyitem_ParaRun_Vanish               = window['AscDFH'].historyitem_type_ParaRun | 56;
 	window['AscDFH'].historyitem_ParaRun_SmallCaps             = window['AscDFH'].historyitem_type_ParaRun | 16;
 	window['AscDFH'].historyitem_ParaRun_Position              = window['AscDFH'].historyitem_type_ParaRun | 17;
 	window['AscDFH'].historyitem_ParaRun_Value                 = window['AscDFH'].historyitem_type_ParaRun | 18; // obsolete
@@ -5370,6 +5372,56 @@
 			this.Old = false;
 	};
 	window['AscDFH'].CChangesBaseBoolProperty = CChangesBaseBoolProperty;
+
+	/**
+	 * Underline: undefined, false, true (single) or a number of Asc.UnderlineType (double, words only)
+	 * @constructor
+	 * @extends {AscDFH.CChangesBaseBoolProperty}
+	 */
+	function CChangesBaseUnderlineProperty(Class, Old, New, Color)
+	{
+		CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+	}
+	CChangesBaseUnderlineProperty.prototype = Object.create(CChangesBaseBoolProperty.prototype);
+	CChangesBaseUnderlineProperty.prototype.constructor = CChangesBaseUnderlineProperty;
+	CChangesBaseUnderlineProperty.prototype.WriteToBinary = function(Writer)
+	{
+		// Long : Flag, the bits of CChangesBaseBoolProperty (a number counts as true), then
+		// 6-bit : New is a number, 7-bit : Old is a number
+		// Long : New (6-bit), Long : Old (7-bit)
+		var nFlags = 0;
+		if (false !== this.Color)
+			nFlags |= 1;
+		if (undefined === this.New)
+			nFlags |= 2;
+		else if (this.New)
+			nFlags |= 4;
+		if (undefined === this.Old)
+			nFlags |= 8;
+		else if (this.Old)
+			nFlags |= 16;
+		if ("number" === typeof this.New)
+			nFlags |= 32;
+		if ("number" === typeof this.Old)
+			nFlags |= 64;
+		Writer.WriteLong(nFlags);
+		if (nFlags & 32)
+			Writer.WriteLong(this.New);
+		if (nFlags & 64)
+			Writer.WriteLong(this.Old);
+	};
+	CChangesBaseUnderlineProperty.prototype.ReadFromBinary = function(Reader)
+	{
+		var nFlags = Reader.GetLong();
+		this.Color = !!(nFlags & 1);
+		this.New = (nFlags & 2) ? undefined : !!(nFlags & 4);
+		this.Old = (nFlags & 8) ? undefined : !!(nFlags & 16);
+		if (nFlags & 32)
+			this.New = Reader.GetLong();
+		if (nFlags & 64)
+			this.Old = Reader.GetLong();
+	};
+	window['AscDFH'].CChangesBaseUnderlineProperty = CChangesBaseUnderlineProperty;
 	/**
 	 * Базовый класс для изменения числовых (double) свойств.
 	 * @constructor

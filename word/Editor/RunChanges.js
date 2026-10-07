@@ -41,6 +41,7 @@ AscDFH.changesFactory[AscDFH.historyitem_ParaRun_RStyle]                = CChang
 AscDFH.changesFactory[AscDFH.historyitem_ParaRun_Spacing]               = CChangesRunSpacing;
 AscDFH.changesFactory[AscDFH.historyitem_ParaRun_DStrikeout]            = CChangesRunDStrikeout;
 AscDFH.changesFactory[AscDFH.historyitem_ParaRun_Caps]                  = CChangesRunCaps;
+AscDFH.changesFactory[AscDFH.historyitem_ParaRun_Vanish]                = CChangesRunVanish;
 AscDFH.changesFactory[AscDFH.historyitem_ParaRun_SmallCaps]             = CChangesRunSmallCaps;
 AscDFH.changesFactory[AscDFH.historyitem_ParaRun_Position]              = CChangesRunPosition;
 AscDFH.changesFactory[AscDFH.historyitem_ParaRun_Value]                 = undefined; // obsolete
@@ -105,6 +106,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_RStyle]            = [AscDF
 AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_Spacing]           = [AscDFH.historyitem_ParaRun_TextPr, AscDFH.historyitem_ParaRun_Spacing];
 AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_DStrikeout]        = [AscDFH.historyitem_ParaRun_TextPr, AscDFH.historyitem_ParaRun_DStrikeout];
 AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_Caps]              = [AscDFH.historyitem_ParaRun_TextPr, AscDFH.historyitem_ParaRun_Caps];
+AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_Vanish]            = [AscDFH.historyitem_ParaRun_TextPr, AscDFH.historyitem_ParaRun_Vanish];
 AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_SmallCaps]         = [AscDFH.historyitem_ParaRun_TextPr, AscDFH.historyitem_ParaRun_SmallCaps];
 AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_Position]          = [AscDFH.historyitem_ParaRun_TextPr, AscDFH.historyitem_ParaRun_Position];
 AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_RFonts]            = [
@@ -149,6 +151,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_ParaRun_TextPr]            = [
 	AscDFH.historyitem_ParaRun_Spacing,
 	AscDFH.historyitem_ParaRun_DStrikeout,
 	AscDFH.historyitem_ParaRun_Caps,
+	AscDFH.historyitem_ParaRun_Vanish,
 	AscDFH.historyitem_ParaRun_SmallCaps,
 	AscDFH.historyitem_ParaRun_Position,
 	AscDFH.historyitem_ParaRun_RFonts,
@@ -582,13 +585,13 @@ CChangesRunStrikeout.prototype.Merge = private_ParaRunChangesOnMergeTextPr;
 CChangesRunStrikeout.prototype.CheckLock = private_ParagraphContentChangesCheckLock;
 /**
  * @constructor
- * @extends {AscDFH.CChangesBaseBoolProperty}
+ * @extends {AscDFH.CChangesBaseUnderlineProperty}
  */
 function CChangesRunUnderline(Class, Old, New, Color)
 {
-	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+	AscDFH.CChangesBaseUnderlineProperty.call(this, Class, Old, New, Color);
 }
-CChangesRunUnderline.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesRunUnderline.prototype = Object.create(AscDFH.CChangesBaseUnderlineProperty.prototype);
 CChangesRunUnderline.prototype.constructor = CChangesRunUnderline;
 CChangesRunUnderline.prototype.Type = AscDFH.historyitem_ParaRun_Underline;
 CChangesRunUnderline.prototype.private_SetValue = function(Value)
@@ -937,6 +940,28 @@ CChangesRunCaps.prototype.private_SetValue = function(Value)
 CChangesRunCaps.prototype.Load = private_ParaRunChangesLoadTextPr;
 CChangesRunCaps.prototype.Merge = private_ParaRunChangesOnMergeTextPr;
 CChangesRunCaps.prototype.CheckLock = private_ParagraphContentChangesCheckLock;
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
+function CChangesRunVanish(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+}
+CChangesRunVanish.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesRunVanish.prototype.constructor = CChangesRunVanish;
+CChangesRunVanish.prototype.Type = AscDFH.historyitem_ParaRun_Vanish;
+CChangesRunVanish.prototype.private_SetValue = function(Value)
+{
+	var oRun = this.Class;
+	oRun.Pr.Vanish = Value;
+
+	oRun.Recalc_CompiledPr(true);
+	oRun.private_UpdateTrackRevisionOnChangeTextPr(false);
+};
+CChangesRunVanish.prototype.Load = private_ParaRunChangesLoadTextPr;
+CChangesRunVanish.prototype.Merge = private_ParaRunChangesOnMergeTextPr;
+CChangesRunVanish.prototype.CheckLock = private_ParagraphContentChangesCheckLock;
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseBoolProperty}
@@ -1690,6 +1715,11 @@ CChangesRunTextPr.prototype.Merge = function(oChange)
 		case AscDFH.historyitem_ParaRun_Caps:
 		{
 			this.New.Caps = oChange.New;
+			break;
+		}
+		case AscDFH.historyitem_ParaRun_Vanish:
+		{
+			this.New.Vanish = oChange.New;
 			break;
 		}
 		case AscDFH.historyitem_ParaRun_SmallCaps:

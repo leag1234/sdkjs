@@ -172,6 +172,9 @@ ParaTextPr.prototype.Apply_TextPr = function(TextPr)
 	if (undefined !== TextPr.Caps)
 		this.Set_Caps(TextPr.Caps);
 
+	if (undefined !== TextPr.Vanish)
+		this.SetVanish(TextPr.Vanish);
+
 	if (undefined !== TextPr.SmallCaps)
 		this.Set_SmallCaps(TextPr.SmallCaps);
 
@@ -258,6 +261,9 @@ ParaTextPr.prototype.Clear_Style = function()
 
 	if (undefined != this.Value.Caps)
 		this.Set_Caps(undefined);
+
+	if (undefined != this.Value.Vanish)
+		this.SetVanish(undefined);
 
 	if (undefined != this.Value.SmallCaps)
 		this.Set_SmallCaps(undefined);
@@ -414,6 +420,17 @@ ParaTextPr.prototype.Set_Caps = function(Value)
 
 	AscCommon.History.Add(new CChangesParaTextPrCaps(this, this.Value.Caps, Value));
 	this.Value.Caps = Value;
+};
+ParaTextPr.prototype.SetVanish = function(Value)
+{
+	if (null === Value)
+		Value = undefined;
+
+	if (this.Value.Vanish === Value)
+		return;
+
+	AscCommon.History.Add(new CChangesParaTextPrVanish(this, this.Value.Vanish, Value));
+	this.Value.Vanish = Value;
 };
 ParaTextPr.prototype.Set_SmallCaps = function(Value)
 {

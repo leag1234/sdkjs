@@ -6558,6 +6558,10 @@ ParaRun.prototype.Draw_HighLights = function(drawState)
 
 ParaRun.prototype.Draw_Elements = function(drawState)
 {
+	// hidden text is not drawn (see AscWord.IsHiddenText)
+	if (AscWord.IsHiddenText(this.Get_CompiledPr(false)))
+		return;
+
 	let rangePos = this.getRangePos(drawState.Line, drawState.Range);
 	let startPos = rangePos[0];
 	let endPos   = rangePos[1];
@@ -7681,6 +7685,7 @@ ParaRun.prototype.Clear_TextFormatting = function(DefHyper, bHighlight)
 	this.Set_Spacing(undefined);
 	this.Set_DStrikeout(undefined);
 	this.Set_Caps(undefined);
+	this.SetVanish(undefined);
 	this.Set_SmallCaps(undefined);
 	this.Set_Position(undefined);
 	this.Set_RFonts2(undefined);
@@ -8558,6 +8563,9 @@ ParaRun.prototype.Apply_Pr = function(TextPr)
 	if (undefined !== TextPr.Caps)
 		this.Set_Caps(null === TextPr.Caps ? undefined : TextPr.Caps);
 
+	if (undefined !== TextPr.Vanish)
+		this.SetVanish(null === TextPr.Vanish ? undefined : TextPr.Vanish);
+
 	if (undefined !== TextPr.SmallCaps)
 		this.Set_SmallCaps(null === TextPr.SmallCaps ? undefined : TextPr.SmallCaps);
 
@@ -9036,6 +9044,19 @@ ParaRun.prototype.Set_Caps = function(Value)
         this.Recalc_CompiledPr(true);
         this.private_UpdateTrackRevisionOnChangeTextPr(true);
     }
+};
+
+ParaRun.prototype.SetVanish = function(Value)
+{
+	if (Value !== this.Pr.Vanish)
+	{
+		var OldValue = this.Pr.Vanish;
+		this.Pr.Vanish = Value;
+
+		AscCommon.History.Add(new CChangesRunVanish(this, OldValue, Value, this.private_IsCollPrChangeMine()));
+		this.Recalc_CompiledPr(true);
+		this.private_UpdateTrackRevisionOnChangeTextPr(true);
+	}
 };
 
 ParaRun.prototype.Get_Caps = function()

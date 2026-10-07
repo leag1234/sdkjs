@@ -219,6 +219,15 @@
 			}
 		}
 	};
+	/**
+	 * Hidden text (w:vanish) takes no room and is not drawn, unless the formatting marks are shown
+	 * @param {AscWord.CTextPr} textPr
+	 * @returns {boolean}
+	 */
+	AscWord.IsHiddenText = function(textPr)
+	{
+		return !!(textPr && textPr.Vanish && !(Asc.editor && Asc.editor.ShowParaMarks));
+	};
 	CParagraphTextShaper.prototype.private_CheckRun = function(oRun)
 	{
 		let oRunParent = oRun.GetParent();
@@ -233,6 +242,7 @@
 		this.Paragraph = oRun.GetParagraph();
 		this.Parent    = oRunParent;
 		this.TextPr    = oTextPr;
+		this.Hidden    = AscWord.IsHiddenText(oTextPr);
 		this.Spacing   = isCombForm ? 0 : oTextPr.Spacing;
 		this.Ligatures = isCombForm || Math.abs(this.Spacing) > 0.001 ? Asc.LigaturesType.None : oTextPr.Ligatures;
 		this.AscFont   = oRun.IsUseAscFont(oTextPr);
@@ -266,6 +276,9 @@
 	};
 	CParagraphTextShaper.prototype.private_HandleItem = function(oItem, nGrapheme, nWidth, nFontSize, nFontSlot, nCodePointType)
 	{
+		if (this.Hidden)
+			nWidth = 0;
+
 		if (this.Temporary)
 		{
 			oItem.ResetTemporaryGrapheme();
@@ -298,6 +311,8 @@
 		
 		item.SetGrapheme(this.MaskSymbol ? grapheme : AscFonts.NO_GRAPHEME);
 		item.SetMetrics(fontInfo.Size, AscWord.fontslot_ASCII, this.TextPr);
+		if (this.Hidden)
+			width = enWidth = 0;
 		item.SetWidth(width, this.TextPr, enWidth);
 	};
 	CParagraphTextShaper.prototype.IsEqualTextPr = function(oTextPr)

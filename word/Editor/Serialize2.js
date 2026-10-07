@@ -3134,7 +3134,7 @@ function Binary_rPrWriter(memory, saveParams)
             this.memory.WriteByte(c_oSerPropLenType.Byte);
 
 			if (rPr.Underline)
-				this.memory.WriteByte(Asc.UnderlineType.Single);
+				this.memory.WriteByte("number" === typeof rPr.Underline ? rPr.Underline : Asc.UnderlineType.Single);
 			else
 				this.memory.WriteByte(Asc.UnderlineType.None);
         }
@@ -10163,7 +10163,11 @@ function Binary_rPrReader(doc, oReadResult, stream)
                 rPr.Italic = (this.stream.GetUChar() != 0);
                 break;
             case c_oSerProp_rPrType.Underline:
-                rPr.Underline = (this.stream.GetUChar() !== Asc.UnderlineType.None);
+				{
+					// double and words-only are kept, the other styles are drawn as a single line
+					let underlineType = this.stream.GetUChar();
+					rPr.Underline = Asc.UnderlineType.None === underlineType ? false : (Asc.UnderlineType.Double === underlineType || Asc.UnderlineType.Words === underlineType ? underlineType : true);
+				}
                 break;
             case c_oSerProp_rPrType.Strikeout:
                 rPr.Strikeout = (this.stream.GetUChar() != 0);
