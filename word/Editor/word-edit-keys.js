@@ -32,6 +32,8 @@
  *   Ctrl+Shift+F3        paste the Spike and clear it
  *   Ctrl+Alt+V           ask the interface for the Paste Special dialog
  *   Shift+F5, Ctrl+Alt+Z go back to the places of the last edits (history of 4 places)
+ *   Ctrl+Shift+D / W / H  double and words-only underline, hidden text
+ *   Alt+Shift+R          header or footer of the previous section
  * The interface is told through the events asc_onMoveCopyMode(mode: 0 off, 1 move, 2 copy),
  * asc_onSpikeChanged(count, added) and asc_onPasteSpecialDialog.
  */
@@ -290,6 +292,67 @@
 		return result;
 	};
 
+	// ---------------------------------------------------------------- underline styles
+	/**
+	 * Ctrl+Shift+D (double), Ctrl+Shift+W (words only): apply the style, or remove the underline when the text has it
+	 */
+	CDocument.prototype.private_ToggleUnderlineType = function(type)
+	{
+		let textPr = this.GetCalculatedTextPr();
+		if (!textPr || this.IsSelectionLocked(AscCommon.changestype_Paragraph_TextProperties))
+			return;
+
+		let value = textPr.Underline === type ? false : type;
+		this.StartAction(AscDFH.historydescription_Document_SetTextUnderlineHotKey, null, null, !!value);
+		this.AddToParagraph(new ParaTextPr({Underline : value}));
+		this.UpdateInterface();
+		this.FinalizeAction();
+	};
+
+	// ---------------------------------------------------------------- hidden text
+	/**
+	 * Ctrl+Shift+H: hide the selected text, or show it again when it is hidden
+	 */
+	CDocument.prototype.private_ToggleHiddenText = function()
+	{
+		let textPr = this.GetCalculatedTextPr();
+		if (!textPr || this.IsSelectionLocked(AscCommon.changestype_Paragraph_TextProperties))
+			return;
+
+		let value = !textPr.Vanish;
+		this.StartAction(AscDFH.historydescription_Document_SetTextVanish ? AscDFH.historydescription_Document_SetTextVanish : AscDFH.historydescription_Document_SetTextUnderlineHotKey, null, null, value);
+		this.AddToParagraph(new ParaTextPr({Vanish : value}));
+		this.UpdateInterface();
+		this.FinalizeAction();
+	};
+
+	/**
+	 * The formatting marks were switched: the hidden text appears or disappears, the paragraphs that have some
+	 * are measured and laid out again
+	 */
+	CDocument.prototype.refreshHiddenText = function()
+	{
+		let changed = false;
+		let paragraphs = this.GetAllParagraphs({All : true});
+		for (let i = 0; i < paragraphs.length; ++i)
+		{
+			let hasHidden = false;
+			paragraphs[i].CheckRunContent(function(run)
+			{
+				if (run.Get_CompiledPr(false).Vanish)
+					hasHidden = true;
+				return hasHidden;
+			});
+			if (hasHidden)
+			{
+				paragraphs[i].Recalc_RunsCompiledPr();
+				changed = true;
+			}
+		}
+		if (changed)
+			this.RecalculateFromStart(true);
+	};
+
 	// ---------------------------------------------------------------- shortcuts
 	let executeWordShortcut = CDocument.prototype.executeWordShortcut;
 	CDocument.prototype.executeWordShortcut = function(type)
@@ -323,6 +386,20 @@
 					return true;
 				}
 				this.sendEvent("asc_onPasteSpecialDialog");
+				return true;
+			case Type.UnderlineDouble:
+				this.private_ToggleUnderlineType(Asc.UnderlineType.Double);
+				return true;
+			case Type.UnderlineWords:
+				this.private_ToggleUnderlineType(Asc.UnderlineType.Words);
+				return true;
+			case Type.CopyPreviousHeaderFooter:
+				// the header or footer being edited becomes the one of the previous section (Link to Previous)
+				if (docpostype_HdrFtr === this.GetDocPosType())
+					this.Api.HeadersAndFooters_LinkToPrevious(true);
+				return true;
+			case Type.HiddenText:
+				this.private_ToggleHiddenText();
 				return true;
 			case Type.PreviousEditLocation:
 			case Type.CycleEditLocations:

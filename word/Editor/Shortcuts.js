@@ -419,7 +419,11 @@
 			[T.SpikePaste,            [[keyCodes.F3, 1, 1]],                             [[keyCodes.F3, 0, 1, 0, 1]]],
 			[T.PasteSpecial,          [[keyCodes.KeyV, 1, 0, 1]],                        [[keyCodes.KeyV, 1, 0, 0, 1]]],
 			[T.PreviousEditLocation,  [[keyCodes.F5, 0, 1]],                             [[keyCodes.F5, 0, 1]]],
-			[T.CycleEditLocations,    [[keyCodes.KeyZ, 1, 0, 1]],                        []]
+			[T.CycleEditLocations,    [[keyCodes.KeyZ, 1, 0, 1]],                        []],
+			[T.UnderlineDouble,       [[keyCodes.KeyD, 1, 1]],                           [[keyCodes.KeyD, 0, 1, 0, 1]]],
+			[T.UnderlineWords,        [[keyCodes.KeyW, 1, 1]],                           [[keyCodes.KeyW, 0, 1, 0, 1]]],
+			[T.HiddenText,            [[keyCodes.KeyH, 1, 1]],                           []],
+			[T.CopyPreviousHeaderFooter, [[keyCodes.KeyR, 0, 1, 1]],                     []]
 		];
 		for (let i = 0; i < bindings.length; ++i)
 		{
@@ -428,6 +432,9 @@
 			c_oAscDefaultShortcuts[type] = keys.map(function(k) { return new AscShortcut(type, k[0], !!k[1], !!k[2], !!k[3], !!k[4]); });
 			c_oAscUnlockedShortcutActionTypes[type] = true;
 		}
+		// Ctrl+Shift+H is Hidden text in Word (the comments pane has no key there)
+		if (!isMac)
+			c_oAscDefaultShortcuts[T.OpenCommentsPanel] = [];
 		// Ctrl+Alt+V is Paste Special in Word (Paste Formatting is Cmd+Option+V on macOS)
 		if (!isMac)
 			c_oAscDefaultShortcuts[T.PasteFormat] = [];

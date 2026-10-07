@@ -365,6 +365,10 @@ var c_oAscDocumentShortcutType = {
 	PasteSpecial                  : 204,
 	PreviousEditLocation          : 205,
 	CycleEditLocations            : 206,
+	UnderlineDouble               : 207,
+	UnderlineWords                : 208,
+	HiddenText                    : 209,
+	CopyPreviousHeaderFooter      : 211,
 	// Microsoft Word shortcuts (word/Editor/word-shortcuts.js)
 	IncreaseFontSizeByPoint       : 148,
 	DecreaseFontSizeByPoint       : 149,
@@ -596,6 +600,10 @@ prot['SpikePaste']                              = prot.SpikePaste;
 prot['PasteSpecial']                            = prot.PasteSpecial;
 prot['PreviousEditLocation']                    = prot.PreviousEditLocation;
 prot['CycleEditLocations']                      = prot.CycleEditLocations;
+prot['UnderlineDouble']                         = prot.UnderlineDouble;
+prot['UnderlineWords']                          = prot.UnderlineWords;
+prot['HiddenText']                               = prot.HiddenText;
+prot['CopyPreviousHeaderFooter']                = prot.CopyPreviousHeaderFooter;
 prot['IncreaseFontSizeByPoint']         = prot.IncreaseFontSizeByPoint;
 prot['DecreaseFontSizeByPoint']         = prot.DecreaseFontSizeByPoint;
 prot['ChangeCase']                      = prot.ChangeCase;
