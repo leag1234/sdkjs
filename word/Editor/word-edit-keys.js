@@ -34,6 +34,8 @@
  *   Shift+F5, Ctrl+Alt+Z go back to the places of the last edits (history of 4 places)
  *   Ctrl+Shift+D / W / H  double and words-only underline, hidden text
  *   Alt+Shift+R          header or footer of the previous section
+ *   Alt+F3               define an AutoText from the selection (the interface asks for the name and keeps it),
+ *                        Enter after the name of an AutoText inserts it
  * The interface is told through the events asc_onMoveCopyMode(mode: 0 off, 1 move, 2 copy),
  * asc_onSpikeChanged(count, added) and asc_onPasteSpecialDialog.
  */
@@ -353,6 +355,75 @@
 			this.RecalculateFromStart(true);
 	};
 
+	// ---------------------------------------------------------------- AutoText
+	// The blocks are kept per user in this browser (localStorage): the names in eo-autotext-index, each block in
+	// eo-autotext:<name> as {data, text}, data being the internal clipboard format of the selection.
+	const AUTOTEXT_INDEX = "eo-autotext-index";
+	const AUTOTEXT_PREFIX = "eo-autotext:";
+
+	function getAutoTextNames()
+	{
+		try { return JSON.parse(window.localStorage.getItem(AUTOTEXT_INDEX) || "[]"); } catch (e) { return []; }
+	}
+
+	/**
+	 * Alt+F3: the selection becomes an AutoText block; asc_onDefineAutoText(text, data) asks the interface for its name
+	 */
+	CDocument.prototype.defineAutoText = function()
+	{
+		if (!isBodyContent(this) || this.IsSelectionEmpty(true))
+			return false;
+
+		let text = "", data = "";
+		let formats = AscCommon.c_oAscClipboardDataFormat;
+		this.Api.asc_CheckCopy({pushData : function(format, value)
+		{
+			if (formats.Text === format)
+				text = value || "";
+			else if (formats.Internal === format)
+				data = value || "";
+		}}, formats.Text | formats.Internal);
+		if (data)
+			this.sendEvent("asc_onDefineAutoText", text, data);
+		return true;
+	};
+
+	/**
+	 * Enter after the name of an AutoText block inserts the block in place of the name
+	 * @returns {boolean} true when a block was inserted
+	 */
+	CDocument.prototype.private_InsertAutoTextBeforeCursor = function()
+	{
+		if (!isBodyContent(this) || this.IsSelectionUse())
+			return false;
+
+		let names = getAutoTextNames();
+		if (!names.length)
+			return false;
+
+		let paragraph = this.GetCurrentParagraph();
+		if (!paragraph || !paragraph.IsParagraph())
+			return false;
+
+		let text   = paragraph.GetText({ParaEndToSpace : false}).replace(/[\r\n]+$/, "");
+		let offset = this.private_GetOffsetInParagraph(paragraph);
+		let match  = /(\S+)$/.exec(text.substring(0, offset));
+		if (!match || -1 === names.indexOf(match[1]))
+			return false;
+
+		let entry;
+		try { entry = JSON.parse(window.localStorage.getItem(AUTOTEXT_PREFIX + match[1])); } catch (e) { return false; }
+		if (!entry || !entry.data || this.IsSelectionLocked(AscCommon.changestype_Paragraph_Content))
+			return false;
+
+		this.StartAction(AscDFH.historydescription_Document_PasteHotKey);
+		for (let i = 0; i < match[1].length; ++i)
+			this.MoveCursorLeft(true, false);
+		this.Api.asc_PasteData(AscCommon.c_oAscClipboardDataFormat.Internal, entry.data, undefined, undefined, true);
+		this.FinalizeAction();
+		return true;
+	};
+
 	// ---------------------------------------------------------------- shortcuts
 	let executeWordShortcut = CDocument.prototype.executeWordShortcut;
 	CDocument.prototype.executeWordShortcut = function(type)
@@ -392,6 +463,9 @@
 				return true;
 			case Type.UnderlineWords:
 				this.private_ToggleUnderlineType(Asc.UnderlineType.Words);
+				return true;
+			case Type.DefineAutoText:
+				this.defineAutoText();
 				return true;
 			case Type.CopyPreviousHeaderFooter:
 				// the header or footer being edited becomes the one of the previous section (Link to Previous)
@@ -433,6 +507,9 @@
 			if (!isModifier && !isNavigation)
 				this.cancelMoveCopyTo();
 		}
+		if (13 === e.KeyCode && !e.CtrlKey && !e.AltKey && !e.ShiftKey && !e.MacCmdKey && this.private_InsertAutoTextBeforeCursor())
+			return PreventAll;
+
 		return handleWordKeyDown ? handleWordKeyDown.call(this, e) : undefined;
 	};
 })(window);

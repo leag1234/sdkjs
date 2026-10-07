@@ -423,7 +423,8 @@
 			[T.UnderlineDouble,       [[keyCodes.KeyD, 1, 1]],                           [[keyCodes.KeyD, 0, 1, 0, 1]]],
 			[T.UnderlineWords,        [[keyCodes.KeyW, 1, 1]],                           [[keyCodes.KeyW, 0, 1, 0, 1]]],
 			[T.HiddenText,            [[keyCodes.KeyH, 1, 1]],                           []],
-			[T.CopyPreviousHeaderFooter, [[keyCodes.KeyR, 0, 1, 1]],                     []]
+			[T.CopyPreviousHeaderFooter, [[keyCodes.KeyR, 0, 1, 1]],                     []],
+			[T.DefineAutoText,        [[keyCodes.F3, 0, 0, 1]],                          [[keyCodes.F3, 0, 0, 1]]]
 		];
 		for (let i = 0; i < bindings.length; ++i)
 		{

@@ -368,6 +368,7 @@ var c_oAscDocumentShortcutType = {
 	UnderlineDouble               : 207,
 	UnderlineWords                : 208,
 	HiddenText                    : 209,
+	DefineAutoText                : 210,
 	CopyPreviousHeaderFooter      : 211,
 	// Microsoft Word shortcuts (word/Editor/word-shortcuts.js)
 	IncreaseFontSizeByPoint       : 148,
@@ -603,6 +604,7 @@ prot['CycleEditLocations']                      = prot.CycleEditLocations;
 prot['UnderlineDouble']                         = prot.UnderlineDouble;
 prot['UnderlineWords']                          = prot.UnderlineWords;
 prot['HiddenText']                               = prot.HiddenText;
+prot['DefineAutoText']                           = prot.DefineAutoText;
 prot['CopyPreviousHeaderFooter']                = prot.CopyPreviousHeaderFooter;
 prot['IncreaseFontSizeByPoint']         = prot.IncreaseFontSizeByPoint;
 prot['DecreaseFontSizeByPoint']         = prot.DecreaseFontSizeByPoint;
