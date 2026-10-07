@@ -406,6 +406,33 @@
 		}
 	})();
 
+	// Word editing shortcuts of word/Editor/word-edit-keys.js
+	(function()
+	{
+		const T = Asc.c_oAscDocumentShortcutType;
+		const isMac = AscCommon.AscBrowser.isMacOs;
+		// [type, Windows/Linux keys, macOS keys]; a key is [keyCode, ctrl, shift, alt, cmd]
+		const bindings = [
+			[T.MoveToLocation,        [[keyCodes.F2]],                                   []],
+			[T.CopyToLocation,        [[keyCodes.F2, 0, 1]],                             [[keyCodes.F2, 0, 1]]],
+			[T.SpikeCut,              [[keyCodes.F3, 1]],                                [[keyCodes.F3, 0, 0, 0, 1]]],
+			[T.SpikePaste,            [[keyCodes.F3, 1, 1]],                             [[keyCodes.F3, 0, 1, 0, 1]]],
+			[T.PasteSpecial,          [[keyCodes.KeyV, 1, 0, 1]],                        [[keyCodes.KeyV, 1, 0, 0, 1]]],
+			[T.PreviousEditLocation,  [[keyCodes.F5, 0, 1]],                             [[keyCodes.F5, 0, 1]]],
+			[T.CycleEditLocations,    [[keyCodes.KeyZ, 1, 0, 1]],                        []]
+		];
+		for (let i = 0; i < bindings.length; ++i)
+		{
+			let type = bindings[i][0];
+			let keys = bindings[i][isMac ? 2 : 1];
+			c_oAscDefaultShortcuts[type] = keys.map(function(k) { return new AscShortcut(type, k[0], !!k[1], !!k[2], !!k[3], !!k[4]); });
+			c_oAscUnlockedShortcutActionTypes[type] = true;
+		}
+		// Ctrl+Alt+V is Paste Special in Word (Paste Formatting is Cmd+Option+V on macOS)
+		if (!isMac)
+			c_oAscDefaultShortcuts[T.PasteFormat] = [];
+	})();
+
 	if (window["AscDesktopEditor"]) {
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.NextFileTab] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.NextFileTab, keyCodes.Tab, true, false, false, false)];
 		c_oAscDefaultShortcuts[Asc.c_oAscDocumentShortcutType.PreviousFileTab] = [new AscShortcut(Asc.c_oAscDocumentShortcutType.PreviousFileTab, keyCodes.Tab, true, true, false, false)];

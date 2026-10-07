@@ -347,6 +347,7 @@
 			"word/Editor/Shortcuts.js",
 			"word/Editor/word-shortcuts.js",
 			"word/Editor/repeat-command.js",
+			"word/Editor/word-edit-keys.js",
 
 			"word/Editor/sections/document-sections.js",
 			"word/Editor/sections/footnote-pr.js",

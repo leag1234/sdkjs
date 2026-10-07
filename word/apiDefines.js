@@ -357,6 +357,14 @@ var c_oAscDocumentShortcutType = {
 	InsertLineBreakMultilineForm  : 145,
 	MoveToNextPage                : 146,
 	MoveToPreviousPage            : 147,
+	// Word editing shortcuts (word/Editor/word-edit-keys.js)
+	MoveToLocation                : 200,
+	CopyToLocation                : 201,
+	SpikeCut                      : 202,
+	SpikePaste                    : 203,
+	PasteSpecial                  : 204,
+	PreviousEditLocation          : 205,
+	CycleEditLocations            : 206,
 	// Microsoft Word shortcuts (word/Editor/word-shortcuts.js)
 	IncreaseFontSizeByPoint       : 148,
 	DecreaseFontSizeByPoint       : 149,
@@ -581,6 +589,13 @@ prot['MoveToStartPreviousPage']       = prot.MoveToStartPreviousPage;
 prot['MoveToStartNextPage']           = prot.MoveToStartNextPage;
 prot['MoveToNextPage']                = prot.MoveToNextPage;
 prot['MoveToPreviousPage']            = prot.MoveToPreviousPage;
+prot['MoveToLocation']                          = prot.MoveToLocation;
+prot['CopyToLocation']                          = prot.CopyToLocation;
+prot['SpikeCut']                                = prot.SpikeCut;
+prot['SpikePaste']                              = prot.SpikePaste;
+prot['PasteSpecial']                            = prot.PasteSpecial;
+prot['PreviousEditLocation']                    = prot.PreviousEditLocation;
+prot['CycleEditLocations']                      = prot.CycleEditLocations;
 prot['IncreaseFontSizeByPoint']         = prot.IncreaseFontSizeByPoint;
 prot['DecreaseFontSizeByPoint']         = prot.DecreaseFontSizeByPoint;
 prot['ChangeCase']                      = prot.ChangeCase;
