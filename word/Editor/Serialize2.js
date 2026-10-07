@@ -81,7 +81,8 @@ var c_oSerTableTypes = {
 var c_oSerFontTableTypes = {
 	Font: 0,
 	Name: 1,
-	AltName: 2
+	AltName: 2,
+	Family: 3
 };
 var c_oSerSigTypes = {
     Version:0
@@ -8496,6 +8497,8 @@ function BinaryFileReader(doc, openParams)
 		}
 		if (!this.oReadResult.bCopyPaste && AscFonts.g_fontApplication) {
 			AscFonts.g_fontApplication.SetDocumentAltNames(this.oReadResult.fontAltNames);
+			if (AscFonts.g_fontApplication.SetDocumentFontFamilies)
+				AscFonts.g_fontApplication.SetDocumentFontFamilies(this.oReadResult.fontFamilies);
 		}
 		if(null !== this.oReadResult.defaultTabStop && this.oReadResult.defaultTabStop > 0) {
 			AscCommonWord.Default_Tab_Stop = this.oReadResult.defaultTabStop;
@@ -16424,8 +16427,9 @@ function Binary_CommentsTableReader(doc, oReadResult, stream, oComments)
     };
 };
 /**
- * Font table written by x2t (word/fontTable.xml): alternate names (w:altName) of the document fonts,
- * stored in oReadResult.fontAltNames (font name => alternate name).
+ * Font table written by x2t (word/fontTable.xml): alternate names (w:altName) and generic families (w:family)
+ * of the document fonts, stored in oReadResult.fontAltNames (font name => alternate name) and
+ * oReadResult.fontFamilies (font name => "script", "swiss"...).
  */
 function Binary_FontTableReader(oReadResult, stream)
 {
@@ -16439,18 +16443,22 @@ function Binary_FontTableReader(oReadResult, stream)
 			if (c_oSerFontTableTypes.Font !== t)
 				return c_oSerConstants.ReadUnknown;
 
-			let font = {name : "", altName : ""};
+			let font = {name : "", altName : "", family : ""};
 			let res = oThis.bcr.Read1(l, function(t, l){
 				if (c_oSerFontTableTypes.Name === t)
 					font.name = oThis.stream.GetString2LE(l);
 				else if (c_oSerFontTableTypes.AltName === t)
 					font.altName = oThis.stream.GetString2LE(l);
+				else if (c_oSerFontTableTypes.Family === t)
+					font.family = oThis.stream.GetString2LE(l);
 				else
 					return c_oSerConstants.ReadUnknown;
 				return c_oSerConstants.ReadOk;
 			});
 			if (font.name && font.altName && font.name !== font.altName)
 				oThis.oReadResult.fontAltNames[font.name] = font.altName;
+			if (font.name && font.family)
+				oThis.oReadResult.fontFamilies[font.name] = font.family;
 			return res;
 		});
 	};
@@ -17492,6 +17500,7 @@ function DocReadResult(doc) {
 	this.logicDocument = doc;
 	this.ImageMap = {};
 	this.fontAltNames = {};
+	this.fontFamilies = {};
 	this.oComments = {};
 	this.oDocumentComments = {};
 	this.oCommentsPlaces = {};

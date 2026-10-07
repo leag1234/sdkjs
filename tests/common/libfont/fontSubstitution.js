@@ -90,12 +90,77 @@ $(function ()
 		});
 	});
 
+	QUnit.test("French school cursives use Playwrite FR derivatives", function (assert)
+	{
+		const aInstalled = ["Carlito", "Playwrite FR Moderne Metric", "Playwrite FR Moderne", "Playwrite Seyes Metric", "Playwrite FR Trad"];
+		withInstalled(aInstalled, function ()
+		{
+			assert.strictEqual(oApp.GetSubstituteName("Cursif & Lignes"), "Playwrite Seyes Metric", "ruled font");
+			assert.strictEqual(oApp.GetSubstituteName("Cursif et Lignes"), "Playwrite Seyes Metric", "name variant");
+			assert.strictEqual(oApp.GetSubstituteName("Marianne"), "Carlito", "other unknown fonts keep Word's default");
+			assert.strictEqual(oApp.GetSubstituteName("Cursive standard"), "Carlito", "author's machine unknown: Word's default");
+			assert.strictEqual(oApp.GetSubstituteName("Belle Allure CE1"), "Carlito");
+		});
+		oApp.SetDocumentAltNames({"Cursive standard" : "Cursivestandard", "Belle Allure CE1" : "Courier New"});
+		try
+		{
+			withInstalled(aInstalled, function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Cursive standard"), "Playwrite FR Moderne Metric", "font installed where the document was written");
+				assert.strictEqual(oApp.GetSubstituteName("Belle Allure CE1"), "Carlito", "alternate name is another font: not installed there");
+			});
+			withInstalled(["Carlito", "Playwrite FR Moderne", "Playwrite FR Trad"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Cursive standard"), "Playwrite FR Moderne", "plain font when the metric one is absent");
+				assert.strictEqual(oApp.GetSubstituteName("Cursif & Lignes"), "Playwrite FR Trad");
+			});
+			withInstalled(["Cursive standard", "Playwrite FR Moderne Metric"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Cursive standard"), "Cursive standard", "installed font wins");
+			});
+		}
+		finally
+		{
+			oApp.SetDocumentAltNames({});
+		}
+	});
+
+	QUnit.test("font declared as script by the document (w:family) and known there (w:altName)", function (assert)
+	{
+		oApp.SetDocumentFontFamilies({"Zapf Hand Test" : "script", "Bare Script Test" : "script", "Plain Test" : "swiss", "Bradley Hand ITC" : "script"});
+		oApp.SetDocumentAltNames({"Zapf Hand Test" : "Zapf Alt Test", "Plain Test" : "Plain Alt Test", "Bradley Hand ITC" : "Viner Hand ITC"});
+		try
+		{
+			withInstalled(["Carlito", "Playwrite FR Moderne Compact", "Playwrite FR Moderne"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Zapf Hand Test"), "Playwrite FR Moderne Compact", "unknown script font");
+				assert.strictEqual(oApp.GetSubstituteName("Bradley Hand ITC"), "Playwrite FR Moderne Compact", "known to the dictionary but not installed");
+				assert.strictEqual(oApp.GetSubstituteName("Plain Test"), "Carlito", "not a script font: Word's default");
+				assert.strictEqual(oApp.GetSubstituteName("Bare Script Test"), "Carlito", "script entry without alternate name: a font Word did not have");
+			});
+			withInstalled(["Carlito"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Zapf Hand Test"), "Carlito", "no script font installed");
+			});
+			oApp.SetDocumentAltNames({"Zapf Hand Test" : "Times New Roman"});
+			withInstalled(["Carlito", "Liberation Serif", "Playwrite FR Moderne"], function ()
+			{
+				assert.strictEqual(oApp.GetSubstituteName("Zapf Hand Test"), "Liberation Serif", "installed alternate name first, as Word");
+			});
+		}
+		finally
+		{
+			oApp.SetDocumentFontFamilies({});
+			oApp.SetDocumentAltNames({});
+		}
+	});
+
 	QUnit.test("unknown font falls back to Word's default font (Calibri, then its clone)", function (assert)
 	{
 		withInstalled(["Carlito", "Liberation Sans"], function ()
 		{
 			assert.strictEqual(oApp.GetSubstituteName("Andika"), "Carlito");
-			assert.strictEqual(oApp.GetSubstituteName("Cursive standard"), "Carlito");
+			assert.strictEqual(oApp.GetSubstituteName("Cursive standard"), "Carlito", "school cursive without its substitute installed");
 			assert.strictEqual(oApp.GetSubstituteName("Marianne"), "Carlito");
 		});
 		withInstalled(["Calibri"], function ()

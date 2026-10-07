@@ -224,6 +224,24 @@
 			"Wingdings 3"       : ["Elixir Symbols", "Symbola"],
 			"Webdings"          : ["Elixir Symbols", "Symbola"]
 		};
+		// French school cursives, by name pattern (the name varies: Belle Allure CM / CE1 / GS, Cursif et Lignes,
+		// Ecolier CP...): [pattern, substitutes, onlyIfAuthorHadFont] tried after FD_Substitutes. Playwrite FR
+		// (Typotheque, OFL): "Seyes Metric" has the ruled lines of "Cursif & Lignes" drawn in its glyphs; "Moderne
+		// Metric" has the line height and width of "Cursive standard". When none is installed, Word's default
+		// font applies. onlyIfAuthorHadFont: Word writes the font's own alias (w:altName, its PostScript name,
+		// "Cursivestandard") in fontTable.xml when the font was installed on the author's machine; without it the
+		// font is, as for Word on a machine without it, replaced by Word's default font (rendering a document of
+		// an author who does not have the font like Word does, which is what a recipient without the font sees).
+		this.FD_SubstitutePatterns = [
+			[/^Cursif\s*(&|et|\+)\s*Lignes/i, ["Playwrite Seyes Metric", "Playwrite FR Trad"], false],
+			[/^Sey[eè]s(\s|$)/i, ["Playwrite Seyes Metric", "Playwrite FR Trad"], false],
+			[/^(Cursive standard|Belle Allure|[EÉé]colier|[EÉé]criture)/i, ["Playwrite FR Moderne Metric", "Playwrite FR Moderne"], true]
+		];
+		// Substitutes for a font that the document declares as a script font (w:family="script" of fontTable.xml,
+		// with a w:altName) and that has no other substitute: a cursive typeface rather than Word's default font. The font has
+		// the average width and line height (1.25 em) of a script font, so that the layout stays close to Word's.
+		this.FD_ScriptFontSubstitutes = ["Playwrite FR Moderne Compact", "Playwrite FR Moderne"];
+
 		// Word replaces a font it knows nothing about (not installed, not in its font dictionary, no usable
 		// alternate name) by its default font Calibri; so do we, instead of the closest font by panose.
 		this.FD_UnknownFontSubstitute = "Calibri";
@@ -3009,17 +3027,54 @@
 			this.FontPickerMap = {};
 		};
 
+		// Generic families (w:family) of the fonts of the current document: font name => "script", "swiss"...
+		this.DocumentFontFamilies = {};
+		this.SetDocumentFontFamilies = function(families)
+		{
+			this.DocumentFontFamilies = families || {};
+			this.FontPickerMap = {};
+		};
+
 		// Installed font for "name": the font itself or the first installed font of FD_Substitutes; null if none.
 		this.GetInstalledSubstitute = function(name)
 		{
 			if (undefined !== AscFonts.g_map_font_index[name])
 				return name;
 
-			var aSubstitutes = this.g_fontDictionary.FD_Substitutes[name];
+			var aSubstitutes = this.GetSubstituteList(name);
 			for (var i = 0, nCount = aSubstitutes ? aSubstitutes.length : 0; i < nCount; ++i)
 			{
 				if (undefined !== AscFonts.g_map_font_index[aSubstitutes[i]])
 					return aSubstitutes[i];
+			}
+			return null;
+		};
+
+		// True when the document font table gives "name" its own alias as alternate name ("Cursive standard" /
+		// "Cursivestandard"): the font was installed where the document was written.
+		this.IsOwnAliasDeclared = function(name)
+		{
+			var sAlt = this.DocumentAltNames[name];
+			if (!sAlt)
+				return false;
+			var fNorm = function(s) { return s.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]/g, ""); };
+			return fNorm(sAlt) === fNorm(name);
+		};
+
+		// List of substitutes of "name": FD_Substitutes, then the first matching FD_SubstitutePatterns entry.
+		this.GetSubstituteList = function(name)
+		{
+			var oDictionary = this.g_fontDictionary;
+			if (oDictionary.FD_Substitutes[name])
+				return oDictionary.FD_Substitutes[name];
+			var aPatterns = oDictionary.FD_SubstitutePatterns;
+			for (var i = 0, nCount = aPatterns ? aPatterns.length : 0; i < nCount; ++i)
+			{
+				if (!aPatterns[i][0].test(name))
+					continue;
+				if (aPatterns[i][2] && !this.IsOwnAliasDeclared(name))
+					continue;
+				return aPatterns[i][1];
 			}
 			return null;
 		};
@@ -3048,6 +3103,18 @@
 			var oDictionary = this.g_fontDictionary;
 			if (oDictionary.FD_Substitutes[name])
 				return name;
+
+			// declared as a script font by the document, with an alternate name (so a font that existed where the
+			// document was written; a bare entry is a font Word did not have): a script font if one is installed
+			if ("script" === this.DocumentFontFamilies[name] && this.DocumentAltNames[name])
+			{
+				var aScript = oDictionary.FD_ScriptFontSubstitutes;
+				for (var j = 0, nScript = aScript ? aScript.length : 0; j < nScript; ++j)
+				{
+					if (undefined !== AscFonts.g_map_font_index[aScript[j]])
+						return aScript[j];
+				}
+			}
 
 			if (!/^[\x20-\x7E]+$/.test(name))
 				return name;
