@@ -126,6 +126,8 @@ function CEditorPage(api)
 	this.m_dScrollX_max       = 1;
 
 	this.m_dDocumentWidth      = 0;
+	// ElixirOffice: width (CSS px) of the comment markup area kept to the right of the pages
+	this.ElixirMarkupWidth     = 0;
 	this.m_dDocumentHeight     = 0;
 	this.m_dDocumentPageWidth  = 0;
 	this.m_dDocumentPageHeight = 0;
@@ -832,7 +834,7 @@ function CEditorPage(api)
 		var Zoom = 100;
 		if (0 != this.m_dDocumentPageWidth)
 		{
-			Zoom = 100 * (w - 10) / this.m_dDocumentPageWidth;
+			Zoom = 100 * (w - 10 - this.ElixirMarkupWidth) / this.m_dDocumentPageWidth;
 
 			if (Zoom < 5)
 				Zoom = 5;
@@ -3169,6 +3171,9 @@ function CEditorPage(api)
 
 		this.m_dDocumentHeight += this.viewBetweenPagesVer;
 
+		if (!isMultiPageView)
+			this.m_dDocumentWidth += this.ElixirMarkupWidth;
+
 		// теперь увеличим ширину документа, чтобы он не был плотно к краям
 		if (!this.m_oApi.isMobileVersion)
 			this.m_dDocumentWidth += 40;
@@ -3224,12 +3229,14 @@ function CEditorPage(api)
 		var bIsFoundFirst = false;
 		var bIsFoundEnd   = false;
 
-		var hor_pos_median = parseInt(_width / 2);
+		// ElixirOffice: the pages and the comment markup area are centered together
+		var nMarkupWidth = this.isUseMultiPageView() ? 0 : this.ElixirMarkupWidth;
+		var hor_pos_median = parseInt((_width - nMarkupWidth) / 2);
 		if (0 != this.m_dScrollX || (this.m_dDocumentWidth > _width))
 		{
 			//var part = this.m_dScrollX / Math.max(this.m_dScrollX_max, 1);
 			//hor_pos_median = parseInt(this.m_dDocumentWidth / 2 + part * (_width - this.m_dDocumentWidth));
-			hor_pos_median = parseInt(this.m_dDocumentWidth / 2 - this.m_dScrollX);
+			hor_pos_median = parseInt((this.m_dDocumentWidth - nMarkupWidth) / 2 - this.m_dScrollX);
 		}
 
 		let lCurrentTopInDoc = parseInt(this.m_dScrollY);
@@ -3379,6 +3386,10 @@ function CEditorPage(api)
 
 		if (this.m_bDocumentPlaceChangedEnabled)
 			this.m_oApi.sendEvent("asc_onDocumentPlaceChanged");
+
+		// ElixirOffice: the comment balloons follow scrolling and zooming
+		if (this.ElixirMarkupWidth > 0)
+			this.m_oApi.sendEvent("asc_onElixirCommentAnchorsChanged");
 
 		// update position of toggle-chart-elements button
 		Asc.editor.toggleChartElementsCallback();

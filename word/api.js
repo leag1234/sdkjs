@@ -7621,6 +7621,76 @@ background-repeat: no-repeat;\
 			window.g_asc_plugins.onPluginEvent("onAddComment", {"Id" : Id, "Data" : CommentData.ConvertToSimpleObject()});
 	};
 
+	/**
+	 * ElixirOffice: reserves a markup area of nWidth CSS pixels to the right of the pages
+	 * (Word-style comment balloons). The pages and the area are centered together.
+	 */
+	asc_docs_api.prototype.asc_ElixirSetMarkupWidth = function(nWidth)
+	{
+		var oWordControl = this.WordControl;
+		if (!oWordControl)
+			return;
+
+		nWidth = Math.max(0, nWidth | 0);
+		if (oWordControl.ElixirMarkupWidth === nWidth)
+			return;
+
+		oWordControl.ElixirMarkupWidth = nWidth;
+		oWordControl.OnResize(true);
+		if (oWordControl.m_oEditor && oWordControl.m_oEditor.HtmlElement)
+			oWordControl.m_oEditor.HtmlElement.fullRepaint = true;
+		oWordControl.OnRePaintAttack();
+	};
+	/**
+	 * ElixirOffice: screen anchors (relative to the editor area) of every comment attached
+	 * to the main text, for the comment balloons in the right margin.
+	 */
+	asc_docs_api.prototype.asc_ElixirGetCommentAnchors = function()
+	{
+		var oLogicDocument   = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		var oDrawingDocument = this.WordControl ? this.WordControl.m_oDrawingDocument : null;
+		var arrResult        = [];
+		if (!oLogicDocument || !oLogicDocument.Comments || !oDrawingDocument)
+			return arrResult;
+
+		var oAll = oLogicDocument.Comments.GetAllComments();
+		for (var sId in oAll)
+		{
+			var oComment = oAll[sId];
+			if (!oComment || !oComment.GetRangeStart())
+				continue;
+
+			var oStartMark = AscCommon.g_oTableId.Get_ById(oComment.GetRangeStart());
+			var oInfo      = oComment.m_oStartInfo;
+			if (!oStartMark || !oInfo || !(oInfo.PageNum >= 0) || !oDrawingDocument.m_arrPages[oInfo.PageNum])
+				continue;
+
+			var nX = oInfo.X, nY = oInfo.Y, nH = oInfo.H || 0;
+			var oParagraph = oStartMark.GetParagraph ? oStartMark.GetParagraph() : null;
+			var oTransform = oParagraph ? oParagraph.Get_ParentTextTransform() : null;
+			if (oTransform)
+			{
+				var nTX = oTransform.TransformPointX(nX, nY);
+				nY      = oTransform.TransformPointY(nX, nY);
+				nX      = nTX;
+			}
+
+			var nPageW  = oDrawingDocument.m_arrPages[oInfo.PageNum].width_mm;
+			var oText   = oDrawingDocument.ConvertCoordsToCursorWR(nX, nY, oInfo.PageNum);
+			var oBottom = oDrawingDocument.ConvertCoordsToCursorWR(nX, nY + nH, oInfo.PageNum);
+			var oEdge   = oDrawingDocument.ConvertCoordsToCursorWR(nPageW, nY, oInfo.PageNum);
+			arrResult.push({
+				"Id"        : sId,
+				"Page"      : oInfo.PageNum,
+				"X"         : oText.X,
+				"Y"         : oText.Y,
+				"H"         : oBottom.Y - oText.Y,
+				"PageRight" : oEdge.X,
+				"Solved"    : oComment.IsSolved()
+			});
+		}
+		return arrResult;
+	};
 	asc_docs_api.prototype.sync_ShowComment = function(arrId, X, Y)
 	{
 		this.sendEvent("asc_onShowComment", arrId, X, Y);
@@ -16018,6 +16088,8 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_showComments']                          = asc_docs_api.prototype.asc_showComments;
 	asc_docs_api.prototype['asc_hideComments']                          = asc_docs_api.prototype.asc_hideComments;
 	asc_docs_api.prototype['asc_addComment']                            = asc_docs_api.prototype.asc_addComment;
+	asc_docs_api.prototype['asc_ElixirSetMarkupWidth']                 = asc_docs_api.prototype.asc_ElixirSetMarkupWidth;
+	asc_docs_api.prototype['asc_ElixirGetCommentAnchors']               = asc_docs_api.prototype.asc_ElixirGetCommentAnchors;
 	asc_docs_api.prototype['asc_removeComment']                         = asc_docs_api.prototype.asc_removeComment;
 	asc_docs_api.prototype['asc_changeComment']                         = asc_docs_api.prototype.asc_changeComment;
 	asc_docs_api.prototype['asc_selectComment']                         = asc_docs_api.prototype.asc_selectComment;

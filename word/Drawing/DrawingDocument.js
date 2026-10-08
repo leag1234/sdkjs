@@ -3861,6 +3861,10 @@ function CDrawingDocument()
 		if (this.m_oWordControl)
 			this.m_oWordControl.m_oApi.checkLastWork();
 
+		// ElixirOffice: comment anchors may have moved (margin balloons)
+		if (this.m_oWordControl && this.m_oWordControl.ElixirMarkupWidth > 0)
+			this.m_oWordControl.m_oApi.sendEvent("asc_onElixirCommentAnchorsChanged");
+
 		if (undefined != isBreak)
 		{
 			this.m_lCountCalculatePages = this.m_lPagesCount;
