@@ -968,7 +968,8 @@ CDocumentContentBase.prototype.private_Remove = function(Count, isRemoveWholeEle
 									Prev.MoveCursorToEndPos(false, false);
 
 									// Запоминаем новую позицию курсора, после совмещения параграфов
-									Prev.Concat(this.Content[nCurContentPos]);
+									// A previous paragraph made of page breaks only is as good as empty: keep the formatting of the current one
+									Prev.Concat(this.Content[nCurContentPos], Prev.IsParagraph() && Prev.IsOnlyPageOrColumnBreaks());
 									this.Internal_Content_Remove(nCurContentPos, 1);
 									nCurContentPos--;
 								}
@@ -1056,7 +1057,8 @@ CDocumentContentBase.prototype.private_Remove = function(Count, isRemoveWholeEle
 								{
 									// Соединяем текущий и следующий параграфы
 									var Cur = this.Content[nCurContentPos];
-									Cur.Concat(this.Content[nCurContentPos + 1]);
+									// A paragraph made of page breaks only is as good as empty: keep the formatting of the next one
+									Cur.Concat(this.Content[nCurContentPos + 1], Cur.IsOnlyPageOrColumnBreaks());
 									this.Internal_Content_Remove(nCurContentPos + 1, 1);
 								}
 							}

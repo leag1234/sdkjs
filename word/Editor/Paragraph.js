@@ -9957,6 +9957,30 @@ Paragraph.prototype.Is_Empty = function(Props)
 	return true;
 };
 /**
+ * A paragraph that holds nothing but page or column breaks (what Ctrl+Enter leaves behind).
+ * When it is merged with a neighbouring paragraph, the formatting of the other paragraph must
+ * win, as it does for an empty paragraph: Word keeps the "Heading 1" style of "9. Title" after
+ * a Backspace at its start.
+ * @returns {boolean}
+ */
+Paragraph.prototype.IsOnlyPageOrColumnBreaks = function()
+{
+	if (this.IsEmpty() || !this.IsEmpty({SkipNewLine : true}))
+		return false;
+
+	let isOnlyPageBreaks = true;
+	this.CheckRunContent(function(oRun)
+	{
+		for (let nPos = 0, nCount = oRun.Content.length; nPos < nCount; ++nPos)
+		{
+			let oItem = oRun.Content[nPos];
+			if (para_NewLine === oItem.Type && !oItem.IsPageOrColumnBreak())
+				isOnlyPageBreaks = false;
+		}
+	});
+	return isOnlyPageBreaks;
+};
+/**
  * Проверяем, попали ли мы в текст
  */
 Paragraph.prototype.IsInText = function(X, Y, CurPage)
