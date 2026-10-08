@@ -60,6 +60,7 @@
 
 			"common/nameMap.js",
 			"common/downloaderfiles.js",
+			"common/clientpdf/clientpdf.js",
 			"common/NumFormat.js",
 			"common/SerializeChart.js",
 

@@ -32,6 +32,8 @@ const licenseText = buildLicenseHeader(BUILD_DIR, { stripSentinel: true });
 const IGNORE_NAMES = new Set([
     'jquery_native', 'fonts_ie', 'spell_ie', 'engine_ie',
     'zlib_ie', 'drawingfile_ie', 'themes',
+    // already minified third-party bundle: copied as is (see common/clientpdf/vendor/fontkit/README.md)
+    'fontkit.umd.min',
 ]);
 
 // Mirrors the otherFiles array in Gruntfile.js
@@ -61,6 +63,8 @@ const OTHER_FILES = [
             'hash/hash/*',
             'zlib/engine/*',
             'serviceworker/*',
+            'clientpdf/eo-pdf.js',
+            'clientpdf/vendor/fontkit/*',
         ],
         dest: path.join(BUILD_ROOT, 'common'),
     },

@@ -9406,6 +9406,10 @@ background-repeat: no-repeat;\
 			return true;
 		}
 
+		// ElixirOffice: PDF made in the browser (common/clientpdf), server path as fallback
+		if (AscCommon.ClientPdf && AscCommon.ClientPdf.canHandle(this, actionType, options, downloadType))
+			return AscCommon.ClientPdf.run(this, actionType, options, downloadType);
+
 		if (c_oAscAsyncAction.SendMailMerge === actionType)
 		{
 			oAdditionalData["c"] = 'sendmm';
