@@ -1004,7 +1004,8 @@ var c_oSer_FldSimpleType = {
 	Instr: 1,
 	FFData: 2,
 	CharType: 3,
-	PrivateData: 4
+	PrivateData: 4,
+	FldLock: 5
 };
 var c_oSerProp_RevisionType = {
     Author: 0,
@@ -5829,6 +5830,13 @@ function BinaryDocumentTableWriter(memory, doc, oMapCommentId, oNumIdMap, copyPa
 		if (null !== fldChar.fldData) {
 			this.bs.WriteItem(c_oSer_FldSimpleType.PrivateData, function () {
 				oThis.memory.WriteString3(fldChar.fldData);
+			});
+		}
+		
+		// w:fldLock of the begin character (Ctrl+F11)
+		if (fldChar.IsBegin() && fldChar.ElxFieldLock) {
+			this.bs.WriteItem(c_oSer_FldSimpleType.FldLock, function () {
+				oThis.memory.WriteBool(true);
 			});
 		}
 	};
@@ -11866,6 +11874,8 @@ function Binary_DocumentTableReader(doc, oReadResult, openParams, stream, curNot
 			paraField.ffData = ffData;
 		} else if (c_oSer_FldSimpleType.PrivateData === type) {
 			paraField.fldData = this.stream.GetString2LE(length);
+		} else if (c_oSer_FldSimpleType.FldLock === type) {
+			paraField.ElxFieldLock = this.stream.GetBool();
 		} else
 			res = c_oSerConstants.ReadUnknown;
 		return res;

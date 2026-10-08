@@ -29,7 +29,8 @@
  * Word document views and field commands:
  *   Outline view (Ctrl+Alt+O)  paragraphs indented by outline level, outline symbols, no paragraph formatting,
  *                              collapse / expand (Alt+Shift+Minus / Plus), show levels (Alt+Shift+1..9, Alt+Shift+A),
- *                              text formatting on/off (numeric keypad /), Tab / Shift+Tab demote / promote headings
+ *                              text formatting on/off (numeric keypad /), first line of body text only (Alt+Shift+L),
+ *                              Tab / Shift+Tab demote / promote headings
  *   Draft view (Ctrl+Alt+N)    no headers, footers or page margins at the top; floating objects in the text flow
  *   Print Layout (Ctrl+Alt+P)  back to the normal layout
  *   Ctrl+F9                    empty field (or a field whose code is the selected text), its code shown
@@ -180,7 +181,7 @@
 			this.Layout = layout;
 		}
 
-		this.WordOutline = {show : SHOW_ALL, limits : new Map(), hidden : new Set(), plain : false};
+		this.WordOutline = {show : SHOW_ALL, limits : new Map(), hidden : new Set(), plain : false, firstLine : false};
 		recompileAll(this);
 		this.RecalculateFromStart(true);
 		this.UpdateSelection();
@@ -397,10 +398,21 @@
 		this.sendEvent("asc_onWordViewChanged", VIEW_OUTLINE);
 	};
 
+	// Alt+Shift+L (macOS Control+Shift+L): only the first line of each body text paragraph, or all of it
+	CDocument.prototype.OutlineToggleFirstLine = function()
+	{
+		this.WordOutline.firstLine = !this.WordOutline.firstLine;
+		recompileAll(this);
+		this.RecalculateFromStart(true);
+		this.UpdateSelection();
+		this.sendEvent("asc_onWordViewChanged", VIEW_OUTLINE);
+	};
+
 	CDocument.prototype.GetOutlineState = function()
 	{
 		let state = this.WordOutline;
 		return {
+			"firstLineOnly"  : state ? !!state.firstLine : false,
 			"view"           : getWordView(this),
 			"showLevel"      : state ? (state.show < SHOW_ALL ? state.show : (undefined !== state.orphan && !state.limits.size ? state.orphan : 0)) : 0,
 			"showFormatting" : state ? !state.plain : true,
@@ -624,12 +636,60 @@
 		return !!(textPr && textPr.ElxOutlineHidden) || isHiddenText(textPr);
 	};
 
+	function isFirstLineOnly(paragraph)
+	{
+		let doc = paragraph.LogicDocument;
+		return !!(doc && doc.WordOutline && doc.WordOutline.firstLine && isOutline(doc) && isTopParagraph(doc, paragraph) && BODY_RANK === rankOf(paragraph));
+	}
+
+	let recalculateLineMetrics = Paragraph.prototype.private_RecalculateLineMetrics;
+	Paragraph.prototype.private_RecalculateLineMetrics = function(curLine, curPage, prs, paraPr)
+	{
+		recalculateLineMetrics.apply(this, arguments);
+		if (curLine > 0 && isFirstLineOnly(this))
+		{
+			let metrics = this.Lines[curLine].Metrics;
+			metrics.Ascent = metrics.Descent = metrics.TextAscent = metrics.TextAscent2 = metrics.TextDescent = metrics.LineGap = 0;
+		}
+	};
+
 	let drawParagraph = Paragraph.prototype.Draw;
 	Paragraph.prototype.Draw = function(curPage, graphics)
 	{
 		let doc = this.LogicDocument;
 		if (doc && doc.WordOutline && doc.WordOutline.hidden.size && doc.WordOutline.hidden.has(this) && isOutline(doc))
 			return;
+		let page = this.Pages[curPage];
+		if (page && this.Lines.length > 1 && isFirstLineOnly(this))
+		{
+			if (page.StartLine > 0)
+				return;
+			let endLine = page.EndLine;
+			page.EndLine = 0;
+			try
+			{
+				drawParagraph.call(this, curPage, graphics);
+			}
+			finally
+			{
+				page.EndLine = endLine;
+			}
+			let line  = this.Lines[0];
+			let range = line && line.Ranges[line.Ranges.length - 1];
+			if (range && graphics.df)
+			{
+				// "..." after the first line, as Word does
+				let y = page.Y + line.Y - 0.4;
+				let x = range.XVisible + range.W + 1;
+				graphics.b_color1(96, 96, 96, 255);
+				for (let i = 0; i < 3; ++i)
+				{
+					drawCircle(graphics, x + i * 1.2, y, 0.25);
+					graphics.df();
+				}
+			}
+			return;
+		}
 		drawParagraph.call(this, curPage, graphics);
 	};
 
@@ -768,13 +828,53 @@
 	 */
 	CDocument.prototype.SetFieldsLocked = function(isLocked)
 	{
-		let fields = this.private_GetFieldsForCommand();
-		fields.forEach(function(field)
+		let all = this.private_GetFieldsForCommand();
+		let fields = all.filter(function(field)
 		{
-			field.GetBeginChar().ElxFieldLock = isLocked;
+			return !!field.IsLocked() !== !!isLocked && field.GetBeginChar().GetRun();
 		});
-		this.sendEvent("asc_onWordFieldHint", fields.length ? (isLocked ? "locked" : "unlocked") : "nofield", fields.length);
-		return fields.length;
+		let changed = fields.length;
+		if (changed)
+		{
+			let runs = fields.map(function(field) { return field.GetBeginChar().GetRun(); });
+			if (this.IsSelectionLocked(AscCommon.changestype_None, {Type : AscCommon.changestype_2_ElementsArray_and_Type, Elements : runs.map(function(run) { return run.GetParagraph(); }), CheckType : AscCommon.changestype_Paragraph_Content}))
+				return 0;
+			// The lock is a property of the begin character (w:fldLock): the character is replaced through the
+			// history, so that the lock is undone, sent to co-editors and saved.
+			this.StartAction(AscDFH.historydescription_Document_AddComplexField);
+			let doc = this;
+			fields.forEach(function(field)
+			{
+				let oldChar = field.GetBeginChar();
+				let run = oldChar.GetRun();
+				let pos = run.GetElementPosition(oldChar);
+				if (pos < 0)
+					return;
+				// both characters belong to the field: the one in the run is its begin character (see SetParent below,
+				// for undo and redo)
+				let newChar = new ParaFieldChar(fldchartype_Begin, doc);
+				newChar.ComplexField = field;
+				newChar.ElxLockSwap = oldChar.ElxLockSwap = true;
+				newChar.showFieldCode = oldChar.showFieldCode;
+				newChar.fldData = oldChar.fldData;
+				newChar.ffData = oldChar.ffData ? oldChar.ffData.Copy() : null;
+				newChar.ElxFieldLock = !!isLocked;
+				run.RemoveFromContent(pos, 1, true);
+				run.AddToContent(pos, newChar, true);
+				field.ReplaceChar(newChar);
+			});
+			this.FinalizeAction();
+		}
+		this.sendEvent("asc_onWordFieldHint", all.length ? (isLocked ? "locked" : "unlocked") : "nofield", all.length);
+		return all.length;
+	};
+
+	let setFieldCharParent = ParaFieldChar.prototype.SetParent;
+	ParaFieldChar.prototype.SetParent = function(parent)
+	{
+		setFieldCharParent.apply(this, arguments);
+		if (this.ElxLockSwap && parent && this.IsBegin() && this.ComplexField)
+			this.ComplexField.ReplaceChar(this);
 	};
 
 	CComplexField.prototype.IsLocked = function()
@@ -928,6 +1028,11 @@
 					this.OutlineShowLevel(code - 48);
 					return PreventAll;
 				}
+				if (76 === code)
+				{
+					this.OutlineToggleFirstLine();
+					return PreventAll;
+				}
 				if (65 === code)
 				{
 					this.OutlineToggleAll();
@@ -1048,7 +1153,7 @@
 	};
 	/**
 	 * Commands of the Outlining tab: "promote", "demote", "body", "h1", "setlevel" (0..8, 9 body text), "up", "down", "expand", "collapse",
-	 * "level" (with the level, 0 for all), "formatting"
+	 * "level" (with the level, 0 for all), "formatting", "firstline"
 	 */
 	api["asc_OutlineCommand"] = api.asc_OutlineCommand = function(command, value)
 	{
@@ -1068,6 +1173,7 @@
 			case "collapse": doc.OutlineExpandCollapse(false); break;
 			case "level": doc.OutlineShowLevel(value); break;
 			case "formatting": doc.OutlineToggleFormatting(); break;
+			case "firstline": doc.OutlineToggleFirstLine(); break;
 		}
 		this.WordControl && this.WordControl.m_oLogicDocument && this.WordControl.m_oLogicDocument.UpdateSelection();
 	};
@@ -1322,6 +1428,74 @@
 	{
 		let doc = this.private_GetLogicDocument();
 		doc && doc.RenamePaneObject(id, name);
+	};
+
+	// ---------------------------------------------------------------- split window (Ctrl+Alt+S)
+	/**
+	 * The second pane of a split window draws the pages itself: page sizes, one page drawn into a canvas,
+	 * a click of the pane placed in the document, and an event at the end of each recalculation.
+	 */
+	api["asc_GetPagesSizes"] = api.asc_GetPagesSizes = function()
+	{
+		let dd = this.WordControl && this.WordControl.m_oDrawingDocument;
+		if (!dd || !dd.m_arrPages)
+			return [];
+		return dd.m_arrPages.map(function(page) { return {"w" : page.width_mm, "h" : page.height_mm}; });
+	};
+	api["asc_GetZoomValue"] = api.asc_GetZoomValue = function()
+	{
+		return this.WordControl ? this.WordControl.m_nZoomValue : 100;
+	};
+	api["asc_DrawPageToCanvas"] = api.asc_DrawPageToCanvas = function(pageIndex, canvas, widthPx)
+	{
+		let doc = this.private_GetLogicDocument();
+		let dd  = this.WordControl && this.WordControl.m_oDrawingDocument;
+		let page = dd && dd.m_arrPages && dd.m_arrPages[pageIndex];
+		if (!doc || !page || !canvas || (doc.CanDrawPage && !doc.CanDrawPage(pageIndex)))
+			return false;
+		let w = Math.max(1, Math.round(widthPx));
+		let h = Math.max(1, Math.round(widthPx * page.height_mm / page.width_mm));
+		canvas.width  = w;
+		canvas.height = h;
+		let ctx = canvas.getContext("2d");
+		ctx.fillStyle = "#ffffff";
+		ctx.fillRect(0, 0, w, h);
+		let g = new AscCommon.CGraphics();
+		g.init(ctx, w, h, page.width_mm, page.height_mm);
+		g.m_oFontManager = AscCommon.g_fontManager;
+		g.transform(1, 0, 0, 1, 0, 0);
+		if (this.isDarkMode)
+			g.setDarkMode();
+		doc.DrawPage(pageIndex, g);
+		return true;
+	};
+	api["asc_ClickInPage"] = api.asc_ClickInPage = function(pageIndex, x, y)
+	{
+		let doc = this.private_GetLogicDocument();
+		if (!doc)
+			return;
+		let e = new AscCommon.CMouseEventHandler();
+		e.ClickCount = 1;
+		e.Type = AscCommon.g_mouse_event_type_down;
+		doc.OnMouseDown(e, x, y, pageIndex);
+		e.Type = AscCommon.g_mouse_event_type_up;
+		doc.OnMouseUp(e, x, y, pageIndex);
+		doc.UpdateSelection();
+		doc.UpdateInterface();
+	};
+	api["asc_WatchRecalculation"] = api.asc_WatchRecalculation = function()
+	{
+		let dd = this.WordControl && this.WordControl.m_oDrawingDocument;
+		if (!dd || dd.ElxRecalcWatched)
+			return;
+		dd.ElxRecalcWatched = true;
+		let onEnd = dd.OnEndRecalculate, api = this;
+		dd.OnEndRecalculate = function()
+		{
+			let r = onEnd.apply(this, arguments);
+			api.sendEvent("asc_onElxRecalculated");
+			return r;
+		};
 	};
 
 	AscWord.CDocumentWordView = CDocumentWordView;

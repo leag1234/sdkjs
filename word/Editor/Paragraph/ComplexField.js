@@ -82,6 +82,8 @@ ParaFieldChar.prototype.Copy = function()
 	}
 	//todo fldData
 	oChar.ffData = this.ffData ? this.ffData.Copy() : null;
+	if (this.ElxFieldLock)
+		oChar.ElxFieldLock = true;
 
 	return oChar;
 };
@@ -189,6 +191,9 @@ ParaFieldChar.prototype.Write_ToBinary = function(writer)
 		writer.WriteBool(false);
 	}
 	
+	// Bool : field lock (w:fldLock)
+	writer.WriteBool(!!this.ElxFieldLock);
+	
 	//todo fldData
 };
 ParaFieldChar.prototype.Read_FromBinary = function(reader)
@@ -201,6 +206,9 @@ ParaFieldChar.prototype.Read_FromBinary = function(reader)
 	
 	if (reader.GetBool())
 		this.ffData = AscWord.FFData.fromBinary(reader);
+	
+	if (reader.GetBool())
+		this.ElxFieldLock = true;
 	
 	//todo fldData
 };
