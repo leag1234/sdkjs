@@ -197,6 +197,7 @@
 			"cell/view/WorksheetView.js",
 			"cell/view/DrawingObjectsController.js",
 			"cell/view/elixir-keys.js",
+			"cell/model/flash-fill.js",
 			"word/Drawing/Graphics.js",
 			"cell/model/DrawingObjects/Graphics.js",
 			"word/Drawing/buttons.js",
