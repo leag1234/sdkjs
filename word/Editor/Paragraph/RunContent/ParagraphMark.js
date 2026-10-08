@@ -192,7 +192,8 @@
 	{
 		return (AscWord.AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE
 			| AscWord.AUTOCORRECT_FLAGS_HYPERLINK
-			| AscWord.AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH);
+			| AscWord.AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH
+			| AscWord.AUTOCORRECT_FLAGS_TEXT_REPLACE);
 	};
 	CRunParagraphMark.prototype.ToSearchElement = function(oProps)
 	{

@@ -607,7 +607,7 @@
 
 		// /,\,@  - исключения, на них мы не должны стартовать атозамену первой буквы предложения
 		if ((this.IsPunctuation() || this.IsNumber()) && 92 !== this.Value && 47 !== this.Value && 64 !== this.Value)
-			return AscWord.AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE | AscWord.AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH;
+			return AscWord.AUTOCORRECT_FLAGS_FIRST_LETTER_SENTENCE | AscWord.AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH | (this.IsPunctuation() ? AscWord.AUTOCORRECT_FLAGS_TEXT_REPLACE : 0);
 
 		return AscWord.AUTOCORRECT_FLAGS_NONE;
 	};

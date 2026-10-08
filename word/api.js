@@ -12960,6 +12960,12 @@ background-repeat: no-repeat;\
 		var oEnd    = oDrawingDocument.ConvertCoordsToCursorWR(oFields.XLimit, oAnchor.Y, oAnchor.Page);
 		return {"X" : oStart.X, "Y" : oStart.Y, "W" : oEnd.X - oStart.X};
 	};
+	asc_docs_api.prototype.asc_ElixirSetTextAutoCorrect = function(isEnabled, oLists)
+	{
+		AscWord.ElixirTextAutoCorrect.enabled = !!isEnabled;
+		if (undefined !== oLists)
+			AscWord.ElixirTextAutoCorrect.lists = oLists;
+	};
 	asc_docs_api.prototype.asc_SetAutoCorrectSmartQuotes = function(isSmartQuotes)
 	{
 		var oLogicDocument = this.WordControl.m_oLogicDocument;
@@ -16262,6 +16268,7 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_ElixirMarkIndexEntry']                 = asc_docs_api.prototype.asc_ElixirMarkIndexEntry;
 	asc_docs_api.prototype['asc_ElixirGetIndexEntries']                = asc_docs_api.prototype.asc_ElixirGetIndexEntries;
 	asc_docs_api.prototype['asc_ElixirGetInsertionArea']               = asc_docs_api.prototype.asc_ElixirGetInsertionArea;
+	asc_docs_api.prototype['asc_ElixirSetTextAutoCorrect']             = asc_docs_api.prototype.asc_ElixirSetTextAutoCorrect;
 	asc_docs_api.prototype['asc_ElixirSetThemeFonts']                  = asc_docs_api.prototype.asc_ElixirSetThemeFonts;
 	asc_docs_api.prototype['asc_ElixirGetThemeFonts']                  = asc_docs_api.prototype.asc_ElixirGetThemeFonts;
 	asc_docs_api.prototype['asc_ElixirSetPageBorders']                 = asc_docs_api.prototype.asc_ElixirSetPageBorders;

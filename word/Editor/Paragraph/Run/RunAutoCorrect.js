@@ -39,6 +39,7 @@
 	const AUTOCORRECT_FLAGS_NUMBERING                = 0x00000020;
 	const AUTOCORRECT_FLAGS_DOUBLE_SPACE_WITH_PERIOD = 0x00000040;
 	const AUTOCORRECT_FLAGS_SYMBOLS                  = 0x00000080;
+	const AUTOCORRECT_FLAGS_TEXT_REPLACE             = 0x00000100; // ElixirOffice: "Replace text as you type"
 
 	// Word's default AutoCorrect entries for symbols: (c) (r) (tm) (e)
 	const AUTOCORRECT_SYMBOLS = [["(tm", 0x2122], ["(c", 0x00A9], ["(r", 0x00AE], ["(e", 0x20AC]];
@@ -156,6 +157,12 @@
 			return this.private_Return();
 
 		if (!this.private_CollectTextBefore())
+			return this.private_Return();
+
+		if (!this.private_ProcessAutoCorrect(AUTOCORRECT_FLAGS_TEXT_REPLACE, this.private_ProcessTextReplaceAutoCorrect))
+			return this.private_Return();
+
+		if ((this.Result & AUTOCORRECT_FLAGS_TEXT_REPLACE) && !this.private_CollectTextBefore())
 			return this.private_Return();
 
 		if (!this.private_ProcessAutoCorrect(AUTOCORRECT_FLAGS_HYPHEN_WITH_DASH, this.private_ProcessSpaceHyphenWithDashAutoCorrect))
@@ -617,6 +624,63 @@
 		}
 
 		return false;
+	};
+	/**
+	 * ElixirOffice: Word's "Replace text as you type" (common typos and their corrections). The list comes
+	 * from the interface (api.asc_ElixirSetTextAutoCorrect), by language: the entries of the language of the
+	 * word ("en", "fr"...) and the common ones ("*"). The case of the typed word is kept: "Teh" -> "The",
+	 * "TEH" -> "THE". It is its own undo step: Ctrl+Z right after it restores what was typed.
+	 * @returns {boolean}
+	 */
+	CRunAutoCorrect.prototype.private_ProcessTextReplaceAutoCorrect = function()
+	{
+		let oSettings = AscWord.ElixirTextAutoCorrect;
+		if (!oSettings || !oSettings.enabled || !oSettings.lists || !this.Text || !this.AsYouType)
+			return false;
+
+		let sWord = this.Text;
+		let sLang = (Asc.g_oLcidIdToNameMap && Asc.g_oLcidIdToNameMap[this.Lang]) || "";
+		sLang = sLang.split("-")[0].toLowerCase();
+
+		let sKey = sWord.toLowerCase();
+		let oList = oSettings.lists[sLang], sReplace = oList ? oList[sKey] : undefined;
+		if (undefined === sReplace && oSettings.lists["*"])
+			sReplace = oSettings.lists["*"][sKey];
+		if (!sReplace || sReplace === sWord)
+			return false;
+
+		if (sWord.length > 1 && sWord === sWord.toUpperCase() && sWord !== sWord.toLowerCase())
+			sReplace = sReplace.toUpperCase();
+		else if (sWord.charAt(0) !== sWord.charAt(0).toLowerCase())
+			sReplace = sReplace.charAt(0).toUpperCase() + sReplace.slice(1);
+
+		if (this.private_IsDocumentLocked())
+			return false;
+
+		let oDocument    = this.Document;
+		let oParagraph   = this.Paragraph;
+		let oRun         = this.Run;
+		let arrPositions = this.RunElementsBefore.GetContentPositions();
+		if (!arrPositions || arrPositions.length < sWord.length)
+			return false;
+
+		oDocument.StartAction(AscDFH.historydescription_Document_AutoCorrectCommon);
+
+		// the new text goes in front of the character that started the autocorrection, then the typed word goes
+		let arrCodePoints = [];
+		for (let oIter = sReplace[Symbol.iterator](), oChar = oIter.next(); !oChar.done; oChar = oIter.next())
+			arrCodePoints.push(oChar.value.codePointAt(0));
+		for (let nIndex = 0; nIndex < arrCodePoints.length; ++nIndex)
+		{
+			let oItem = 0x20 === arrCodePoints[nIndex] ? new AscWord.CRunSpace() : new AscWord.CRunText(arrCodePoints[nIndex]);
+			oRun.AddToContent(this.Pos + nIndex, oItem);
+		}
+		for (let nPos = 0; nPos < sWord.length; ++nPos)
+			oParagraph.RemoveRunElement(arrPositions[nPos]);
+
+		oDocument.Recalculate();
+		oDocument.FinalizeAction();
+		return true;
 	};
 	CRunAutoCorrect.prototype.private_ProcessHyphenWithDashAutoCorrect = function()
 	{
@@ -1512,6 +1576,8 @@
 	window['AscWord'].AUTOCORRECT_FLAGS_NUMBERING                = AUTOCORRECT_FLAGS_NUMBERING;
 	window['AscWord'].AUTOCORRECT_FLAGS_DOUBLE_SPACE_WITH_PERIOD = AUTOCORRECT_FLAGS_DOUBLE_SPACE_WITH_PERIOD;
 	window['AscWord'].AUTOCORRECT_FLAGS_SYMBOLS                  = AUTOCORRECT_FLAGS_SYMBOLS;
+	window['AscWord'].AUTOCORRECT_FLAGS_TEXT_REPLACE             = AUTOCORRECT_FLAGS_TEXT_REPLACE;
+	window['AscWord'].ElixirTextAutoCorrect                      = {enabled : false, lists : null};
 
 })(window);
 
