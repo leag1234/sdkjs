@@ -2008,7 +2008,7 @@ CTable.prototype.Set_Props = function(Props)
 						ThemeFill : oUnifill ? oUnifill.createDuplicate() : undefined
 					};
 
-					Cell.Set_Shd(NewShd);
+					this.private_SetCellShdWithText(Cell, NewShd);
 
 					bRedraw = true;
 				}
@@ -2046,7 +2046,7 @@ CTable.prototype.Set_Props = function(Props)
 
 					};
 
-					Cell.Set_Shd(NewShd);
+					this.private_SetCellShdWithText(Cell, NewShd);
 
 					bRedraw = true;
 				}
@@ -2079,7 +2079,7 @@ CTable.prototype.Set_Props = function(Props)
 					ThemeFill : oUnifill ? oUnifill.createDuplicate() : undefined
 				};
 
-				Cell.Set_Shd(NewShd);
+				this.private_SetCellShdWithText(Cell, NewShd);
 
 				bRedraw = true;
 			}
@@ -9209,6 +9209,55 @@ CTable.prototype.Get_Shd = function()
 {
 	var Pr = this.Get_CompiledPr(false).TablePr;
 	return Pr.Shd;
+};
+/**
+ * Sets the shading of a cell (Table Design > Shading) and recolours the whole cell.
+ * Documents saved by LibreOffice, or converted from .odt/.doc, often repeat the cell colour as
+ * direct paragraph and/or run shading of the cell text. Those duplicates are drawn on top of the
+ * cell fill, so after a cell colour change the text kept a band of the old colour. Direct
+ * paragraph and run shading of the cell paragraphs that has the same colour as the previous cell
+ * fill is removed in the same action (one undo step); any other shading, highlight and the
+ * content of nested tables are kept.
+ * @param {CTableCell} oCell
+ * @param {object} oNewShd
+ */
+CTable.prototype.private_SetCellShdWithText = function(oCell, oNewShd)
+{
+	let oOldShd = oCell.Get_Shd();
+	let oTheme  = this.Get_Theme();
+	let oCMap   = this.Get_ColorMap();
+	let oOld    = oOldShd && !oOldShd.IsNil() ? oOldShd.GetSimpleColor(oTheme, oCMap) : null;
+
+	oCell.Set_Shd(oNewShd);
+
+	if (!oOld || oOld.IsAuto())
+		return;
+
+	let isDuplicate = function(oShd)
+	{
+		if (!oShd || oShd.IsNil())
+			return false;
+
+		let oColor = oShd.GetSimpleColor(oTheme, oCMap);
+		return (!oColor.IsAuto() && oColor.r === oOld.r && oColor.g === oOld.g && oColor.b === oOld.b);
+	};
+
+	let arrContent = oCell.GetContent().Content;
+	for (let nIndex = 0, nCount = arrContent.length; nIndex < nCount; ++nIndex)
+	{
+		let oParagraph = arrContent[nIndex];
+		if (!oParagraph.IsParagraph())
+			continue;
+
+		if (isDuplicate(oParagraph.Pr.Shd))
+			oParagraph.Set_Shd(undefined);
+
+		oParagraph.CheckRunContent(function(oRun)
+		{
+			if (isDuplicate(oRun.Pr.Shd))
+				oRun.Set_Shd(undefined);
+		});
+	}
 };
 CTable.prototype.Get_Borders = function()
 {
