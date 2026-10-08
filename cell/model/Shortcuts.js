@@ -271,7 +271,8 @@
 		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.FormatAsTableTemplate].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.FormatAsTableTemplate, keyCodes.KeyL, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.OpenInsertCellsWindow].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.OpenInsertCellsWindow, keyCodes.KeyEqual, false, true, false, true), new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.OpenInsertCellsWindow, keyCodes.NumpadPlus, false, true, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.OpenDeleteCellsWindow].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.OpenDeleteCellsWindow, keyCodes.KeyMinus, false, true, false, true), new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.OpenDeleteCellsWindow, keyCodes.NumpadMinus, false, true, false, true));
-		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.CellInsertDate].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.CellInsertDate, keyCodes.KeySemicolon, false, false, false, true));
+		// Excel for Mac: Ctrl+; enters the date, Cmd+; the time
+		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.CellInsertTime].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.CellInsertTime, keyCodes.KeySemicolon, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.CellInsertTime].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.CellInsertTime, keyCodes.KeySemicolon, false, true, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.EditSelectAll].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.EditSelectAll, keyCodes.KeyA, false, false, false, true));
 		c_oAscDefaultShortcuts[Asc.c_oAscSpreadsheetShortcutType.MoveBeginningText].push(new AscShortcut(Asc.c_oAscSpreadsheetShortcutType.MoveBeginningText, keyCodes.Home, false, false, false, true));
