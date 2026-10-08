@@ -819,13 +819,17 @@
 		{
 			return field instanceof CComplexField && field.IsValid();
 		});
-		// a code typed or edited in place (Ctrl+F9, Shift+F9) is read again before the update
+		// a code typed or edited in place (Ctrl+F9, Shift+F9) is read again before the update; only for a shown
+		// code whose field lies in one paragraph (reading one paragraph of a longer field, a TOC, would cut it)
 		let paragraphs = [];
 		fields.forEach(function(field)
 		{
+			if (!field.IsShowFieldCode() || !field.GetEndChar())
+				return;
 			let run = field.GetBeginChar() && field.GetBeginChar().GetRun();
+			let endRun = field.GetEndChar().GetRun();
 			let paragraph = run && run.GetParagraph();
-			if (paragraph && -1 === paragraphs.indexOf(paragraph))
+			if (paragraph && endRun && endRun.GetParagraph() === paragraph && -1 === paragraphs.indexOf(paragraph))
 				paragraphs.push(paragraph);
 		});
 		paragraphs.forEach(function(paragraph) { paragraph.ProcessComplexFields(); });
