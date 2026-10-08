@@ -3140,6 +3140,10 @@ CGraphicObjects.prototype =
                 objects_for_grouping[i].setParent(null);
             }
         }
+        // The removal above leaves the anchor paragraph (a table cell, a text box) without a layout, and
+        // the recalculation inside Set_XYForAdd is deferred while an action is running: force it now,
+        // otherwise the page coordinates are kept as-is and the group drifts by the cell origin.
+        this.document.Recalculate(true);
         para_drawing.Set_Props(new asc_CImgProperty(
             {
                 PositionH:
