@@ -375,6 +375,7 @@
 			"word/Editor/custom-xml/custom-xml-manager.js",
 			"word/Editor/custom-xml/data-binding.js",
 			"slide/Editor/Shortcuts.js",
+			"slide/Editor/elixir-keys.js",
 
 			"word/Editor/api/document-column-props.js",
 			"word/Editor/api/document-columns-props.js",
