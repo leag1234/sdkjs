@@ -4467,6 +4467,7 @@ function CDrawingDocument()
 
 		this.Overlay.m_oContext.fillStyle = "rgba(51,102,204,255)";
 		this.Overlay.m_oContext.beginPath();
+		this.SelectionContrastRects = [];
 
 		if (this.m_oWordControl.MobileTouchManager && (true !== isSelect2))
 		{
@@ -4489,11 +4490,101 @@ function CDrawingDocument()
 			ctx.stroke();
 		}
 
+		this.private_DrawSelectionContrast(ctx);
+
 		ctx.beginPath();
 		ctx.globalAlpha = 1.0;
 
 		this.IsTextMatrixUse = false;
 		this.Overlay = null;
+	};
+
+	// The selection is a translucent blue (rgb(51,102,204), alpha 0.2) drawn on the overlay canvas.
+	// On a blue, dark or saturated background (a cell shaded with the standard "Blue" #0070C0,
+	// dark blue, black...) it is almost invisible: the text is selected but the user cannot see it.
+	// Like Word, whose selection stays visible on any fill, every selection rectangle whose
+	// background (read back from the page canvas, along its top and bottom edges where there is
+	// mostly no text) would not visibly change is lightened by a white veil on top of the blue.
+	this.private_DrawSelectionContrast = function (ctx)
+	{
+		var rects = this.SelectionContrastRects;
+		this.SelectionContrastRects = null;
+		if (!rects || !rects.length || !this.m_oWordControl.m_oEditor)
+			return;
+
+		var pageCtx = null;
+		try
+		{
+			pageCtx = this.m_oWordControl.m_oEditor.HtmlElement.getContext("2d");
+		}
+		catch (e)
+		{
+			return;
+		}
+		if (!pageCtx)
+			return;
+
+		var isLight = false;
+		ctx.beginPath();
+		for (var i = 0, count = Math.min(rects.length, 256); i < count; ++i)
+		{
+			var r = rects[i];
+			if (r[2] < 2 || r[3] < 4 || !this.private_IsSelectionHardToSee(pageCtx, r[0], r[1], r[2], r[3]))
+				continue;
+
+			ctx.rect(r[0], r[1], r[2], r[3]);
+			isLight = true;
+		}
+
+		if (isLight)
+		{
+			ctx.fillStyle   = "rgb(255,255,255)";
+			ctx.globalAlpha = 0.45;
+			ctx.fill();
+			ctx.fillStyle   = "rgba(51,102,204,255)";
+		}
+	};
+
+	this.private_IsSelectionHardToSee = function (pageCtx, x, y, w, h)
+	{
+		var samples = [];
+		try
+		{
+			var rows = [y + 1, y + h - 2];
+			for (var k = 0; k < rows.length; ++k)
+			{
+				var data = pageCtx.getImageData(x, rows[k], w, 1).data;
+				var step = Math.max(1, Math.floor(w / 48));
+				for (var px = 0; px < w; px += step)
+				{
+					var o = px * 4;
+					if (data[o + 3] < 128)
+						continue;
+
+					samples.push([data[o], data[o + 1], data[o + 2]]);
+				}
+			}
+		}
+		catch (e)
+		{
+			return false;
+		}
+
+		if (!samples.length)
+			return false;
+
+		// median by luminance: glyph pixels on the edges do not decide
+		samples.sort(function (a, b)
+		{
+			return (0.299 * a[0] + 0.587 * a[1] + 0.114 * a[2]) - (0.299 * b[0] + 0.587 * b[1] + 0.114 * b[2]);
+		});
+		var c = samples[samples.length >> 1];
+		var luma = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+
+		// colour of the background under the default selection, and how far it moves
+		var dr = 0.2 * (51 - c[0]), dg = 0.2 * (102 - c[1]), db = 0.2 * (204 - c[2]);
+		var shift = Math.sqrt(dr * dr + dg * dg + db * db);
+		return (luma < 0.25 || shift < 35);
 	};
 
 	this.AddPageSelection = function (pageIndex, x, y, w, h)
@@ -4522,6 +4613,8 @@ function CDrawingDocument()
 
 			this.Overlay.CheckRect(rPR * _x, rPR * _y, rPR * _w, rPR * _h);
 			this.Overlay.m_oContext.rect((rPR * _x) >> 0, (rPR *_y) >> 0, (_w * rPR) >> 0, (_h * rPR) >> 0);
+			if (this.SelectionContrastRects)
+				this.SelectionContrastRects.push([(rPR * _x) >> 0, (rPR *_y) >> 0, (_w * rPR) >> 0, (_h * rPR) >> 0]);
 		}
 		else
 		{
