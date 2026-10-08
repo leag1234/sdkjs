@@ -8176,6 +8176,110 @@ background-repeat: no-repeat;\
 		}
 
 	};
+	/**
+	 * ElixirOffice: changes the theme fonts (Design > Fonts), like Word: text formatted with the
+	 * heading (+mj) or body (+mn) theme font follows. The fonts are loaded first.
+	 */
+	asc_docs_api.prototype.asc_ElixirSetThemeFonts = function(sMajor, sMinor)
+	{
+		var oLogicDocument = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		var oTheme         = oLogicDocument ? oLogicDocument.theme : null;
+		if (!oTheme || !oTheme.themeElements || !oTheme.themeElements.fontScheme || !sMajor || !sMinor)
+			return false;
+
+		var oLoader = AscCommon.g_font_loader, oThis = this;
+		var isAsync = false;
+		[sMajor, sMinor].forEach(function(sName)
+		{
+			var oInfo = g_fontApplication.GetFontInfo(sName);
+			if (oInfo && false !== oLoader.LoadFont(oInfo))
+				isAsync = true;
+		});
+		if (isAsync)
+		{
+			this.asyncMethodCallback = function() { oThis.asc_ElixirSetThemeFonts(sMajor, sMinor); };
+			return true;
+		}
+
+		if (false !== oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_ColorScheme))
+			return false;
+
+		oLogicDocument.StartAction(AscDFH.historydescription_Document_ChangeColorScheme);
+		var oScheme = oTheme.themeElements.fontScheme.createDuplicate();
+		oScheme.majorFont.setLatin(sMajor);
+		oScheme.minorFont.setLatin(sMinor);
+		oTheme.setFontScheme(oScheme);
+		oLogicDocument.RecalculateFromStart(true);
+		oLogicDocument.FinalizeAction();
+		this.WordControl.m_oDrawingDocument.ClearCachePages();
+		this.WordControl.OnScroll();
+		oLogicDocument.Document_UpdateInterfaceState();
+		this.sendEvent("asc_onElixirThemeFontsChanged", sMajor, sMinor);
+		return true;
+	};
+	asc_docs_api.prototype.asc_ElixirGetThemeFonts = function()
+	{
+		var oLogicDocument = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		var oScheme = oLogicDocument && oLogicDocument.theme && oLogicDocument.theme.themeElements ? oLogicDocument.theme.themeElements.fontScheme : null;
+		return oScheme ? {"Major" : oScheme.majorFont.latin, "Minor" : oScheme.minorFont.latin} : null;
+	};
+	/**
+	 * ElixirOffice: page borders of every section (Design > Page Borders). oProps: {Value: 0 none | 1 single,
+	 * Size (mm), Space (mm), Color: {r, g, b}, OffsetFrom: 0 text | 1 page edge}.
+	 */
+	asc_docs_api.prototype.asc_ElixirSetPageBorders = function(oProps)
+	{
+		var oLogicDocument = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		if (!oLogicDocument || !oProps)
+			return false;
+		if (false !== oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Document_SectPr))
+			return false;
+
+		oLogicDocument.StartAction(AscDFH.historydescription_Document_SetSectionProps);
+		var oSections = oLogicDocument.SectionsInfo;
+		for (var nIndex = 0, nCount = oSections.GetSectionsCount(); nIndex < nCount; ++nIndex)
+		{
+			var oSectPr = oSections.GetSectPrByIndex(nIndex);
+			var make = function()
+			{
+				var oBorder = new AscWord.CBorder();
+				oBorder.Value = oProps["Value"] ? AscWord.BorderType.single : AscWord.BorderType.none;
+				if (oProps["Value"])
+				{
+					var oColor = oProps["Color"] || {r : 0, g : 0, b : 0};
+					oBorder.Color = new AscWord.CDocumentColor(oColor["r"] | 0, oColor["g"] | 0, oColor["b"] | 0);
+					oBorder.Size  = oProps["Size"] || 0.5;
+					oBorder.Space = undefined !== oProps["Space"] ? oProps["Space"] : 4.2;
+				}
+				return oBorder;
+			};
+			oSectPr.Set_Borders_Left(make());
+			oSectPr.Set_Borders_Top(make());
+			oSectPr.Set_Borders_Right(make());
+			oSectPr.Set_Borders_Bottom(make());
+			oSectPr.SetBordersOffsetFrom(1 === oProps["OffsetFrom"] ? 0x00 : 0x01 /* section_borders_OffsetFromPage : section_borders_OffsetFromText */);
+		}
+		oLogicDocument.Recalculate();
+		oLogicDocument.FinalizeAction();
+		this.WordControl.m_oDrawingDocument.ClearCachePages();
+		this.WordControl.OnScroll();
+		return true;
+	};
+	asc_docs_api.prototype.asc_ElixirGetPageBorders = function()
+	{
+		var oLogicDocument = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		var oSectPr = oLogicDocument && oLogicDocument.SectionsInfo ? oLogicDocument.SectionsInfo.GetFirstSectPr() : null;
+		if (!oSectPr)
+			return null;
+		var oTop = oSectPr.Get_Borders_Top();
+		return {
+			"Value"      : AscWord.BorderType.none !== oTop.Value ? 1 : 0,
+			"Size"       : oTop.Size,
+			"Space"      : oTop.Space,
+			"Color"      : oTop.Color ? {"r" : oTop.Color.r, "g" : oTop.Color.g, "b" : oTop.Color.b} : null,
+			"OffsetFrom" : 0x00 /* section_borders_OffsetFromPage */ === oSectPr.GetBordersOffsetFrom() ? 1 : 0
+		};
+	};
 	asc_docs_api.prototype.asc_ChangeColorSchemeByIdx            = function(nIdx)
 	{
 		if (null == this.WordControl.m_oLogicDocument)
@@ -16088,6 +16192,10 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_showComments']                          = asc_docs_api.prototype.asc_showComments;
 	asc_docs_api.prototype['asc_hideComments']                          = asc_docs_api.prototype.asc_hideComments;
 	asc_docs_api.prototype['asc_addComment']                            = asc_docs_api.prototype.asc_addComment;
+	asc_docs_api.prototype['asc_ElixirSetThemeFonts']                  = asc_docs_api.prototype.asc_ElixirSetThemeFonts;
+	asc_docs_api.prototype['asc_ElixirGetThemeFonts']                  = asc_docs_api.prototype.asc_ElixirGetThemeFonts;
+	asc_docs_api.prototype['asc_ElixirSetPageBorders']                 = asc_docs_api.prototype.asc_ElixirSetPageBorders;
+	asc_docs_api.prototype['asc_ElixirGetPageBorders']                 = asc_docs_api.prototype.asc_ElixirGetPageBorders;
 	asc_docs_api.prototype['asc_ElixirSetMarkupWidth']                 = asc_docs_api.prototype.asc_ElixirSetMarkupWidth;
 	asc_docs_api.prototype['asc_ElixirGetCommentAnchors']               = asc_docs_api.prototype.asc_ElixirGetCommentAnchors;
 	asc_docs_api.prototype['asc_removeComment']                         = asc_docs_api.prototype.asc_removeComment;
