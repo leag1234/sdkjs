@@ -63,9 +63,36 @@
 		
 		return result;
 	};
+	/**
+	 * ElixirOffice: XE field (index entry, Word's Mark Entry). Like ADDIN, the field has no result: it was read
+	 * as a REF to a bookmark named "XE" and showed "Error! Reference source not found." in the text.
+	 * @constructor
+	 * @extends AscWord.FieldInstructionBase
+	 */
+	function CFieldInstructionXE()
+	{
+		AscWord.FieldInstructionBase.call(this);
+		this.Value = null;
+	}
+	CFieldInstructionXE.prototype = Object.create(AscWord.FieldInstructionBase.prototype);
+	CFieldInstructionXE.prototype.constructor = CFieldInstructionXE;
+	CFieldInstructionXE.prototype.Type = AscWord.fieldtype_XE;
+	CFieldInstructionXE.prototype.SetValue = function(value)
+	{
+		this.Value = value;
+	};
+	CFieldInstructionXE.prototype.GetValue = function()
+	{
+		return this.Value;
+	};
+	CFieldInstructionXE.prototype.ToString = function()
+	{
+		return " XE " + (this.Value ? this.Value + " " : "");
+	};
 	//--------------------------------------------------------export----------------------------------------------------
 	window['AscWord'] = window['AscWord'] || {};
 	window['AscWord'].CFieldInstructionADDIN = CFieldInstructionADDIN;
+	window['AscWord'].CFieldInstructionXE    = CFieldInstructionXE;
 	
 })(window);
 

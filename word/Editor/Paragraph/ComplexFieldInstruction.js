@@ -1442,6 +1442,13 @@ CFieldInstructionParser.prototype.private_Parse = function()
 	{
 		this.private_ReadDATE();
 	}
+	else if ("XE" === sBuffer)
+	{
+		// ElixirOffice: index entry, no result
+		this.Result = new AscWord.CFieldInstructionXE();
+		if (this.private_ReadTillEnd())
+			this.Result.SetValue(this.Buffer);
+	}
 	else if ("ADDIN" === sBuffer)
 	{
 		this.private_ReadADDIN();

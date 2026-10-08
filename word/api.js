@@ -12893,6 +12893,73 @@ background-repeat: no-repeat;\
 
 		return oLogicDocument.SetAutomaticNumberedLists(isAuto);
 	};
+	/**
+	 * ElixirOffice: "Replace text as you type". oLists: {"en": {"teh": "the", ...}, "fr": {...}, "*": {...}}
+	 * (lower-case keys); isEnabled switches it on or off.
+	 */
+	/**
+	 * ElixirOffice: References > Mark Entry (Alt+Shift+X). Adds an XE field (index entry, "Main:Sub") at the
+	 * end of the selection, like Word; its result is empty, so nothing shows in the text.
+	 */
+	asc_docs_api.prototype.asc_ElixirMarkIndexEntry = function(sEntry)
+	{
+		var oLogicDocument = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		if (!oLogicDocument || !sEntry)
+			return false;
+
+		if (oLogicDocument.IsSelectionUse())
+			oLogicDocument.MoveCursorRight(false, false, false);
+
+		var sCode = "XE \"" + String(sEntry).replace(/"/g, "\\\"") + "\"";
+		return !!oLogicDocument.AddComplexField(sCode);
+	};
+	/**
+	 * ElixirOffice: the index entries of the document (XE fields) with their page number, for Insert Index.
+	 */
+	asc_docs_api.prototype.asc_ElixirGetIndexEntries = function()
+	{
+		var oLogicDocument = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		var arrResult      = [];
+		if (!oLogicDocument)
+			return arrResult;
+
+		var arrFields = oLogicDocument.GetAllFields(false);
+		for (var nIndex = 0; nIndex < arrFields.length; ++nIndex)
+		{
+			var oField = arrFields[nIndex];
+			if (!oField || !oField.GetInstructionLine)
+				continue;
+
+			var oMatch = /^\s*XE\s+"((?:[^"\\]|\\.)*)"/i.exec(oField.GetInstructionLine() || "");
+			if (!oMatch)
+				continue;
+
+			var oBegin = oField.GetBeginChar ? oField.GetBeginChar() : null;
+			var nPage  = oBegin && undefined !== oBegin.GetPage() ? oBegin.GetPage() : -1;
+			arrResult.push({"Entry" : oMatch[1].replace(/\\(.)/g, "$1"), "Page" : nPage + 1});
+		}
+		return arrResult;
+	};
+	/**
+	 * ElixirOffice: the text column at the insertion point (screen coordinates, like asc_getAnchorPosition but
+	 * between the page margins), for the live preview of Insert > Table.
+	 */
+	asc_docs_api.prototype.asc_ElixirGetInsertionArea = function()
+	{
+		var oLogicDocument   = this.WordControl ? this.WordControl.m_oLogicDocument : null;
+		var oDrawingDocument = this.WordControl ? this.WordControl.m_oDrawingDocument : null;
+		if (!oLogicDocument || !oDrawingDocument || !oLogicDocument.Controller)
+			return null;
+
+		var oAnchor = oLogicDocument.Controller.GetSelectionAnchorPos();
+		if (!oAnchor || undefined === oAnchor.Page)
+			return null;
+
+		var oFields = oLogicDocument.Get_PageFields(oAnchor.Page);
+		var oStart  = oDrawingDocument.ConvertCoordsToCursorWR(oFields.X, oAnchor.Y, oAnchor.Page);
+		var oEnd    = oDrawingDocument.ConvertCoordsToCursorWR(oFields.XLimit, oAnchor.Y, oAnchor.Page);
+		return {"X" : oStart.X, "Y" : oStart.Y, "W" : oEnd.X - oStart.X};
+	};
 	asc_docs_api.prototype.asc_SetAutoCorrectSmartQuotes = function(isSmartQuotes)
 	{
 		var oLogicDocument = this.WordControl.m_oLogicDocument;
@@ -16192,6 +16259,9 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_showComments']                          = asc_docs_api.prototype.asc_showComments;
 	asc_docs_api.prototype['asc_hideComments']                          = asc_docs_api.prototype.asc_hideComments;
 	asc_docs_api.prototype['asc_addComment']                            = asc_docs_api.prototype.asc_addComment;
+	asc_docs_api.prototype['asc_ElixirMarkIndexEntry']                 = asc_docs_api.prototype.asc_ElixirMarkIndexEntry;
+	asc_docs_api.prototype['asc_ElixirGetIndexEntries']                = asc_docs_api.prototype.asc_ElixirGetIndexEntries;
+	asc_docs_api.prototype['asc_ElixirGetInsertionArea']               = asc_docs_api.prototype.asc_ElixirGetInsertionArea;
 	asc_docs_api.prototype['asc_ElixirSetThemeFonts']                  = asc_docs_api.prototype.asc_ElixirSetThemeFonts;
 	asc_docs_api.prototype['asc_ElixirGetThemeFonts']                  = asc_docs_api.prototype.asc_ElixirGetThemeFonts;
 	asc_docs_api.prototype['asc_ElixirSetPageBorders']                 = asc_docs_api.prototype.asc_ElixirSetPageBorders;
