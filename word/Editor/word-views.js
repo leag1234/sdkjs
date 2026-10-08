@@ -52,6 +52,7 @@
 	const VIEW_PRINT   = "print";
 	const VIEW_OUTLINE = "outline";
 	const VIEW_DRAFT   = "draft";
+	const VIEW_READ    = "read";
 
 	// ---------------------------------------------------------------- layouts
 	/**
@@ -104,6 +105,8 @@
 	function getWordView(doc)
 	{
 		let layout = doc && doc.Layout;
+		if (layout && doc.Layouts && layout === doc.Layouts.Read)
+			return VIEW_READ;
 		return layout && layout.IsWordView && layout.IsWordView() ? layout.Kind : VIEW_PRINT;
 	}
 
@@ -134,13 +137,14 @@
 	};
 
 	/**
-	 * @param {string} view "print", "outline" or "draft"
+	 * @param {string} view "print", "outline", "draft" or "read" (Read Mode: pages of width x height mm, the text
+	 *                      flows in them)
 	 */
-	CDocument.prototype.SetWordView = function(view)
+	CDocument.prototype.SetWordView = function(view, width, height)
 	{
-		if (VIEW_OUTLINE !== view && VIEW_DRAFT !== view)
+		if (VIEW_OUTLINE !== view && VIEW_DRAFT !== view && VIEW_READ !== view)
 			view = VIEW_PRINT;
-		if (view === getWordView(this))
+		if (view === getWordView(this) && VIEW_READ !== view)
 			return;
 
 		if (!this.Layouts.Outline)
@@ -156,6 +160,16 @@
 		if (VIEW_PRINT === view)
 		{
 			this.Layout = this.Layouts.Print;
+		}
+		else if (VIEW_READ === view)
+		{
+			let read = this.Layouts.Read;
+			read.Set(width || 180, height || 240, 1);
+			AscCommon.ExecuteNoHistory(function()
+			{
+				read.SectPr.SetPageMargins(12, 12, 12, 12);
+			}, this);
+			this.Layout = read;
 		}
 		else
 		{
@@ -213,7 +227,8 @@
 			while (stack.length && stack[stack.length - 1].rank >= rank)
 				stack.pop();
 
-			let visible = rank < state.show;
+			// text before the first heading follows the show level
+			let visible = rank < state.show && (stack.length || undefined === state.orphan || rank < state.orphan);
 			for (let i = 0; visible && i < stack.length; ++i)
 			{
 				if (rank >= stack[i].limit)
@@ -299,6 +314,22 @@
 	CDocument.prototype.OutlineExpandCollapse = function(isExpand)
 	{
 		let state = this.WordOutline, targets = this.private_GetOutlineTargets();
+
+		// the show level becomes a limit of each heading, so that one heading can be expanded on its own
+		if (state.show < SHOW_ALL)
+		{
+			for (let index = 0, count = this.Content.length; index < count; ++index)
+			{
+				let element = this.Content[index];
+				if (!element.IsParagraph() || rankOf(element) >= state.show)
+					continue;
+				let limit = state.limits.get(element);
+				state.limits.set(element, undefined === limit ? state.show : Math.min(limit, state.show));
+			}
+			state.orphan = state.show;
+			state.show   = SHOW_ALL;
+		}
+
 		for (let t = 0; t < targets.length; ++t)
 		{
 			let heading = targets[t], rank = rankOf(heading);
@@ -325,9 +356,6 @@
 					state.limits.delete(heading);
 				else
 					state.limits.set(heading, next);
-				// the show level does not hide what is expanded on purpose
-				if (state.show < next || state.show < SHOW_ALL && !state.limits.has(heading))
-					state.show = SHOW_ALL;
 			}
 			else
 			{
@@ -346,6 +374,7 @@
 	{
 		let state = this.WordOutline;
 		state.show = (level >= 1 && level <= 9) ? level : SHOW_ALL;
+		state.orphan = undefined;
 		state.limits.clear();
 		this.private_RefreshOutline();
 	};
@@ -371,9 +400,10 @@
 		let state = this.WordOutline;
 		return {
 			"view"           : getWordView(this),
-			"showLevel"      : state ? (state.show >= SHOW_ALL ? 0 : state.show) : 0,
+			"showLevel"      : state ? (state.show < SHOW_ALL ? state.show : (undefined !== state.orphan && !state.limits.size ? state.orphan : 0)) : 0,
 			"showFormatting" : state ? !state.plain : true,
-			"hidden"         : state ? state.hidden.size : 0
+			"hidden"         : state ? state.hidden.size : 0,
+			"level"          : isTopParagraph(this, this.GetCurrentParagraph()) ? rankOf(this.GetCurrentParagraph()) : BODY_RANK
 		};
 	};
 
@@ -396,7 +426,9 @@
 		paragraphs.forEach(function(paragraph)
 		{
 			let rank = rankOf(paragraph), next;
-			if ("h1" === delta)
+			if (delta && "object" === typeof delta)
+				next = Math.max(0, Math.min(BODY_RANK, delta.level));
+			else if ("h1" === delta)
 				next = 0;
 			else if (0 === delta)
 				next = BODY_RANK;
@@ -993,10 +1025,10 @@
 
 	// ---------------------------------------------------------------- api
 	let api = window["Asc"]["asc_docs_api"].prototype;
-	api["asc_SetWordView"] = api.asc_SetWordView = function(view)
+	api["asc_SetWordView"] = api.asc_SetWordView = function(view, width, height)
 	{
 		let doc = this.private_GetLogicDocument();
-		doc && doc.SetWordView(view);
+		doc && doc.SetWordView(view, width, height);
 	};
 	api["asc_GetWordView"] = api.asc_GetWordView = function()
 	{
@@ -1009,7 +1041,7 @@
 		return doc ? doc.GetOutlineState() : null;
 	};
 	/**
-	 * Commands of the Outlining tab: "promote", "demote", "body", "h1", "up", "down", "expand", "collapse",
+	 * Commands of the Outlining tab: "promote", "demote", "body", "h1", "setlevel" (0..8, 9 body text), "up", "down", "expand", "collapse",
 	 * "level" (with the level, 0 for all), "formatting"
 	 */
 	api["asc_OutlineCommand"] = api.asc_OutlineCommand = function(command, value)
@@ -1023,6 +1055,7 @@
 			case "demote": doc.OutlineSetLevel(1); break;
 			case "body": doc.OutlineSetLevel(0); break;
 			case "h1": doc.OutlineSetLevel("h1"); break;
+			case "setlevel": doc.OutlineSetLevel({level : value}); break;
 			case "up": doc.executeWordShortcut(Type.MoveParagraphUp); break;
 			case "down": doc.executeWordShortcut(Type.MoveParagraphDown); break;
 			case "expand": doc.OutlineExpandCollapse(true); break;
@@ -1041,6 +1074,92 @@
 	{
 		let doc = this.private_GetLogicDocument();
 		return doc ? doc.SetFieldsLocked(isLocked) : 0;
+	};
+
+	/**
+	 * Reveal Formatting (Shift+F1): the formatting at the cursor or of the selection, in millimetres and points.
+	 * Values that differ in the selection are null.
+	 */
+	CDocument.prototype.GetRevealFormatting = function()
+	{
+		let textPr = this.GetCalculatedTextPr() || new CTextPr();
+		let paraPr = this.GetCalculatedParaPr() || new CParaPr();
+		let sectPr = this.GetCurrentSectPr ? this.GetCurrentSectPr() : null;
+		let style  = paraPr.PStyle ? this.Styles.Get(paraPr.PStyle) : this.Styles.Get(this.Styles.GetDefaultParagraph());
+
+		let color = null;
+		try
+		{
+			if (textPr.Unifill && textPr.Unifill.fill)
+			{
+				textPr.Unifill.check(this.GetTheme(), this.GetColorMap());
+				let rgba = textPr.Unifill.getRGBAColor();
+				color = {r : rgba.R, g : rgba.G, b : rgba.B, auto : false};
+			}
+			else if (textPr.Color)
+				color = {r : textPr.Color.r, g : textPr.Color.g, b : textPr.Color.b, auto : !!textPr.Color.Auto};
+		}
+		catch (e)
+		{
+			color = null;
+		}
+
+		let font = textPr.RFonts && textPr.RFonts.Ascii ? textPr.RFonts.Ascii.Name : (textPr.FontFamily ? textPr.FontFamily.Name : null);
+		let numPr = paraPr.NumPr;
+		let result = {
+			"font" : {
+				"name"      : font || null,
+				"size"      : undefined !== textPr.FontSize ? textPr.FontSize : null,
+				"bold"      : undefined !== textPr.Bold ? !!textPr.Bold : null,
+				"italic"    : undefined !== textPr.Italic ? !!textPr.Italic : null,
+				"underline" : undefined !== textPr.Underline ? !!textPr.Underline : null,
+				"strikeout" : undefined !== textPr.Strikeout ? !!(textPr.Strikeout || textPr.DStrikeout) : null,
+				"caps"      : undefined !== textPr.Caps ? !!textPr.Caps : null,
+				"smallCaps" : undefined !== textPr.SmallCaps ? !!textPr.SmallCaps : null,
+				"hidden"    : !!textPr.Vanish,
+				"position"  : undefined !== textPr.VertAlign ? textPr.VertAlign : null,
+				"spacing"   : undefined !== textPr.Spacing ? textPr.Spacing : null,
+				"highlight" : textPr.HighLight && highlight_None !== textPr.HighLight ? {r : textPr.HighLight.r, g : textPr.HighLight.g, b : textPr.HighLight.b} : null,
+				"color"     : color,
+				"lang"      : textPr.Lang && undefined !== textPr.Lang.Val ? textPr.Lang.Val : null
+			},
+			"paragraph" : {
+				"style"           : style ? style.GetName() : null,
+				"align"           : undefined !== paraPr.Jc ? paraPr.Jc : null,
+				"outlineLevel"    : undefined !== paraPr.OutlineLvl && null !== paraPr.OutlineLvl ? paraPr.OutlineLvl : null,
+				"left"            : paraPr.Ind && undefined !== paraPr.Ind.Left ? paraPr.Ind.Left : null,
+				"right"           : paraPr.Ind && undefined !== paraPr.Ind.Right ? paraPr.Ind.Right : null,
+				"firstLine"       : paraPr.Ind && undefined !== paraPr.Ind.FirstLine ? paraPr.Ind.FirstLine : null,
+				"before"          : paraPr.Spacing && undefined !== paraPr.Spacing.Before ? paraPr.Spacing.Before : null,
+				"after"           : paraPr.Spacing && undefined !== paraPr.Spacing.After ? paraPr.Spacing.After : null,
+				"line"            : paraPr.Spacing && undefined !== paraPr.Spacing.Line ? paraPr.Spacing.Line : null,
+				"lineRule"        : paraPr.Spacing && undefined !== paraPr.Spacing.LineRule ? paraPr.Spacing.LineRule : null,
+				"keepNext"        : !!paraPr.KeepNext,
+				"keepLines"       : !!paraPr.KeepLines,
+				"pageBreakBefore" : !!paraPr.PageBreakBefore,
+				"widowControl"    : !!paraPr.WidowControl,
+				"numbered"        : !!(numPr && numPr.NumId && "0" !== numPr.NumId)
+			},
+			"section" : null
+		};
+		if (sectPr)
+		{
+			result["section"] = {
+				"width"   : sectPr.GetPageWidth(),
+				"height"  : sectPr.GetPageHeight(),
+				"left"    : sectPr.GetPageMarginLeft(),
+				"right"   : sectPr.GetPageMarginRight(),
+				"top"     : sectPr.GetPageMarginTop(),
+				"bottom"  : sectPr.GetPageMarginBottom(),
+				"columns" : sectPr.GetColumnCount ? sectPr.GetColumnCount() : 1
+			};
+		}
+		return result;
+	};
+	api["asc_GetRevealFormatting"] = api.asc_GetRevealFormatting = function()
+	{
+		let doc = this.private_GetLogicDocument();
+		return doc ? doc.GetRevealFormatting() : null;
 	};
 
 	AscWord.CDocumentWordView = CDocumentWordView;
