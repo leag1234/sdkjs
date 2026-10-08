@@ -2987,7 +2987,8 @@ CParaLineMetrics.prototype =
             }
             case Asc.linerule_Exact:
             {
-                var ExactValue = Math.max( 25.4 / 72, ParaPr.Spacing.Line );
+                // a paragraph collapsed in the Outline view has no height (word/Editor/word-views.js)
+                var ExactValue = ( ParaPr.Spacing.Line > 0 && ParaPr.Spacing.Line < 1e-5 ) ? 0 : Math.max( 25.4 / 72, ParaPr.Spacing.Line );
                 LineGap = ExactValue - ( TextAscent + TextDescent );
 
                 var Gap = this.Ascent + this.Descent - ExactValue;

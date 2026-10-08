@@ -370,6 +370,13 @@ var c_oAscDocumentShortcutType = {
 	HiddenText                    : 209,
 	DefineAutoText                : 210,
 	CopyPreviousHeaderFooter      : 211,
+	// Word views and field commands (word/Editor/word-views.js)
+	InsertEmptyField              : 220,
+	LockField                     : 221,
+	UnlockField                   : 222,
+	OutlineView                   : 223,
+	DraftView                     : 224,
+	PrintLayoutView               : 225,
 	// Microsoft Word shortcuts (word/Editor/word-shortcuts.js)
 	IncreaseFontSizeByPoint       : 148,
 	DecreaseFontSizeByPoint       : 149,
