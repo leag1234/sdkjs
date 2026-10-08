@@ -1364,5 +1364,73 @@
 		doc && doc.RenamePaneObject(id, name);
 	};
 
+	// ---------------------------------------------------------------- split window (Ctrl+Alt+S)
+	/**
+	 * The second pane of a split window draws the pages itself: page sizes, one page drawn into a canvas,
+	 * a click of the pane placed in the document, and an event at the end of each recalculation.
+	 */
+	api["asc_GetPagesSizes"] = api.asc_GetPagesSizes = function()
+	{
+		let dd = this.WordControl && this.WordControl.m_oDrawingDocument;
+		if (!dd || !dd.m_arrPages)
+			return [];
+		return dd.m_arrPages.map(function(page) { return {"w" : page.width_mm, "h" : page.height_mm}; });
+	};
+	api["asc_GetZoomValue"] = api.asc_GetZoomValue = function()
+	{
+		return this.WordControl ? this.WordControl.m_nZoomValue : 100;
+	};
+	api["asc_DrawPageToCanvas"] = api.asc_DrawPageToCanvas = function(pageIndex, canvas, widthPx)
+	{
+		let doc = this.private_GetLogicDocument();
+		let dd  = this.WordControl && this.WordControl.m_oDrawingDocument;
+		let page = dd && dd.m_arrPages && dd.m_arrPages[pageIndex];
+		if (!doc || !page || !canvas || (doc.CanDrawPage && !doc.CanDrawPage(pageIndex)))
+			return false;
+		let w = Math.max(1, Math.round(widthPx));
+		let h = Math.max(1, Math.round(widthPx * page.height_mm / page.width_mm));
+		canvas.width  = w;
+		canvas.height = h;
+		let ctx = canvas.getContext("2d");
+		ctx.fillStyle = "#ffffff";
+		ctx.fillRect(0, 0, w, h);
+		let g = new AscCommon.CGraphics();
+		g.init(ctx, w, h, page.width_mm, page.height_mm);
+		g.m_oFontManager = AscCommon.g_fontManager;
+		g.transform(1, 0, 0, 1, 0, 0);
+		if (this.isDarkMode)
+			g.setDarkMode();
+		doc.DrawPage(pageIndex, g);
+		return true;
+	};
+	api["asc_ClickInPage"] = api.asc_ClickInPage = function(pageIndex, x, y)
+	{
+		let doc = this.private_GetLogicDocument();
+		if (!doc)
+			return;
+		let e = new AscCommon.CMouseEventHandler();
+		e.ClickCount = 1;
+		e.Type = AscCommon.g_mouse_event_type_down;
+		doc.OnMouseDown(e, x, y, pageIndex);
+		e.Type = AscCommon.g_mouse_event_type_up;
+		doc.OnMouseUp(e, x, y, pageIndex);
+		doc.UpdateSelection();
+		doc.UpdateInterface();
+	};
+	api["asc_WatchRecalculation"] = api.asc_WatchRecalculation = function()
+	{
+		let dd = this.WordControl && this.WordControl.m_oDrawingDocument;
+		if (!dd || dd.ElxRecalcWatched)
+			return;
+		dd.ElxRecalcWatched = true;
+		let onEnd = dd.OnEndRecalculate, api = this;
+		dd.OnEndRecalculate = function()
+		{
+			let r = onEnd.apply(this, arguments);
+			api.sendEvent("asc_onElxRecalculated");
+			return r;
+		};
+	};
+
 	AscWord.CDocumentWordView = CDocumentWordView;
 })(window);
