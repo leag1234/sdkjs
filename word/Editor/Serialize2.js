@@ -12323,11 +12323,7 @@ function Binary_DocumentTableReader(doc, oReadResult, openParams, stream, curNot
 				}
 			}
 
-			if(AscCommon.isRealObject(oParaDrawing.docPr) && oParaDrawing.docPr.isHidden)
-			{
-				oParaDrawing.GraphicObj = null;
-				GraphicObj = null;
-			}
+			// a hidden object (wp:docPr hidden) is kept: it is not drawn (word/Editor/word-views.js) and is saved back
 
 			if(GraphicObj)
 			{

@@ -36,6 +36,8 @@
  *   Ctrl+F11, Ctrl+Shift+F11   lock / unlock fields (a locked field is not updated by F9)
  *   F9                         after the update, a field whose code was shown on its own shows its result again
  * Views are layouts of the engine (word/Editor/Layout); they change neither the document nor its history.
+ *   Selection pane           the objects of the document, show / hide (wp:docPr hidden), rename
+ *   Reveal Formatting        the formatting at the cursor (asc_GetRevealFormatting)
  * The interface is told through asc_onWordViewChanged(view) and asc_onWordFieldHint(kind, count).
  */
 (function(window)
@@ -1160,6 +1162,162 @@
 	{
 		let doc = this.private_GetLogicDocument();
 		return doc ? doc.GetRevealFormatting() : null;
+	};
+
+	// ---------------------------------------------------------------- Selection pane (Alt+F10)
+	// A hidden object (wp:docPr hidden) is kept in the document, not drawn, and the text does not wrap around it.
+	function isHiddenDrawing(paraDrawing)
+	{
+		return !!(paraDrawing && paraDrawing.docPr && paraDrawing.docPr.isHidden);
+	}
+
+	let useTextWrap = ParaDrawing.prototype.Use_TextWrap;
+	ParaDrawing.prototype.Use_TextWrap = function()
+	{
+		return isHiddenDrawing(this) ? false : useTextWrap.apply(this, arguments);
+	};
+
+	["CShape", "CImageShape", "CGroupShape", "CChartSpace", "CGraphicFrame", "SmartArt"].forEach(function(name)
+	{
+		let cls = AscFormat[name];
+		if (!cls || !cls.prototype || !cls.prototype.draw)
+			return;
+		let draw = cls.prototype.draw;
+		cls.prototype.draw = function()
+		{
+			if (this.parent instanceof ParaDrawing && isHiddenDrawing(this.parent))
+				return;
+			return draw.apply(this, arguments);
+		};
+	});
+
+	const DRAWING_KIND = {};
+	DRAWING_KIND[AscDFH.historyitem_type_ImageShape] = "picture";
+	DRAWING_KIND[AscDFH.historyitem_type_Shape]      = "shape";
+	DRAWING_KIND[AscDFH.historyitem_type_GroupShape] = "group";
+	DRAWING_KIND[AscDFH.historyitem_type_ChartSpace] = "chart";
+	DRAWING_KIND[AscDFH.historyitem_type_SmartArt]   = "smartart";
+
+	CDocument.prototype.private_GetPaneDrawings = function()
+	{
+		return this.GetAllDrawingObjects().filter(function(drawing)
+		{
+			return drawing.GraphicObj && drawing.IsUseInDocument && drawing.IsUseInDocument();
+		});
+	};
+
+	/**
+	 * The objects of the document for the Selection pane, the one in front first (as Word lists them)
+	 */
+	CDocument.prototype.GetSelectionPaneObjects = function()
+	{
+		let selected = this.DrawingObjects ? this.DrawingObjects.getSelectedObjects() : [];
+		let counters = {};
+		let list = this.private_GetPaneDrawings().map(function(drawing)
+		{
+			let graphic = drawing.GraphicObj;
+			let kind = DRAWING_KIND[graphic.getObjectType()] || "object";
+			if ("shape" === kind && graphic.txBody === undefined && graphic.textBoxContent)
+				kind = "textbox";
+			counters[kind] = (counters[kind] || 0) + 1;
+			return {
+				"id"       : drawing.GetId(),
+				"name"     : drawing.docPr && drawing.docPr.name ? drawing.docPr.name : null,
+				"kind"     : kind,
+				"number"   : counters[kind],
+				"hidden"   : isHiddenDrawing(drawing),
+				"inline"   : drawing.IsInline(),
+				"page"     : drawing.GetPageNum ? drawing.GetPageNum() : 0,
+				"z"        : drawing.IsInline() ? -1 : (drawing.RelativeHeight || 0),
+				"selected" : selected.indexOf(graphic) !== -1
+			};
+		});
+		list.sort(function(a, b) { return a["page"] - b["page"] || b["z"] - a["z"]; });
+		return list;
+	};
+
+	CDocument.prototype.private_GetPaneDrawing = function(id)
+	{
+		let drawing = AscCommon.g_oTableId.Get_ById(id);
+		return drawing instanceof ParaDrawing ? drawing : null;
+	};
+
+	CDocument.prototype.SelectPaneObject = function(id)
+	{
+		let drawing = this.private_GetPaneDrawing(id);
+		let paragraph = drawing && drawing.GetParagraph();
+		if (!paragraph || isHiddenDrawing(drawing))
+			return false;
+		this.SelectDrawings([drawing], paragraph.GetParent());
+		this.UpdateSelection();
+		this.UpdateInterface();
+		return true;
+	};
+
+	/**
+	 * Show or hide objects (one undo step); ids: one id or a list, or null for all objects
+	 */
+	CDocument.prototype.SetPaneObjectsHidden = function(ids, isHidden)
+	{
+		let doc = this;
+		let drawings = null === ids ? this.private_GetPaneDrawings() : [].concat(ids).map(function(id) { return doc.private_GetPaneDrawing(id); }).filter(Boolean);
+		drawings = drawings.filter(function(drawing) { return isHiddenDrawing(drawing) !== isHidden; });
+		if (!drawings.length)
+			return;
+		let paragraphs = drawings.map(function(drawing) { return drawing.GetParagraph(); }).filter(Boolean);
+		if (this.IsSelectionLocked(AscCommon.changestype_None, {Type : AscCommon.changestype_2_ElementsArray_and_Type, Elements : paragraphs, CheckType : AscCommon.changestype_Paragraph_Content}))
+			return;
+
+		this.StartAction(AscDFH.historydescription_Document_ApplyImagePr);
+		if (isHidden && this.DrawingObjects)
+		{
+			let selected = this.DrawingObjects.getSelectedObjects();
+			if (drawings.some(function(drawing) { return selected.indexOf(drawing.GraphicObj) !== -1; }))
+			{
+				this.RemoveSelection();
+				this.SetDocPosType(docpostype_Content);
+			}
+		}
+		drawings.forEach(function(drawing) { drawing.docPr.setIsHidden(isHidden ? true : null); });
+		this.Recalculate();
+		this.GetDrawingDocument().ClearCachePages && this.GetDrawingDocument().ClearCachePages();
+		this.GetDrawingDocument().FirePaint && this.GetDrawingDocument().FirePaint();
+		this.UpdateSelection();
+		this.UpdateInterface();
+		this.FinalizeAction();
+	};
+
+	CDocument.prototype.RenamePaneObject = function(id, name)
+	{
+		let drawing = this.private_GetPaneDrawing(id);
+		if (!drawing || !name || !drawing.GetParagraph())
+			return;
+		if (this.IsSelectionLocked(AscCommon.changestype_None, {Type : AscCommon.changestype_2_Element_and_Type, Element : drawing.GetParagraph(), CheckType : AscCommon.changestype_Paragraph_Content}))
+			return;
+		this.StartAction(AscDFH.historydescription_Document_ApplyImagePr);
+		drawing.docPr.setName(name);
+		this.FinalizeAction();
+	};
+
+	api["asc_GetSelectionPaneObjects"] = api.asc_GetSelectionPaneObjects = function()
+	{
+		let doc = this.private_GetLogicDocument();
+		return doc ? doc.GetSelectionPaneObjects() : [];
+	};
+	api["asc_SelectPaneObject"] = api.asc_SelectPaneObject = function(id)
+	{
+		let doc = this.private_GetLogicDocument();
+		return doc ? doc.SelectPaneObject(id) : false;
+	};
+	api["asc_SetPaneObjectsHidden"] = api.asc_SetPaneObjectsHidden = function(ids, isHidden)
+	{
+		let doc = this.private_GetLogicDocument();
+		doc && doc.SetPaneObjectsHidden(ids, isHidden);
+	};
+	api["asc_RenamePaneObject"] = api.asc_RenamePaneObject = function(id, name)
+	{
+		let doc = this.private_GetLogicDocument();
+		doc && doc.RenamePaneObject(id, name);
 	};
 
 	AscWord.CDocumentWordView = CDocumentWordView;
