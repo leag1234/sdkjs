@@ -1016,6 +1016,23 @@ CopyProcessor.prototype =
         var oCellBorder = cell.Get_Borders();
         tcStyle += this._BordersToStyle(oCellBorder, false, false);
 
+        if (null != cellPr)
+        {
+            // vertical alignment (a td is middle-aligned by default in HTML) and rotated text, written
+            // the way Word writes them (layout-flow) and as CSS writing-mode
+            if (vertalignjc_Center === cellPr.VAlign)
+                tcStyle += "vertical-align:middle;";
+            else if (vertalignjc_Bottom === cellPr.VAlign)
+                tcStyle += "vertical-align:bottom;";
+            else if (vertalignjc_Top === cellPr.VAlign)
+                tcStyle += "vertical-align:top;";
+
+            if (Asc.c_oAscCellTextDirection.BTLR === cellPr.TextDirection)
+                tcStyle += "layout-flow:vertical;mso-layout-flow-alt:bottom-to-top;writing-mode:sideways-lr;";
+            else if (Asc.c_oAscCellTextDirection.TBRL === cellPr.TextDirection)
+                tcStyle += "layout-flow:vertical;writing-mode:vertical-rl;";
+        }
+
         if("" != tcStyle)
             tc.oAttributes["style"] = tcStyle;
         //Content
@@ -1054,6 +1071,8 @@ CopyProcessor.prototype =
             if(null != rowPr.Height && Asc.linerule_Auto != rowPr.Height.HRule && null != rowPr.Height.Value)
             {
                 trStyle += "height:"+(rowPr.Height.Value * g_dKoef_mm_to_pt)+"pt;";
+                if (Asc.linerule_Exact === rowPr.Height.HRule)
+                    trStyle += "mso-height-rule:exactly;";
             }
         }
 		//WBefore
@@ -11707,8 +11726,10 @@ PasteProcessor.prototype =
 			row.Set_CellSpacing(spacing);
 		if (node.style.height) {
 			var height = node.style.height;
+			// Word writes mso-height-rule:exactly for a row of exact height
+			var isExactHeight = /mso-height-rule:\s*exactly/i.test(node.getAttribute("style") || "");
 			if (!("auto" === height || "inherit" === height || -1 !== height.indexOf("%")) && null != (height = AscCommon.valueToMm(height)))
-				row.Set_Height(height, Asc.linerule_AtLeast);
+				row.Set_Height(height, isExactHeight ? Asc.linerule_Exact : Asc.linerule_AtLeast);
 		}
 		var bBefore = false;
 		var bAfter = false;
@@ -11840,6 +11861,37 @@ PasteProcessor.prototype =
 		fParseSpans();
 	},
 
+	/**
+	 * Rotated text of a pasted table cell: Word writes layout-flow:vertical (top to bottom), with
+	 * mso-layout-flow-alt:bottom-to-top for text read from the bottom; browsers use writing-mode.
+	 * @returns {?number} c_oAscCellTextDirection, null if the cell text is horizontal
+	 */
+	_getTableCellTextDirection: function (node, computedStyle) {
+		var sStyle = (node && node.getAttribute && node.getAttribute("style") || "").toLowerCase().replace(/\s+/g, "");
+		var className = node && node.className;
+		if (className && this.oMsoStylesParser) {
+			var msoClass = this.oMsoStylesParser.getMsoClassByName("." + className);
+			if (msoClass) {
+				var sFlow = msoClass.getAttributeByName("layout-flow");
+				var sFlowAlt = msoClass.getAttributeByName("mso-layout-flow-alt");
+				sStyle = (sFlow ? "layout-flow:" + sFlow + ";" : "") + (sFlowAlt ? "mso-layout-flow-alt:" + sFlowAlt + ";" : "") + sStyle;
+			}
+		}
+		if (/(^|;)mso-layout-flow-alt:bottom-to-top/.test(sStyle) || /(^|;)writing-mode:sideways-lr/.test(sStyle)) {
+			return Asc.c_oAscCellTextDirection.BTLR;
+		}
+		if (/(^|;)layout-flow:vertical/.test(sStyle) || /(^|;)mso-layout-flow-alt:top-to-bottom/.test(sStyle)) {
+			return Asc.c_oAscCellTextDirection.TBRL;
+		}
+		var writingMode = computedStyle ? computedStyle.getPropertyValue("writing-mode") : null;
+		if ("sideways-lr" === writingMode) {
+			return Asc.c_oAscCellTextDirection.BTLR;
+		}
+		if ("vertical-rl" === writingMode || "sideways-rl" === writingMode || "tb-rl" === writingMode || "tb" === writingMode) {
+			return Asc.c_oAscCellTextDirection.TBRL;
+		}
+		return null;
+	},
 	_ExecuteTableCell: function (node, cell, bUseScaleKoef, dScaleKoef, spacing, arrShapes, arrImages, arrTables) {
 		//Pr
 		var Pr = cell.Pr;
@@ -11902,6 +11954,11 @@ PasteProcessor.prototype =
 		var whiteSpace = this._getStyle(node, computedStyle, "white-space");
 		if ("nowrap" === whiteSpace || true === node.noWrap) {
 			cell.SetNoWrap(true);
+		}
+
+		var textDirection = this._getTableCellTextDirection(node, computedStyle);
+		if (null !== textDirection) {
+			cell.Set_TextDirection(textDirection);
 		}
 
 		var vAlign = this._getStyle(node, computedStyle, "vertical-align");
