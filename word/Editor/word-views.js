@@ -29,7 +29,8 @@
  * Word document views and field commands:
  *   Outline view (Ctrl+Alt+O)  paragraphs indented by outline level, outline symbols, no paragraph formatting,
  *                              collapse / expand (Alt+Shift+Minus / Plus), show levels (Alt+Shift+1..9, Alt+Shift+A),
- *                              text formatting on/off (numeric keypad /), Tab / Shift+Tab demote / promote headings
+ *                              text formatting on/off (numeric keypad /), first line of body text only (Alt+Shift+L),
+ *                              Tab / Shift+Tab demote / promote headings
  *   Draft view (Ctrl+Alt+N)    no headers, footers or page margins at the top; floating objects in the text flow
  *   Print Layout (Ctrl+Alt+P)  back to the normal layout
  *   Ctrl+F9                    empty field (or a field whose code is the selected text), its code shown
@@ -180,7 +181,7 @@
 			this.Layout = layout;
 		}
 
-		this.WordOutline = {show : SHOW_ALL, limits : new Map(), hidden : new Set(), plain : false};
+		this.WordOutline = {show : SHOW_ALL, limits : new Map(), hidden : new Set(), plain : false, firstLine : false};
 		recompileAll(this);
 		this.RecalculateFromStart(true);
 		this.UpdateSelection();
@@ -397,10 +398,21 @@
 		this.sendEvent("asc_onWordViewChanged", VIEW_OUTLINE);
 	};
 
+	// Alt+Shift+L (macOS Control+Shift+L): only the first line of each body text paragraph, or all of it
+	CDocument.prototype.OutlineToggleFirstLine = function()
+	{
+		this.WordOutline.firstLine = !this.WordOutline.firstLine;
+		recompileAll(this);
+		this.RecalculateFromStart(true);
+		this.UpdateSelection();
+		this.sendEvent("asc_onWordViewChanged", VIEW_OUTLINE);
+	};
+
 	CDocument.prototype.GetOutlineState = function()
 	{
 		let state = this.WordOutline;
 		return {
+			"firstLineOnly"  : state ? !!state.firstLine : false,
 			"view"           : getWordView(this),
 			"showLevel"      : state ? (state.show < SHOW_ALL ? state.show : (undefined !== state.orphan && !state.limits.size ? state.orphan : 0)) : 0,
 			"showFormatting" : state ? !state.plain : true,
@@ -624,12 +636,60 @@
 		return !!(textPr && textPr.ElxOutlineHidden) || isHiddenText(textPr);
 	};
 
+	function isFirstLineOnly(paragraph)
+	{
+		let doc = paragraph.LogicDocument;
+		return !!(doc && doc.WordOutline && doc.WordOutline.firstLine && isOutline(doc) && isTopParagraph(doc, paragraph) && BODY_RANK === rankOf(paragraph));
+	}
+
+	let recalculateLineMetrics = Paragraph.prototype.private_RecalculateLineMetrics;
+	Paragraph.prototype.private_RecalculateLineMetrics = function(curLine, curPage, prs, paraPr)
+	{
+		recalculateLineMetrics.apply(this, arguments);
+		if (curLine > 0 && isFirstLineOnly(this))
+		{
+			let metrics = this.Lines[curLine].Metrics;
+			metrics.Ascent = metrics.Descent = metrics.TextAscent = metrics.TextAscent2 = metrics.TextDescent = metrics.LineGap = 0;
+		}
+	};
+
 	let drawParagraph = Paragraph.prototype.Draw;
 	Paragraph.prototype.Draw = function(curPage, graphics)
 	{
 		let doc = this.LogicDocument;
 		if (doc && doc.WordOutline && doc.WordOutline.hidden.size && doc.WordOutline.hidden.has(this) && isOutline(doc))
 			return;
+		let page = this.Pages[curPage];
+		if (page && this.Lines.length > 1 && isFirstLineOnly(this))
+		{
+			if (page.StartLine > 0)
+				return;
+			let endLine = page.EndLine;
+			page.EndLine = 0;
+			try
+			{
+				drawParagraph.call(this, curPage, graphics);
+			}
+			finally
+			{
+				page.EndLine = endLine;
+			}
+			let line  = this.Lines[0];
+			let range = line && line.Ranges[line.Ranges.length - 1];
+			if (range && graphics.df)
+			{
+				// "..." after the first line, as Word does
+				let y = page.Y + line.Y - 0.4;
+				let x = range.XVisible + range.W + 1;
+				graphics.b_color1(96, 96, 96, 255);
+				for (let i = 0; i < 3; ++i)
+				{
+					drawCircle(graphics, x + i * 1.2, y, 0.25);
+					graphics.df();
+				}
+			}
+			return;
+		}
 		drawParagraph.call(this, curPage, graphics);
 	};
 
@@ -968,6 +1028,11 @@
 					this.OutlineShowLevel(code - 48);
 					return PreventAll;
 				}
+				if (76 === code)
+				{
+					this.OutlineToggleFirstLine();
+					return PreventAll;
+				}
 				if (65 === code)
 				{
 					this.OutlineToggleAll();
@@ -1088,7 +1153,7 @@
 	};
 	/**
 	 * Commands of the Outlining tab: "promote", "demote", "body", "h1", "setlevel" (0..8, 9 body text), "up", "down", "expand", "collapse",
-	 * "level" (with the level, 0 for all), "formatting"
+	 * "level" (with the level, 0 for all), "formatting", "firstline"
 	 */
 	api["asc_OutlineCommand"] = api.asc_OutlineCommand = function(command, value)
 	{
@@ -1108,6 +1173,7 @@
 			case "collapse": doc.OutlineExpandCollapse(false); break;
 			case "level": doc.OutlineShowLevel(value); break;
 			case "formatting": doc.OutlineToggleFormatting(); break;
+			case "firstline": doc.OutlineToggleFirstLine(); break;
 		}
 		this.WordControl && this.WordControl.m_oLogicDocument && this.WordControl.m_oLogicDocument.UpdateSelection();
 	};
