@@ -198,6 +198,7 @@
 			"cell/view/DrawingObjectsController.js",
 			"cell/view/elixir-keys.js",
 			"cell/model/flash-fill.js",
+			"cell/view/quick-analysis.js",
 			"word/Drawing/Graphics.js",
 			"cell/model/DrawingObjects/Graphics.js",
 			"word/Drawing/buttons.js",
