@@ -768,13 +768,53 @@
 	 */
 	CDocument.prototype.SetFieldsLocked = function(isLocked)
 	{
-		let fields = this.private_GetFieldsForCommand();
-		fields.forEach(function(field)
+		let all = this.private_GetFieldsForCommand();
+		let fields = all.filter(function(field)
 		{
-			field.GetBeginChar().ElxFieldLock = isLocked;
+			return !!field.IsLocked() !== !!isLocked && field.GetBeginChar().GetRun();
 		});
-		this.sendEvent("asc_onWordFieldHint", fields.length ? (isLocked ? "locked" : "unlocked") : "nofield", fields.length);
-		return fields.length;
+		let changed = fields.length;
+		if (changed)
+		{
+			let runs = fields.map(function(field) { return field.GetBeginChar().GetRun(); });
+			if (this.IsSelectionLocked(AscCommon.changestype_None, {Type : AscCommon.changestype_2_ElementsArray_and_Type, Elements : runs.map(function(run) { return run.GetParagraph(); }), CheckType : AscCommon.changestype_Paragraph_Content}))
+				return 0;
+			// The lock is a property of the begin character (w:fldLock): the character is replaced through the
+			// history, so that the lock is undone, sent to co-editors and saved.
+			this.StartAction(AscDFH.historydescription_Document_AddComplexField);
+			let doc = this;
+			fields.forEach(function(field)
+			{
+				let oldChar = field.GetBeginChar();
+				let run = oldChar.GetRun();
+				let pos = run.GetElementPosition(oldChar);
+				if (pos < 0)
+					return;
+				// both characters belong to the field: the one in the run is its begin character (see SetParent below,
+				// for undo and redo)
+				let newChar = new ParaFieldChar(fldchartype_Begin, doc);
+				newChar.ComplexField = field;
+				newChar.ElxLockSwap = oldChar.ElxLockSwap = true;
+				newChar.showFieldCode = oldChar.showFieldCode;
+				newChar.fldData = oldChar.fldData;
+				newChar.ffData = oldChar.ffData ? oldChar.ffData.Copy() : null;
+				newChar.ElxFieldLock = !!isLocked;
+				run.RemoveFromContent(pos, 1, true);
+				run.AddToContent(pos, newChar, true);
+				field.ReplaceChar(newChar);
+			});
+			this.FinalizeAction();
+		}
+		this.sendEvent("asc_onWordFieldHint", all.length ? (isLocked ? "locked" : "unlocked") : "nofield", all.length);
+		return all.length;
+	};
+
+	let setFieldCharParent = ParaFieldChar.prototype.SetParent;
+	ParaFieldChar.prototype.SetParent = function(parent)
+	{
+		setFieldCharParent.apply(this, arguments);
+		if (this.ElxLockSwap && parent && this.IsBegin() && this.ComplexField)
+			this.ComplexField.ReplaceChar(this);
 	};
 
 	CComplexField.prototype.IsLocked = function()
