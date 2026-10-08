@@ -6393,6 +6393,44 @@ background-repeat: no-repeat;\
 		}
 		this.WordControl.m_oLogicDocument.moveSelectedSlidesToEnd();
 	};
+	// Slide Sorter and Presenter View: image of a slide (data URL) at the given width in pixels
+	asc_docs_api.prototype.asc_getSlideImage = function(nIndex, nWidth)
+	{
+		const oLogic = this.WordControl && this.WordControl.m_oLogicDocument;
+		if (!oLogic || nIndex < 0 || nIndex >= oLogic.Slides.length)
+			return null;
+		const w_mm = oLogic.GetWidthMM(), h_mm = oLogic.GetHeightMM();
+		const w = Math.max(16, nWidth >> 0 || 320), h = Math.max(9, Math.round(w * h_mm / w_mm));
+		const canvas = document.createElement("canvas");
+		canvas.width = w;
+		canvas.height = h;
+		const ctx = canvas.getContext("2d");
+		ctx.fillStyle = "#ffffff";
+		ctx.fillRect(0, 0, w, h);
+		const g = new AscCommon.CGraphics();
+		g.init(ctx, w, h, w_mm, h_mm);
+		g.m_oFontManager = AscCommon.g_fontManager;
+		g.transform(1, 0, 0, 1, 0, 0);
+		g.IsNoDrawingEmptyPlaceholderText = true;
+		try { oLogic.DrawPage(nIndex, g); } catch (e) {}
+		return canvas.toDataURL("image/png");
+	};
+	// Slide Sorter: select slides by index (replaces the selection)
+	asc_docs_api.prototype.asc_selectSlides = function(aIndexes)
+	{
+		if (this.WordControl && this.WordControl.Thumbnails && aIndexes && aIndexes.length)
+			this.WordControl.Thumbnails.SelectSlides(aIndexes, true);
+	};
+	// Slide Sorter: move slides (indexes) so that they come before the slide at position nPos (0..count)
+	asc_docs_api.prototype.asc_moveSlidesTo = function(aIndexes, nPos, bCopy)
+	{
+		const oLogic = this.WordControl && this.WordControl.m_oLogicDocument;
+		if (!oLogic || !aIndexes || !aIndexes.length)
+			return;
+		oLogic.shiftSlides(nPos, aIndexes.slice().sort(function(a, b) { return a - b; }), !!bCopy);
+		if (this.WordControl.Thumbnails.ClearCacheAttack)
+			this.WordControl.Thumbnails.ClearCacheAttack();
+	};
 	asc_docs_api.prototype.asc_moveSlidesNextPos = function()
 	{
 		if(!this.WordControl || !this.WordControl.m_oLogicDocument)
@@ -9854,6 +9892,9 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_getFirstSlideNumber']             = asc_docs_api.prototype.asc_getFirstSlideNumber;
 	asc_docs_api.prototype['AddSlide']                            = asc_docs_api.prototype.AddSlide;
 	asc_docs_api.prototype['DeleteSlide']                         = asc_docs_api.prototype.DeleteSlide;
+	asc_docs_api.prototype['asc_getSlideImage']                   = asc_docs_api.prototype.asc_getSlideImage;
+	asc_docs_api.prototype['asc_selectSlides']                    = asc_docs_api.prototype.asc_selectSlides;
+	asc_docs_api.prototype['asc_moveSlidesTo']                    = asc_docs_api.prototype.asc_moveSlidesTo;
 	asc_docs_api.prototype['DublicateSlide']                      = asc_docs_api.prototype.DublicateSlide;
 	asc_docs_api.prototype['SelectAllSlides']                     = asc_docs_api.prototype.SelectAllSlides;
 	asc_docs_api.prototype['asc_moveSelectedSlidesToEnd']         = asc_docs_api.prototype.asc_moveSelectedSlidesToEnd;

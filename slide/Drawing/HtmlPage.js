@@ -497,6 +497,47 @@
 
 			demBottonsDiv.innerHTML = _buttonsContent;
 
+			// Presenter View: preview of the next slide, beside the notes
+			(function (oThis) {
+				const CARD_W = 220;
+				const oCard = document.createElement("div");
+				oCard.setAttribute("id", "elx_next_slide");
+				oCard.style.cssText = "position:absolute;top:8px;right:" + (oThis.ScrollWidthMm / g_dKoef_pix_to_mm + 8) + "px;width:" + (CARD_W - 20) + "px;z-index:12;font:12px sans-serif;user-select:none;";
+				const oLabel = document.createElement("div");
+				oLabel.style.cssText = "margin-bottom:4px;opacity:0.75;";
+				oLabel.textContent = (oThis.reporterTranslates && oThis.reporterTranslates[12]) || "Next slide";
+				const oImg = document.createElement("img");
+				oImg.setAttribute("id", "elx_next_slide_img");
+				oImg.style.cssText = "display:block;width:100%;border:1px solid #888;background:#fff;";
+				const oEnd = document.createElement("div");
+				oEnd.setAttribute("id", "elx_next_slide_end");
+				oEnd.style.cssText = "display:none;border:1px solid #888;padding:18px 6px;text-align:center;opacity:0.75;";
+				oEnd.textContent = "End of slideshow";
+				oCard.appendChild(oLabel);
+				oCard.appendChild(oImg);
+				oCard.appendChild(oEnd);
+				oThis.m_oNotesContainer.HtmlElement.appendChild(oCard);
+				const nMm = CARD_W * g_dKoef_pix_to_mm;
+				oThis.m_oNotes.Bounds.SetParams(0, 0, oThis.ScrollWidthMm + nMm, 1000, false, false, true, false, -1, -1);
+				oThis.m_oNotesOverlay.Bounds.SetParams(0, 0, oThis.ScrollWidthMm + nMm, 1000, false, false, true, false, -1, -1);
+				oThis.m_oApi.asc_registerCallback("asc_onDemonstrationSlideChanged", function (nSlide) {
+					const oManager = oThis.DemonstrationManager;
+					let nNext = nSlide + 1;
+					const nCount = oThis.m_oApi.getCountPages();
+					while (nNext < nCount && oManager && oManager.IsVisibleSlide && !oManager.IsVisibleSlide(nNext))
+						nNext++;
+					if (nNext >= nCount) {
+						oImg.style.display = "none";
+						oEnd.style.display = "block";
+					} else {
+						const sUrl = oThis.m_oApi.asc_getSlideImage(nNext, CARD_W * 2);
+						oImg.src = sUrl || "";
+						oImg.style.display = "block";
+						oEnd.style.display = "none";
+					}
+				});
+			})(this);
+
 			// events
 			this.m_oApi.asc_registerCallback("asc_onDemonstrationSlideChanged", function (slideNum) {
 				var _elem = document.getElementById("dem_id_slides");
