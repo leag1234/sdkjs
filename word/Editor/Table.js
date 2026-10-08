@@ -18069,6 +18069,9 @@ CTable.prototype.InsertTableContent = function(_nCellIndex, _nRowIndex, oTable)
 				{
 					oCell.Content.ClearContent(false);
 					oCell.Content.AddContent(oInsertedCell.Content.Content);
+					// Like Word (Overwrite Cells), the cell takes the formatting of the pasted cell: shading,
+					// borders, margins, vertical alignment, text direction; its merge and width are kept.
+					oCell.Copy_Pr(oInsertedCell.Pr, true, true);
 					arrClearedCells.push(oCell);
 				}
 				else

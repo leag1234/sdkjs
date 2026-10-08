@@ -1209,7 +1209,12 @@ CTableCell.prototype =
 			this.updateTrackRevisions();
 	},
 
-    Copy_Pr : function(OtherPr, bCopyOnlyVisualProps)
+    /**
+     * @param OtherPr
+     * @param {boolean} [bCopyOnlyVisualProps=false] keep the merge (GridSpan, VMerge) of this cell
+     * @param {boolean} [bKeepWidth=false] keep the preferred width of this cell
+     */
+    Copy_Pr : function(OtherPr, bCopyOnlyVisualProps, bKeepWidth)
     {
         if ( true != bCopyOnlyVisualProps )
         {
@@ -1328,10 +1333,13 @@ CTableCell.prototype =
         }
 
         // W
-        if ( undefined === OtherPr.TableCellW )
-            this.Set_W( undefined );
-        else
-            this.Set_W( OtherPr.TableCellW.Copy() );
+        if ( true !== bKeepWidth )
+        {
+            if ( undefined === OtherPr.TableCellW )
+                this.Set_W( undefined );
+            else
+                this.Set_W( OtherPr.TableCellW.Copy() );
+        }
 
         // VAlign
         this.Set_VAlign(OtherPr.VAlign);
