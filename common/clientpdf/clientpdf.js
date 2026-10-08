@@ -11,6 +11,16 @@
  * on first use only. Whatever the writer cannot reproduce makes the export fall back to the server
  * path, with an event that lets the interface say why (asc_onClientPdf {state:'fallback'}).
  *
+ * Two interfaces keep the PDF writer replaceable (the in-house JS writer today, possibly the server's
+ * C++ PdfWriter compiled to WebAssembly later, see docs/client-pdf.md):
+ *  - ClientPdf.fonts (font source): get(name, style) -> Promise<{key, bytes, faceIndex, needBold,
+ *    needItalic, source: 'server'|'local'}>: the font file bytes the screen uses, whether they came from
+ *    the server or from the user's computer (Local Font Access);
+ *  - PdfBackend: {id, load() -> Promise, create(env) -> {feed(u8) -> Promise, finish() -> Promise<Uint8Array>,
+ *    stats}}; env = {fonts, getFont, getImage, title, lang, producer, creator}. The backend is fed the
+ *    drawing-command stream page by page; an error with eoUnsupported = true and a code makes the
+ *    export fall back to the server. ClientPdf.registerBackend(backend), ClientPdf.setBackend(id).
+ *
  * Events: api.sendEvent('asc_onClientPdf', {state: 'start'|'progress'|'done'|'fallback'|'error', ...}).
  * Switch: AscCommon.ClientPdf.setEnabled(false) (interface option) sends every PDF to the server.
  */
@@ -84,8 +94,27 @@
 		var bytes = streamBytes(id.file.stream_index);
 		if (!bytes) return null;
 		var need = info.GetNeedInfo ? info.GetNeedInfo(style) : {};
-		return { key: id.file.Id + '#' + (id.faceIndex || 0), bytes: bytes, faceIndex: id.faceIndex || 0, needBold: !!need.needB, needItalic: !!need.needI };
+		var lf = window['Common'] && window['Common']['ElixirLocalFonts'];
+		var local = !!(lf && lf.isLocal && lf.isLocal(name));
+		return { key: id.file.Id + '#' + (id.faceIndex || 0), bytes: bytes, faceIndex: id.faceIndex || 0, needBold: !!need.needB, needItalic: !!need.needI,
+			source: local ? 'local' : 'server' };
 	}
+	var FontSource = { get: getFont };
+
+	function unsupported(code, detail) {
+		var e = new Error('client PDF: unsupported ' + code + (detail ? ' (' + detail + ')' : ''));
+		e.eoUnsupported = true; e.code = code; e.detail = detail || '';
+		return e;
+	}
+
+	// ---- backends --------------------------------------------------------------------------------
+	var backends = {}, backendId = 'js';
+	function registerBackend(b) { backends[b.id] = b; }
+	registerBackend({
+		id: 'js',   // in-house writer on fontkit (common/clientpdf/eo-pdf.js)
+		load: loadLibs,
+		create: function (env) { env.fontkit = window.fontkit; return new window.EOPdf.Writer(env); }
+	});
 
 	// ---- images: the files the screen already loaded (browser cache), never uploaded -------------
 	function jpegInfo(b) {
@@ -155,7 +184,9 @@
 
 	// ---- capture + write -------------------------------------------------------------------------
 	async function build(api, options, onProgress) {
-		await loadLibs();
+		var backend = backends[backendId];
+		if (!backend) throw unsupported('backend', backendId);
+		await backend.load();
 		var t0 = now();
 		var dd = api.WordControl.m_oDrawingDocument;
 		var logic = api.WordControl.m_oLogicDocument;
@@ -168,11 +199,11 @@
 		var ranges = native && native['pages'] !== undefined && !isSelection ? AscCommon.getNativePrintRanges(native['pages'], native['currentPage'], count) : undefined;
 		var list = [];
 		for (var p = 0; p < count; p++) if (!ranges || ranges[p]) list.push(p);
-		if (!list.length) throw window.EOPdf.Unsupported('empty');
-		if (list.length > MAX_PAGES) throw window.EOPdf.Unsupported('size', list.length + ' pages');
+		if (!list.length) throw unsupported('empty');
+		if (list.length > MAX_PAGES) throw unsupported('size', list.length + ' pages');
 
-		var writer = new window.EOPdf.Writer({
-			fontkit: window.fontkit, getFont: getFont, getImage: getImage,
+		var writer = backend.create({
+			fonts: FontSource, getFont: FontSource.get, getImage: getImage,
 			title: api.documentTitle ? String(api.documentTitle).replace(/\.[^.]+$/, '') : '',
 			lang: api.asc_getLocale ? (function () { try { var l = api.asc_getLocale(); return typeof l === 'string' ? l : ''; } catch (e) { return ''; } })() : '',
 			producer: 'ElixirOffice', creator: 'ElixirOffice'
@@ -216,7 +247,8 @@
 			dd.printedDocument = null;
 		}
 		var bytes = await writer.finish();
-		var stats = writer.stats;
+		var stats = writer.stats || {};
+		stats.backend = backend.id;
 		stats.captureMs = Math.round(captureMs);
 		stats.totalMs = Math.round(now() - t0);
 		stats.bytes = bytes.length;
@@ -274,6 +306,12 @@
 		},
 		// for tests and tools: the PDF bytes of the current document, no download
 		build: function (api, options) { return build(api || window.editor, options || { fileType: Asc.c_oAscFileType.PDF }); },
+		fonts: FontSource,
+		getImage: getImage,
+		unsupported: unsupported,
+		registerBackend: registerBackend,
+		setBackend: function (id) { backendId = id; },
+		getBackend: function () { return backendId; },
 		loadLibs: loadLibs
 	};
 
@@ -283,4 +321,11 @@
 	ClientPdf['setEnabled'] = ClientPdf.setEnabled;
 	ClientPdf['isEnabled'] = ClientPdf.isEnabled;
 	ClientPdf['build'] = ClientPdf.build;
+	ClientPdf['fonts'] = FontSource;
+	FontSource['get'] = FontSource.get;
+	ClientPdf['getImage'] = getImage;
+	ClientPdf['unsupported'] = unsupported;
+	ClientPdf['registerBackend'] = ClientPdf.registerBackend;
+	ClientPdf['setBackend'] = ClientPdf.setBackend;
+	ClientPdf['getBackend'] = ClientPdf.getBackend;
 })(window);
