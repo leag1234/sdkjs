@@ -20,3 +20,6 @@ package-lock.json
 connector
 tests/package*
 .claude/
+
+# Versioned wasm artifacts are installed from a validated release manifest.
+/common/clientpdf/runtime/

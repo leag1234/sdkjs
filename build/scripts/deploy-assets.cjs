@@ -34,6 +34,8 @@ const IGNORE_NAMES = new Set([
     'zlib_ie', 'drawingfile_ie', 'themes',
     // already minified third-party bundle: copied as is (see common/clientpdf/vendor/fontkit/README.md)
     'fontkit.umd.min',
+    // Generated wasm glue and its precompressed copies share manifest checksums.
+    'x2t',
 ]);
 
 // Mirrors the otherFiles array in Gruntfile.js
@@ -64,6 +66,9 @@ const OTHER_FILES = [
             'zlib/engine/*',
             'serviceworker/*',
             'clientpdf/eo-pdf.js',
+            'clientpdf/wasm-pdf.js',
+            'clientpdf/wasm-worker.js',
+            'clientpdf/runtime/**/*',
             'clientpdf/vendor/fontkit/*',
         ],
         dest: path.join(BUILD_ROOT, 'common'),

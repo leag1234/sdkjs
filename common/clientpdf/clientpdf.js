@@ -7,12 +7,12 @@
  * server would otherwise replay), with the font files the screen uses (AscFonts.g_fonts_streams,
  * including fonts read from the user's computer). Nothing is sent to the server.
  *
- * The writer (common/clientpdf/eo-pdf.js) and fontkit (common/clientpdf/vendor/fontkit) are loaded
- * on first use only. Whatever the writer cannot reproduce makes the export fall back to the server
+ * The native wasm PDF worker is loaded on first use only; the JS writer and fontkit
+ * are loaded only if the wasm backend fails. Whatever the writer cannot reproduce makes the export fall back to the server
  * path, with an event that lets the interface say why (asc_onClientPdf {state:'fallback'}).
  *
- * Two interfaces keep the PDF writer replaceable (the in-house JS writer today, possibly the server's
- * C++ PdfWriter compiled to WebAssembly later, see docs/client-pdf.md):
+ * Two interfaces keep the native wasm and in-house JS PDF writers replaceable
+ * (see docs/client-pdf.md):
  *  - ClientPdf.fonts (font source): get(name, style) -> Promise<{key, bytes, faceIndex, needBold,
  *    needItalic, source: 'server'|'local'}>: the font file bytes the screen uses, whether they came from
  *    the server or from the user's computer (Local Font Access);
@@ -108,7 +108,21 @@
 	}
 
 	// ---- backends --------------------------------------------------------------------------------
-	var backends = {}, backendId = 'js';
+	var backends = {}, backendId = 'wasm';
+	var wasmLib = null;
+	registerBackend({
+		id: 'wasm',
+		load: function () {
+			if (!wasmLib) {
+				wasmLib = loadScript(BASE + 'wasm-pdf.js').then(function () {
+					if (!window.EOWasmPdf) throw unsupported('wasm', 'backend missing');
+				});
+				wasmLib.catch(function () { wasmLib = null; });
+			}
+			return wasmLib;
+		},
+		create: function (env) { return new window.EOWasmPdf.Writer(env); }
+	});
 	function registerBackend(b) { backends[b.id] = b; }
 	registerBackend({
 		id: 'js',   // in-house writer on fontkit (common/clientpdf/eo-pdf.js)
@@ -182,10 +196,16 @@
 		return { kind: 'raw', width: w, height: h, rgb: rgb, alpha: opaque ? null : alpha };
 	}
 
+	async function getRawImage(path) {
+		var response = await fetch(imageUrl(path), { credentials: 'same-origin', cache: 'force-cache' });
+		if (!response.ok) return null;
+		return { bytes: new Uint8Array(await response.arrayBuffer()) };
+	}
+
 	// ---- capture + write -------------------------------------------------------------------------
-	async function build(api, options, onProgress) {
-		var backend = backends[backendId];
-		if (!backend) throw unsupported('backend', backendId);
+	async function buildOnce(api, options, onProgress, id) {
+		var backend = backends[id];
+		if (!backend) throw unsupported('backend', id);
 		await backend.load();
 		var t0 = now();
 		var dd = api.WordControl.m_oDrawingDocument;
@@ -203,7 +223,7 @@
 		if (list.length > MAX_PAGES) throw unsupported('size', list.length + ' pages');
 
 		var writer = backend.create({
-			fonts: FontSource, getFont: FontSource.get, getImage: getImage,
+			fonts: FontSource, getFont: FontSource.get, getImage: getImage, getRawImage: getRawImage,
 			title: api.documentTitle ? String(api.documentTitle).replace(/\.[^.]+$/, '') : '',
 			lang: api.asc_getLocale ? (function () { try { var l = api.asc_getLocale(); return typeof l === 'string' ? l : ''; } catch (e) { return ''; } })() : '',
 			producer: 'ElixirOffice', creator: 'ElixirOffice'
@@ -253,6 +273,18 @@
 		stats.totalMs = Math.round(now() - t0);
 		stats.bytes = bytes.length;
 		return { bytes: bytes, stats: stats };
+	}
+
+	async function build(api, options, onProgress) {
+		var id = backendId, start = now();
+		try { return await buildOnce(api, options, onProgress, id); }
+		catch (error) {
+			if (id !== 'wasm') throw error;
+			var result = await buildOnce(api, options, onProgress, 'js');
+			result.stats.fallbacks = [{ from: 'wasm', to: 'js', reason: error.code || 'wasm', detail: error.detail || error.message }];
+			result.stats.totalMs = Math.round(now() - start);
+			return result;
+		}
 	}
 
 	// ---- integration with downloadAs -------------------------------------------------------------
@@ -307,7 +339,7 @@
 		// for tests and tools: the PDF bytes of the current document, no download
 		build: function (api, options) { return build(api || window.editor, options || { fileType: Asc.c_oAscFileType.PDF }); },
 		fonts: FontSource,
-		getImage: getImage,
+		getImage: getImage, getRawImage: getRawImage,
 		unsupported: unsupported,
 		registerBackend: registerBackend,
 		setBackend: function (id) { backendId = id; },
