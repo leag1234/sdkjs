@@ -145,7 +145,9 @@ async function main() {
             const destPath = path.join(entry.dest, relFile);
 
             fileCount++;
-            if (ext === '.js' && !IGNORE_NAMES.has(baseName)) {
+            // Runtime glue, manifests and sidecars must retain release checksums.
+            const runtimeFile = relFile.startsWith('clientpdf/runtime/');
+            if (ext === '.js' && !runtimeFile && !IGNORE_NAMES.has(baseName)) {
                 tasks.push(deployJsFile(srcPath, destPath));
             } else {
                 deployFile(srcPath, destPath);
