@@ -5,7 +5,6 @@
 (function (window) {
 	'use strict';
 	var BASE = new URL('../../../../sdkjs/common/clientpdf/', window.location.href).href;
-	var RUNTIME = 'runtime/9ee6831853aa-36c327f971c4-st/';
 	function unsupported(code, detail) { return AscCommon.ClientPdf.unsupported(code, detail); }
 	function join(parts) {
 		var out = new Uint8Array(parts.reduce(function (n, p) { return n + p.length; }, 0)), at = 0;
@@ -94,7 +93,7 @@
 			}
 		} catch (e) { if (e.eoUnsupported) throw e; throw unsupported('font', 'invalid font data'); }
 	}
-	function convert(job) {
+	function convert(job, runtime) {
 		return new Promise(function (resolve, reject) {
 			var worker, timer;
 			function done(error, result) { clearTimeout(timer); if (worker) worker.terminate(); if (error) reject(error); else resolve(result); }
@@ -106,7 +105,7 @@
 				if (m.error) done(unsupported(m.code || 'wasm', m.error));
 				else done(null, m);
 			};
-			job.runtime = BASE + RUNTIME;
+			job.runtime = runtime;
 			var transfers = [job.stream.buffer];
 			job.files.forEach(function (f) { transfers.push(f.bytes.buffer); });
 			try { worker.postMessage(job, transfers); } catch (e) { done(unsupported("wasm-worker", e.message)); }
@@ -134,12 +133,12 @@
 			// The native renderer uses the original vector sidecar when one exists.
 			if (/\.svg$/i.test(image.path)) {
 				for (var ext of ['emf', 'wmf']) {
-					var side = await this.env.getRawImage(image.source.replace(/\.svg(?=[?#]|$)/i, '.' + ext), true).catch(function () { return null; });
+					var side = await this.env.getRawImage(image.source.replace(/\.svg(?=[?#]|$)/i, '.' + ext)).catch(function () { return null; });
 					if (side) { imageBytes += side.bytes.length; files.push({ path: '/p/' + image.path.replace(/\.svg$/i, '.' + ext), bytes: side.bytes.slice() }); }
 				}
 			}
 		}
-		var result = await convert({ stream: join(this.parts), files: files });
+		var result = await convert({ stream: join(this.parts), files: files }, this.env['wasmRuntime']);
 		this.parts = [];
 		this.stats = { pages: this.scanner.pages, images: this.scanner.images.size, links: this.scanner.links,
 			fonts: fonts, fontBytes: fontBytes, imageBytes: imageBytes, worker: true,
@@ -147,5 +146,4 @@
 		return result.bytes;
 	};
 	window.EOWasmPdf = window['EOWasmPdf'] = { Writer: Writer, Scanner: Scanner };
-	AscCommon.ClientPdf.registerBackend({ id: 'wasm', load: function () { return Promise.resolve(); }, create: function (env) { return new Writer(env); } });
 })(window);

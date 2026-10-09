@@ -108,21 +108,40 @@
 	}
 
 	// ---- backends --------------------------------------------------------------------------------
-	var backends = {}, backendId = 'wasm';
-	var wasmLib = null;
-	registerBackend({
-		id: 'wasm',
-		load: function () {
-			if (!wasmLib) {
-				wasmLib = loadScript(BASE + 'wasm-pdf.js').then(function () {
-					if (!window.EOWasmPdf) throw unsupported('wasm', 'backend missing');
+	var backends = {}, backendId = 'js', preferredBackend = 'wasm';
+	var wasmLib = null, runtimeProbe = null, runtimeUrl = null;
+	// One discovery attempt per editor session, including absent or invalid runtimes.
+	function discoverRuntime() {
+		if (!runtimeProbe) runtimeProbe = (async function () {
+			try {
+				var response = await fetch(BASE + 'runtime/current.json', { cache: 'no-store' });
+				if (!response.ok) return false;
+				var pointer = await response.json(), version = pointer.artifact_version;
+				if (typeof version !== 'string' || !/^[0-9a-f]+-[0-9a-f]+-st$/.test(version)) return false;
+				var url = BASE + 'runtime/' + version + '/';
+				response = await fetch(url + 'manifest.json');
+				if (!response.ok) return false;
+				var manifest = await response.json();
+				if (manifest.artifact_version !== version || !manifest.build_flags || manifest.build_flags.module_kind !== 'pdf') return false;
+				runtimeUrl = new URL(url, window.location.href).href;
+				registerBackend({
+					id: 'wasm',
+					load: function () {
+						if (!wasmLib) {
+							wasmLib = loadScript(BASE + 'wasm-pdf.js').then(function () {
+								if (!window.EOWasmPdf) throw unsupported('wasm', 'backend missing');
+							});
+							wasmLib.catch(function () { wasmLib = null; });
+						}
+						return wasmLib;
+					},
+					create: function (env) { env['wasmRuntime'] = runtimeUrl; return new window.EOWasmPdf.Writer(env); }
 				});
-				wasmLib.catch(function () { wasmLib = null; });
-			}
-			return wasmLib;
-		},
-		create: function (env) { return new window.EOWasmPdf.Writer(env); }
-	});
+				return true;
+			} catch (e) { return false; }
+		})();
+		return runtimeProbe;
+	}
 	function registerBackend(b) { backends[b.id] = b; }
 	registerBackend({
 		id: 'js',   // in-house writer on fontkit (common/clientpdf/eo-pdf.js)
@@ -276,7 +295,9 @@
 	}
 
 	async function build(api, options, onProgress) {
-		var id = backendId, start = now();
+		var id = preferredBackend, start = now();
+		if (id === 'wasm' && !(await discoverRuntime())) id = 'js';
+		backendId = id;
 		try { return await buildOnce(api, options, onProgress, id); }
 		catch (error) {
 			if (id !== 'wasm') throw error;
@@ -342,7 +363,8 @@
 		getImage: getImage, getRawImage: getRawImage,
 		unsupported: unsupported,
 		registerBackend: registerBackend,
-		setBackend: function (id) { backendId = id; },
+		setBackend: function (id) { preferredBackend = id; backendId = id === 'wasm' && !runtimeUrl ? 'js' : id; },
+		discoverRuntime: discoverRuntime,
 		getBackend: function () { return backendId; },
 		loadLibs: loadLibs
 	};
@@ -360,4 +382,5 @@
 	ClientPdf['registerBackend'] = ClientPdf.registerBackend;
 	ClientPdf['setBackend'] = ClientPdf.setBackend;
 	ClientPdf['getBackend'] = ClientPdf.getBackend;
+	ClientPdf['discoverRuntime'] = ClientPdf.discoverRuntime;
 })(window);
