@@ -62,6 +62,9 @@
 		if (!ws || !ws.model || ws.getSelectionShape && ws.getSelectionShape()) {
 			return null;
 		}
+		if (AscCommonExcel.autoFillOptionsActive && AscCommonExcel.autoFillOptionsActive(ws)) {
+			return null;
+		}
 		const render = ws.objectRender;
 		if (render && render.getSelectedGraphicObjects && render.getSelectedGraphicObjects().length) {
 			return null;

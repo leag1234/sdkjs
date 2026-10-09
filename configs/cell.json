@@ -199,6 +199,7 @@
 			"cell/view/elixir-keys.js",
 			"cell/model/flash-fill.js",
 			"cell/view/quick-analysis.js",
+			"cell/view/autofill-options.js",
 			"word/Drawing/Graphics.js",
 			"cell/model/DrawingObjects/Graphics.js",
 			"word/Drawing/buttons.js",
