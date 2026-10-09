@@ -6934,7 +6934,6 @@ function BinaryPPTYLoader()
     {
         let s = this.stream;
 
-        let bIsNoSlideSpTree = this.IsNoSlideSpTree();
         let _type = s.GetUChar();
         let _object;
         switch (_type)
@@ -6942,14 +6941,8 @@ function BinaryPPTYLoader()
             case 1:
             {
                 _object = this.ReadShape();
-                if (!IsHiddenObj(_object) || bIsNoSlideSpTree)
-                {
-                    _object.setParent2(this.TempMainObject);
-                }
-                else
-                {
-                    _object = null;
-                }
+                // a hidden object (p:cNvPr hidden) is kept: it is not drawn (slide/Editor/selection-pane.js) and is saved back
+                _object.setParent2(this.TempMainObject);
                 break;
             }
             case 6:
@@ -6992,14 +6985,7 @@ function BinaryPPTYLoader()
         }
         if(_object)
         {
-            if (!IsHiddenObj(_object) || bIsNoSlideSpTree)
-            {
-                _object.setParent2(this.TempMainObject);
-            }
-            else
-            {
-                _object = null
-            }
+            _object.setParent2(this.TempMainObject);
         }
         let nCurPos = s.cur;
         let nType = s.GetUChar();
