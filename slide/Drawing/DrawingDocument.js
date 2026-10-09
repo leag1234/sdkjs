@@ -4434,6 +4434,12 @@ function CThumbnailsManager(editorPage)
 
 		var pos = oThis.ConvertCoords(global_mouseEvent.X, global_mouseEvent.Y);
 		if (pos.Page == -1) {
+			const sectionHeader = oThis.GetSectionHeaderAt(pos.X, pos.Y);
+			if (sectionHeader) {
+				oThis.OnSectionHeaderMouseDown(sectionHeader, pos, global_mouseEvent.Button, e);
+				checkSelectionEnd();
+				return false;
+			}
 			if (global_mouseEvent.Button == 2) {
 				oThis.showContextMenu(false);
 			}
@@ -5098,7 +5104,10 @@ function CThumbnailsManager(editorPage)
 			scrollBy = scrollApi.scrollByY.bind(scrollApi);
 		}
 
-		if (startCoord < 0) {
+		if (startCoord < 0 && this.sectionsInfo) {
+			// with section headers the rows are not of a uniform height: the position of the page is known
+			scrollTo(Math.max(0, (this.m_dScrollY >> 0) + startCoord - this.getSectionHeaderLength()));
+		} else if (startCoord < 0) {
 			const size = endCoord - startCoord;
 			const shouldReversePageIndexes = Asc.editor.isRtlInterface &&
 				Asc.editor.getThumbnailsPosition() === thumbnailsPositionMap.bottom;
@@ -5274,6 +5283,12 @@ function CThumbnailsManager(editorPage)
 		const arrSlides = logicDocument.GetAllSlides();
 		for (let slideIndex = 0; slideIndex < this.GetSlidesCount(); slideIndex++) {
 			const page = this.m_arrPages[slideIndex];
+
+			if (page.collapsedHidden) {
+				this.m_oCacheManager.UnLock(page.cachedImage);
+				page.cachedImage = null;
+				continue;
+			}
 			
 			const oSlide = arrSlides[slideIndex];
 			const slideType = oSlide.deleteLock.Lock.Get_Type();
@@ -5403,6 +5418,8 @@ function CThumbnailsManager(editorPage)
 				}
 			}
 		}
+
+		this.DrawSectionHeaders(context, canvas);
 
 		this.OnUpdateOverlay();
 	};
@@ -5969,6 +5986,88 @@ function CThumbnailsManager(editorPage)
 
 		return minPositionPage;
 	};
+	// ---- sections (sdkjs slide/Editor/sections.js)
+	this.getSectionsInfo = function () {
+		const presentation = this.m_oWordControl.m_oLogicDocument;
+		if (!presentation || !presentation.GetSections || presentation.IsMasterMode() || presentation.IsVisioEditor()) {
+			return null;
+		}
+		const sections = presentation.GetSections();
+		if (!sections.length) {
+			return null;
+		}
+		const info = {byFirst: {}, hidden: {}, headerCount: sections.length, hiddenCount: 0};
+		sections.forEach(function (section) {
+			info.byFirst[section.first] = section;
+			if (section.collapsed) {
+				for (let i = section.first; i < section.first + section.count; ++i) {
+					info.hidden[i] = true;
+					info.hiddenCount++;
+				}
+			}
+		});
+		return info;
+	};
+	this.getSectionHeaderLength = function () {
+		return Math.round(AscCommon.AscBrowser.retinaPixelRatio * 24);
+	};
+	this.GetSectionHeaderAt = function (x, y) {
+		for (let i = 0; i < this.m_arrPages.length; i++) {
+			const header = this.m_arrPages[i].sectionHeader;
+			if (header && y >= header.top && y < header.top + header.height) {
+				return header;
+			}
+		}
+		return null;
+	};
+	this.DrawSectionHeaders = function (context, canvas) {
+		if (!this.sectionsInfo) {
+			return;
+		}
+		const ratio = AscCommon.AscBrowser.retinaPixelRatio;
+		context.save();
+		context.font = "bold " + Math.round(11 * ratio) + "px Arial";
+		context.textBaseline = "middle";
+		context.fillStyle = AscCommon.GlobalSkin.ThumbnailsPageNumberText;
+		const left = Math.round(6 * ratio);
+		for (let i = 0; i < this.m_arrPages.length; i++) {
+			const header = this.m_arrPages[i].sectionHeader;
+			if (!header || header.top + header.height < 0 || header.top > canvas.height) {
+				continue;
+			}
+			const midY = header.top + header.height / 2, size = Math.round(4 * ratio);
+			// the arrow: pointing right when collapsed, down when expanded
+			context.beginPath();
+			if (header.collapsed) {
+				context.moveTo(left, midY - size);
+				context.lineTo(left + size, midY);
+				context.lineTo(left, midY + size);
+			} else {
+				context.moveTo(left - size / 2, midY - size / 2);
+				context.lineTo(left + size * 1.5, midY - size / 2);
+				context.lineTo(left + size / 2, midY + size);
+			}
+			context.closePath();
+			context.fill();
+			let label = header.name + " (" + header.count + ")";
+			const maxWidth = canvas.width - left - Math.round(18 * ratio) - Math.round(6 * ratio);
+			while (label.length > 1 && context.measureText(label).width > maxWidth) {
+				label = label.substring(0, label.length - 2) + "\u2026";
+			}
+			context.fillText(label, left + Math.round(14 * ratio), midY);
+		}
+		context.restore();
+	};
+	this.OnSectionHeaderMouseDown = function (header, pos, button, e) {
+		const presentation = this.m_oWordControl.m_oLogicDocument;
+		if (button === 2) {
+			Asc.editor.sendEvent("asc_onSectionContextMenu", {id: header.id, x: e.clientX, y: e.clientY});
+		} else if (pos.X < Math.round(AscCommon.AscBrowser.retinaPixelRatio * 20)) {
+			presentation.SetSectionCollapsed(header.id, !header.collapsed);
+		} else {
+			presentation.SelectSection(header.id);
+		}
+	};
 	this.CalculatePlaces = function () {
 		if (!this.isThumbnailsShown())
 			return;
@@ -6019,6 +6118,11 @@ function CThumbnailsManager(editorPage)
 		let isFirstSlideFound = false;
 		let isLastSlideFound = false;
 
+		// sections: a header row above the first slide of each section, the slides of a collapsed section take no room
+		const sectionsInfo = isVerticalThumbnails ? this.getSectionsInfo() : null;
+		this.sectionsInfo = sectionsInfo;
+		const sectionHeaderLength = this.getSectionHeaderLength();
+
 		const totalSlidesCount = this.GetSlidesCount();
 		for (let slideIndex = 0; slideIndex < totalSlidesCount; slideIndex++) {
 			if (this.m_oWordControl.m_oLogicDocument.IsVisioEditor()) {
@@ -6040,6 +6144,26 @@ function CThumbnailsManager(editorPage)
 			const slideData = this.m_oWordControl.m_oLogicDocument.GetSlide(slideIndex);
 			const slideRect = this.m_arrPages[slideIndex];
 			slideRect.pageIndex = slideIndex;
+
+			slideRect.sectionHeader = null;
+			slideRect.collapsedHidden = false;
+			if (sectionsInfo) {
+				const section = sectionsInfo.byFirst[slideIndex];
+				if (section) {
+					slideRect.sectionHeader = {
+						id: section.id, name: section.name, count: section.count, collapsed: section.collapsed,
+						top: startOffset - currentScrollPx, height: sectionHeaderLength
+					};
+					startOffset += sectionHeaderLength;
+				}
+				if (sectionsInfo.hidden[slideIndex]) {
+					slideRect.collapsedHidden = true;
+					slideRect.left = isRightToLeft ? this.const_offset_r : this.const_offset_x;
+					slideRect.right = slideRect.left;
+					slideRect.top = slideRect.bottom = startOffset - currentScrollPx;
+					continue;
+				}
+			}
 
 			if (isVerticalThumbnails) {
 				slideRect.left = isRightToLeft ? this.const_offset_r : this.const_offset_x;
@@ -6373,6 +6497,7 @@ function CThumbnailsManager(editorPage)
 		}
 
 		let cumulativeThumbnailLength = 0;
+		let visibleSlidesCount = slidesCount;
 
 		if (oPresentation.IsVisioEditor()) {
 			for (let nIdx = 0; nIdx < slidesCount; ++nIdx) {
@@ -6398,11 +6523,17 @@ function CThumbnailsManager(editorPage)
 			cumulativeThumbnailLength = isHorizontalOrientation
 				? thumbnailWidth * slidesCount
 				: thumbnailHeight * slidesCount;
+			// sections: header rows, no room for the slides of a collapsed section
+			const sectionsInfo = isHorizontalOrientation ? null : this.getSectionsInfo();
+			if (sectionsInfo) {
+				visibleSlidesCount = slidesCount - sectionsInfo.hiddenCount;
+				cumulativeThumbnailLength = thumbnailHeight * visibleSlidesCount + sectionsInfo.headerCount * this.getSectionHeaderLength();
+			}
 		}
 
 		const totalThumbnailsLength = isHorizontalOrientation
 			? 2 * this.const_offset_x + cumulativeThumbnailLength + (slidesCount > 0 ? (slidesCount - 1) * 3 * this.const_border_w : 0)
-			: 2 * this.const_offset_y + cumulativeThumbnailLength + (slidesCount > 0 ? (slidesCount - 1) * 3 * this.const_border_w : 0);
+			: 2 * this.const_offset_y + cumulativeThumbnailLength + (visibleSlidesCount > 0 ? (visibleSlidesCount - 1) * 3 * this.const_border_w : 0);
 
 		return totalThumbnailsLength;
 	};

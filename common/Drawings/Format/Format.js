@@ -16092,6 +16092,70 @@
 						s.Seek2(_end_rec2);
 						break;
 					}
+					case 7: {
+						// sections: the slides of a section are given by their positions in the list of slides
+						var _end_rec7 = s.cur + s.GetULong() + 4;
+						this.sectionLst = [];
+						while (s.cur < _end_rec7) {
+							var _rec7 = s.GetUChar();
+							if (_rec7 === 0) {
+								s.Skip2(4); // len
+								var _countSec = s.GetULong();
+								for (var iSec = 0; iSec < _countSec; iSec++) {
+									s.Skip2(1);
+									var _end_sec = s.cur + s.GetLong() + 4;
+									var _sec = {id: "", name: "", slides: []};
+									s.Skip2(1); // start attributes
+									while (true) {
+										var _atSec = s.GetUChar();
+										if (_atSec === g_nodeAttributeEnd)
+											break;
+										if (_atSec === 0)
+											_sec.id = s.GetString2();
+										else if (_atSec === 1)
+											_sec.name = s.GetString2();
+										else
+											break;
+									}
+									while (s.cur < _end_sec) {
+										var _recSec = s.GetUChar();
+										if (_recSec === 0) {
+											s.Skip2(4); // len
+											var _countId = s.GetULong();
+											for (var iId = 0; iId < _countId; iId++) {
+												s.Skip2(1);
+												var _end_id = s.cur + s.GetLong() + 4;
+												s.Skip2(1); // start attributes
+												var _slidePos = null;
+												while (true) {
+													var _atId = s.GetUChar();
+													if (_atId === g_nodeAttributeEnd)
+														break;
+													if (_atId === 0)
+														_slidePos = parseInt(s.GetString2(), 10);
+													else if (_atId === 1)
+														s.GetString2();
+													else
+														break;
+												}
+												if (_slidePos !== null && !isNaN(_slidePos))
+													_sec.slides.push(_slidePos);
+												s.Seek2(_end_id);
+											}
+										} else {
+											s.SkipRecord();
+										}
+									}
+									s.Seek2(_end_sec);
+									this.sectionLst.push(_sec);
+								}
+							} else {
+								s.SkipRecord();
+							}
+						}
+						s.Seek2(_end_rec7);
+						break;
+					}
 					case 8: {
 						oPresentattion.Api.vbaProject = new AscCommon.VbaProject();
 						oPresentattion.Api.vbaProject.fromStream(s);

@@ -377,6 +377,7 @@
 			"slide/Editor/Shortcuts.js",
 			"slide/Editor/elixir-keys.js",
 			"slide/Editor/selection-pane.js",
+			"slide/Editor/sections.js",
 
 			"word/Editor/api/document-column-props.js",
 			"word/Editor/api/document-columns-props.js",

@@ -1280,6 +1280,37 @@ function CBinaryFileWriter()
                 this.EndRecord();
             }
         }
+        var _sections = presentation.getSectionsToSave ? presentation.getSectionsToSave() : null;
+        if (_sections && _sections.length)
+        {
+            // the slides of a section are given by their positions in the list of slides (the core converter turns them into the ids of the file)
+            this.StartRecord(7);
+            this.StartRecord(0);
+            this.WriteULong(_sections.length);
+            for (var iSec = 0; iSec < _sections.length; iSec++)
+            {
+                var _sec = _sections[iSec];
+                this.StartRecord(0);
+                this.WriteUChar(g_nodeAttributeStart);
+                this._WriteString1(0, _sec.id);
+                this._WriteString1(1, _sec.name);
+                this.WriteUChar(g_nodeAttributeEnd);
+                this.StartRecord(0);
+                this.WriteULong(_sec.slides.length);
+                for (var iId = 0; iId < _sec.slides.length; iId++)
+                {
+                    this.StartRecord(0);
+                    this.WriteUChar(g_nodeAttributeStart);
+                    this._WriteString1(0, "" + _sec.slides[iId]);
+                    this.WriteUChar(g_nodeAttributeEnd);
+                    this.EndRecord();
+                }
+                this.EndRecord();
+                this.EndRecord();
+            }
+            this.EndRecord();
+            this.EndRecord();
+        }
         this.WriteRecord4(8, presentation.Api.vbaProject);
 
 		var macros = presentation.Api.macros.GetData();

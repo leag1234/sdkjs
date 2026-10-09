@@ -627,6 +627,10 @@ function BinaryPPTYLoader()
                     _slideNum++;
                 }
             }
+			if (this.presentation.pres && this.presentation.pres.sectionLst && this.presentation.applyLoadedSections)
+			{
+				this.presentation.applyLoadedSections(this.presentation.pres.sectionLst);
+			}
 			if (undefined != _main_tables["45"])
 			{
 				s.Seek2(_main_tables["45"]);
