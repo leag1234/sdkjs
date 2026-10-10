@@ -113,18 +113,32 @@
 	}
 	function Writer(env) { this.env = env; this.scanner = new Scanner(); this.parts = []; this.stats = {}; }
 	Writer.prototype.feed = async function (u) { this.parts.push(this.scanner.feed(u)); };
+	var fontLibrary;
+	function loadFonts() {
+		if (!fontLibrary) fontLibrary = new Promise(function (resolve, reject) {
+			if (window.EOWasmFonts) { resolve(window.EOWasmFonts); return; }
+			var script = document.createElement('script');
+			script.src = BASE + 'wasm-fonts.js';
+			script.onload = function () { window.EOWasmFonts ? resolve(window.EOWasmFonts) : reject(unsupported('font', 'shared font service missing')); };
+			script.onerror = function () { reject(unsupported('font', 'shared font service unavailable')); };
+			document.head.appendChild(script);
+		});
+		return fontLibrary;
+	}
 	Writer.prototype.finish = async function () {
-		var files = [], fonts = [], byKey = new Map(), fontBytes = 0, imageBytes = 0;
-		for (var entry of this.scanner.fonts.values()) {
-			var font = await this.env.getFont(entry.name, entry.style);
-			if (!font || !font.bytes || !font.bytes.length) throw unsupported('font', entry.name);
+		var files = [], fonts = [], fontBytes = 0, imageBytes = 0;
+		var service = await loadFonts();
+		// The same prepareFS interface is used by local conversion modules. Collect
+		// isolated copies here; the PDF worker receives them through transferables.
+		var selected = await service.prepareFS({ FS: {
+			mkdirTree: function () {},
+			writeFile: function (path, bytes) { files.push({ path: path, bytes: bytes.slice() }); }
+		} }, Array.from(this.scanner.fonts.values()));
+		fontBytes = selected.bytes;
+		selected.written.forEach(function (font) {
 			embeddingAllowed(font.bytes, font.faceIndex || 0);
-			fonts.push({ name: entry.name, style: entry.style, source: font.source });
-			if (!byKey.has(font.key)) {
-				var b = font.bytes.slice(); byKey.set(font.key, true); fontBytes += b.length;
-				files.push({ path: '/fonts/font' + byKey.size + '.ttf', bytes: b });
-			}
-		}
+			fonts.push({ name: font.name, style: font.style, source: font.source });
+		});
 		for (var image of this.scanner.images.values()) {
 			var raw;
 			try { raw = await this.env.getRawImage(image.source); } catch (e) { throw unsupported('image', image.source); }
@@ -141,7 +155,9 @@
 		var result = await convert({ stream: join(this.parts), files: files }, this.env['wasmRuntime']);
 		this.parts = [];
 		this.stats = { pages: this.scanner.pages, images: this.scanner.images.size, links: this.scanner.links,
-			fonts: fonts, fontBytes: fontBytes, imageBytes: imageBytes, worker: true,
+			fonts: fonts, fontBytes: fontBytes, fontFiles: new Set(selected.written.map(function (font) { return font.path; })).size,
+			fontDownloadedBytes: selected.written.reduce(function (n, font) { return n + (font.downloadBytes || 0); }, 0),
+			imageBytes: imageBytes, worker: true,
 			convertMs: result.convertMs, initMs: result.initMs, heapBytes: result.heapBytes };
 		return result.bytes;
 	};
