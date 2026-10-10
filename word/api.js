@@ -4708,10 +4708,12 @@ background-repeat: no-repeat;\
 		if (this.isRestrictionForms() || this.isRestrictionComments())
 			isShow = false;
 
+		let marksChanged = this.ShowParaMarks !== isShow;
 		this.ShowParaMarks = isShow;
 		// hidden text is shown with the formatting marks: it changes the layout
 		let logicDocument = this.WordControl.m_oLogicDocument;
-		if (logicDocument && logicDocument.refreshHiddenText)
+		// Repeated settings during opening do not change hidden-text visibility.
+		if (marksChanged && logicDocument && logicDocument.refreshHiddenText)
 			logicDocument.refreshHiddenText();
 		this.WordControl.OnRePaintAttack();
 

@@ -532,7 +532,8 @@
 	};
 	CRunText.prototype.updateRtlFlag = function()
 	{
-		let isRtl = AscFonts.isRtlScript(this.Value);
+		// ASCII has no RTL scripts; avoid a HarfBuzz call for each ordinary text character.
+		let isRtl = (this.Value >= 0 && this.Value <= 0x7F) ? false : AscFonts.isRtlScript(this.Value);
 		
 		if (isRtl)
 			this.Flags |= FLAGS_RTL;
