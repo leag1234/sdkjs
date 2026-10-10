@@ -237,11 +237,18 @@
 		return result;
 	}
 	function fontsOfDocument(input) {
-		if (Array.isArray(input)) return Array.from(new Set(input.flatMap(fontsOfDocument)));
+		if (Array.isArray(input)) {
+			var unique = new Map();
+			input.flatMap(fontsOfDocument).forEach(function (entry) {
+				var key = typeof entry === 'string' ? 'family:' + entry : 'style:' + entry.name + '|' + entry.style;
+				unique.set(key, entry);
+			});
+			return Array.from(unique.values());
+		}
 		var u = typeof input === 'string' ? new TextEncoder().encode(input) : input instanceof Uint8Array ? input : new Uint8Array(input);
 		if (u[0] === 202) {
 			var scanner = new Scanner(); scanner.feed(u);
-			return Array.from(new Set(Array.from(scanner.fonts.values(), function (f) { return f.name; })));
+			return Array.from(scanner.fonts.values());
 		}
 		// Word editor binaries have a typed font table. Do not guess by searching strings.
 		var text = new TextDecoder().decode(u.subarray(0, 32)), header = /^DOCY;v(\d+);(\d+);/.exec(text);
