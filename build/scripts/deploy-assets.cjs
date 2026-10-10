@@ -67,6 +67,7 @@ const OTHER_FILES = [
             'serviceworker/*',
             'clientpdf/eo-pdf.js',
             'clientpdf/wasm-pdf.js',
+            'clientpdf/wasm-fonts.js',
             'clientpdf/wasm-worker.js',
             'clientpdf/runtime/**/*',
             'clientpdf/vendor/fontkit/*',
