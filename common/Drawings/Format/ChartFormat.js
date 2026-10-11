@@ -6906,6 +6906,29 @@
                                 }
                             }
                         }
+                        else if((oChart.getObjectType() === AscDFH.historyitem_type_BarChart && oChart.barDir !== AscFormat.BAR_DIR_BAR) ||
+                            oChart.getObjectType() === AscDFH.historyitem_type_LineChart ||
+                            oChart.getObjectType() === AscDFH.historyitem_type_AreaChart)
+                        {
+                            // vertical bars, lines, areas: the category axis is horizontal and the value axis vertical, whatever
+                            // axPos says. Other producers (openpyxl writes axPos="l" on both axes) rely on Excel doing the same
+                            for(var _c = 0; _c < axis_by_types.catAx.length; ++_c)
+                            {
+                                var cat_ax = axis_by_types.catAx[_c];
+                                if(cat_ax.axPos !== AscFormat.AX_POS_B && cat_ax.axPos !== AscFormat.AX_POS_T )
+                                {
+                                    cat_ax.setAxPos(AscFormat.AX_POS_B);
+                                }
+                            }
+                            for(var _c = 0; _c < axis_by_types.valAx.length; ++_c)
+                            {
+                                var val_ax = axis_by_types.valAx[_c];
+                                if(val_ax.axPos !== AscFormat.AX_POS_L && val_ax.axPos !== AscFormat.AX_POS_R )
+                                {
+                                    val_ax.setAxPos(AscFormat.AX_POS_L);
+                                }
+                            }
+                        }
                     }
                 }
                 if(oChart.setVaryColors && oChart.varyColors === null){
