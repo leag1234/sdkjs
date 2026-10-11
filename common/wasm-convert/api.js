@@ -12,7 +12,7 @@
   if (!formats[from] || !formats[to]) throw error('format','Unsupported conversion format');
   if (!(input instanceof Uint8Array) && !(input instanceof ArrayBuffer)) throw error('input','Expected document bytes');
   if (options.signal && options.signal.aborted) throw error('cancelled','Conversion cancelled');
-  var runtime=new URL(options.runtime || 'runtime/9eb58bdee9bc-c310de244267-st/',base);
+  var runtime=new URL(options.runtime || 'runtime/528e920e4f34-98317b47cc65-st/',base);
   if (!runtime.pathname.endsWith('/')) runtime.pathname += '/';
   if (runtime.origin !== window.location.origin) throw error('runtime','Conversion runtime must be same-origin');
   var bytes=new Uint8Array(input instanceof ArrayBuffer?input.slice(0):input.slice()),files=[];
