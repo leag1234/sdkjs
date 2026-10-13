@@ -17,7 +17,7 @@ self.onmessage=async function(event){
   var mod=await createX2t({noInitialRun:true,print:function(){},printErr:function(){},
    instantiateWasm:function(imports,receive){var instance=new WebAssembly.Instance(compiled,imports);receive(instance,compiled);return instance.exports;}
   });
-  var FS=mod.FS,codes={docx:65,odt:67,pptx:129,odp:131,xlsx:257,ods:259,doct:8193,xlst:8194,pptt:8195};
+  var FS=mod.FS,codes={docx:65,doc:66,odt:67,rtf:68,txt:69,docm:75,dotx:76,pptx:129,ppt:130,odp:131,ppsx:132,potx:135,xlsx:257,xls:258,ods:259,csv:260,xlsm:261,xltx:262,doct:8193,xlst:8194,pptt:8195};
   if(!codes[job.from]||!codes[job.to])throw new Error('Unsupported conversion format');
   ['/work/media','/fonts','/tmp/conversion'].forEach(function(p){FS.mkdirTree(p);});
   FS.writeFile('/work/input.'+job.from,job.bytes);
@@ -26,11 +26,19 @@ self.onmessage=async function(event){
    if(!/^(media|themes)\/[a-zA-Z0-9_./ -]+$/.test(f.path)||f.path.split('/').some(function(p){return !p||p==='.'||p==='..';}))throw new Error('Invalid resource path');
    var path='/work/'+f.path;FS.mkdirTree(path.slice(0,path.lastIndexOf('/')));FS.writeFile(path,f.bytes);
   });
-  var output='/work/output.'+job.to;
+  var output='/work/output.'+job.to,csv=job.csv||{},encoding=csv.encoding===undefined?46:csv.encoding,delimiter=csv.delimiter===undefined?4:csv.delimiter;
+  if(!Number.isInteger(encoding)||encoding<0||encoding>255||!Number.isInteger(delimiter)||delimiter<0||delimiter>5)throw new Error('Invalid text conversion options');
+  function xml(value){return value.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c];});}
+  var custom='';
+  if(csv.delimiterChar!==undefined&&csv.delimiterChar!==null&&csv.delimiterChar!==''){
+   if(typeof csv.delimiterChar!=='string'||Array.from(csv.delimiterChar).length!==1||/[\x00-\x1f]/.test(csv.delimiterChar))throw new Error('Invalid CSV delimiter');
+   custom='<m_nCsvDelimiterChar>'+xml(csv.delimiterChar)+'</m_nCsvDelimiterChar>';
+  }
   FS.writeFile('/task.xml','<?xml version="1.0" encoding="utf-8"?><TaskQueueDataConvert>'+
    '<m_sFileFrom>/work/input.'+job.from+'</m_sFileFrom><m_sFileTo>'+output+'</m_sFileTo>'+
    '<m_nFormatFrom>'+codes[job.from]+'</m_nFormatFrom><m_nFormatTo>'+codes[job.to]+'</m_nFormatTo>'+
    '<m_bIsNoBase64>true</m_bIsNoBase64><m_sFontDir>/fonts</m_sFontDir>'+
+   '<m_nCsvTxtEncoding>'+encoding+'</m_nCsvTxtEncoding><m_nCsvDelimiter>'+delimiter+'</m_nCsvDelimiter>'+custom+
    '<m_sTempDir>/tmp/conversion</m_sTempDir></TaskQueueDataConvert>');
   var initMs=performance.now()-start,at=performance.now();progress('converting');
   try{nativeStatus=mod.callMain(['/task.xml']);}catch(e){if(typeof e.status==='number')nativeStatus=e.status;else throw e;}

@@ -66,6 +66,7 @@ const OTHER_FILES = [
             'zlib/engine/*',
             'serviceworker/*',
             'clientpdf/eo-pdf.js',
+            'clientpdf/clientpdf.js',
             'wasm-convert/**/*',
             'clientpdf/wasm-pdf.js',
             'clientpdf/wasm-fonts.js',

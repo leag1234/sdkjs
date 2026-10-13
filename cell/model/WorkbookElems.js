@@ -15123,7 +15123,7 @@ function RangeDataManagerElem(bbox, data)
 		//
 		//
 		// вот так, если это будет ссылка на редактор файла в тестовом как в onedrive
-		// onRequestReferenceData({data:{link:"http://192.168.1.1/editor?fileName=new.docx"}})
+		// onRequestReferenceData({data:{link:"http://office.example.invalid/editor?fileName=new.docx"}})
 		//
 		// вот так, если б это было просто путь к файлу как в MS:
 		// 	onRequestReferenceData({data:{path: "new.docx"}})

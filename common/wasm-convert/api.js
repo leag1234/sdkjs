@@ -5,14 +5,14 @@
 (function (window) {
  'use strict';
  var script = document.currentScript.src, base = new URL('.', script).href;
- var formats = {docx:65,odt:67,pptx:129,odp:131,xlsx:257,ods:259,doct:8193,xlst:8194,pptt:8195};
+ var formats = {docx:65,doc:66,odt:67,rtf:68,txt:69,docm:75,dotx:76,pptx:129,ppt:130,odp:131,ppsx:132,potx:135,xlsx:257,xls:258,ods:259,csv:260,xlsm:261,xltx:262,doct:8193,xlst:8194,pptt:8195};
  function error(code,message) { var e=new Error(message); e.code=code; return e; }
  async function convert(input,from,to,options) {
   options=options||{};
   if (!formats[from] || !formats[to]) throw error('format','Unsupported conversion format');
   if (!(input instanceof Uint8Array) && !(input instanceof ArrayBuffer)) throw error('input','Expected document bytes');
   if (options.signal && options.signal.aborted) throw error('cancelled','Conversion cancelled');
-  var runtime=new URL(options.runtime || 'runtime/528e920e4f34-98317b47cc65-st/',base);
+  var runtime=new URL(options.runtime || 'runtime/528e920e4f34-769ba807df31-st/',base);
   if (!runtime.pathname.endsWith('/')) runtime.pathname += '/';
   if (runtime.origin !== window.location.origin) throw error('runtime','Conversion runtime must be same-origin');
   var bytes=new Uint8Array(input instanceof ArrayBuffer?input.slice(0):input.slice()),files=[];
@@ -45,7 +45,7 @@
     output.resources=data.resources;output.stats=Object.assign({},data.stats,{fontBytes:prepared.bytes,fontFiles:files.length-1});
     finish(null,output);
    };
-   try{worker.postMessage({bytes:bytes,from:from,to:to,runtime:runtime.href,files:files,resources:options.resources||[]},[bytes.buffer].concat(files.map(function(f){return f.bytes.buffer;})));}catch(e){finish(error('input','Conversion input cannot be sent to a worker'));}
+   try{worker.postMessage({bytes:bytes,from:from,to:to,runtime:runtime.href,files:files,resources:options.resources||[],csv:options.csv},[bytes.buffer].concat(files.map(function(f){return f.bytes.buffer;})));}catch(e){finish(error('input','Conversion input cannot be sent to a worker'));}
   });
  }
  window.EOWasmConvert={convert:convert,formats:formats};

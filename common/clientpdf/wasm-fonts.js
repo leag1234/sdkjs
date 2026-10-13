@@ -95,6 +95,12 @@
 	}
 	async function consent(lf) {
 		if (!lf || !lf.hasConsent || !lf.hasConsent()) return false;
+		var bridge;
+		try { bridge = window.eoDesktop || window.parent && window.parent.eoDesktop; } catch (e) {}
+		if (bridge && typeof bridge.fontConsent === 'function') {
+			try { return typeof bridge.fontPermission === 'function' && await bridge.fontPermission(); }
+			catch (e) { return false; }
+		}
 		if (window.navigator && window.navigator.permissions) {
 			try { return (await window.navigator.permissions.query({ name: 'local-fonts' })).state === 'granted'; }
 			catch (e) { return false; }
