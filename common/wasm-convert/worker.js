@@ -8,6 +8,8 @@ self.onmessage=async function(event){
  var job=event.data,start=performance.now(),nativeStatus;
  function progress(stage){self.postMessage({progress:{stage:stage}});}
  try{
+  importScripts(new URL('password-options.js',self.location.href).href);
+  self.EOWasmPasswordOptions.check(job);
   progress('loading-runtime');
   importScripts(job.runtime+'x2t.js');
   var response=await fetch(job.runtime+'x2t.wasm',{credentials:'same-origin',cache:'force-cache'});
@@ -34,14 +36,16 @@ self.onmessage=async function(event){
    if(typeof csv.delimiterChar!=='string'||Array.from(csv.delimiterChar).length!==1||/[\x00-\x1f]/.test(csv.delimiterChar))throw new Error('Invalid CSV delimiter');
    custom='<m_nCsvDelimiterChar>'+xml(csv.delimiterChar)+'</m_nCsvDelimiterChar>';
   }
+  var passwords=self.EOWasmPasswordOptions.tags(job);
   FS.writeFile('/task.xml','<?xml version="1.0" encoding="utf-8"?><TaskQueueDataConvert>'+
    '<m_sFileFrom>/work/input.'+job.from+'</m_sFileFrom><m_sFileTo>'+output+'</m_sFileTo>'+
    '<m_nFormatFrom>'+codes[job.from]+'</m_nFormatFrom><m_nFormatTo>'+codes[job.to]+'</m_nFormatTo>'+
    '<m_bIsNoBase64>true</m_bIsNoBase64><m_sFontDir>/fonts</m_sFontDir>'+
    '<m_nCsvTxtEncoding>'+encoding+'</m_nCsvTxtEncoding><m_nCsvDelimiter>'+delimiter+'</m_nCsvDelimiter>'+custom+
-   '<m_sTempDir>/tmp/conversion</m_sTempDir></TaskQueueDataConvert>');
+   '<m_sTempDir>/tmp/conversion</m_sTempDir>'+passwords+'</TaskQueueDataConvert>');
   var initMs=performance.now()-start,at=performance.now();progress('converting');
   try{nativeStatus=mod.callMain(['/task.xml']);}catch(e){if(typeof e.status==='number')nativeStatus=e.status;else throw e;}
+  if(nativeStatus===90||nativeStatus===91)throw self.EOWasmPasswordOptions.nativeError(nativeStatus);
   if(nativeStatus!==0)throw new Error('Native conversion failed: '+nativeStatus);
   var bytes=FS.readFile(output);if(!bytes.length)throw new Error('Conversion produced no output');
   var resources=[];
@@ -49,5 +53,6 @@ self.onmessage=async function(event){
   ['media','themes'].forEach(function(p){try{walk('/work/'+p);}catch(e){if(e.code!=='ENOENT'&&e.errno!==44)throw e;}});
   self.postMessage({bytes:bytes,resources:resources,stats:{initMs:Math.round(initMs),convertMs:Math.round(performance.now()-at),heapBytes:mod.HEAPU8.length}},
    [bytes.buffer].concat(resources.map(function(f){return f.bytes.buffer;})));
- }catch(e){self.postMessage({error:String(e.message||e),code:typeof nativeStatus==='number'?'conversion':'runtime',nativeStatus:nativeStatus});}
+ }catch(e){self.postMessage(self.EOWasmPasswordOptions?self.EOWasmPasswordOptions.failure(e,job,nativeStatus):{error:'Cannot load document password support',code:'runtime'});}
+ finally{job.openPassword=undefined;job.savePassword=undefined;passwords=undefined;}
 };

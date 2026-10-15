@@ -1,3 +1,0 @@
-# sdkjs
-
-@AGENTS.md

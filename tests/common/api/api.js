@@ -61,7 +61,7 @@ $(function () {
 			[".mysite@mysite.org", AscCommon.c_oAscUrlType.Email],//todo Invalid
 			["mysite()*@gmail.com", AscCommon.c_oAscUrlType.Invalid],
 
-			["smb://files.example.invalid/e/Testfolder/TestFile.docx", AscCommon.c_oAscUrlType.Unsafe],
+			["smb://192.0.2.10/e/Testfolder/TestFile.docx", AscCommon.c_oAscUrlType.Unsafe],
 
 			["tessa://tessaclient.EPD/?Action=OpenCard&ID=c40076f5-daa9-4929-8f66-d3fd6ae2dcb1", AscCommon.c_oAscUrlType.Unsafe],
 			["joplin://x-callback-url/openFolder?id=1234", AscCommon.c_oAscUrlType.Unsafe],
@@ -118,7 +118,7 @@ $(function () {
 			[".mysite@mysite.org", AscCommon.c_oAscUrlType.Email],//todo Invalid
 			["mysite()*@gmail.com", AscCommon.c_oAscUrlType.Invalid],
 
-			["smb://files.example.invalid/e/Testfolder/TestFile.docx", AscCommon.c_oAscUrlType.Unsafe],
+			["smb://192.0.2.10/e/Testfolder/TestFile.docx", AscCommon.c_oAscUrlType.Unsafe],
 
 			["tessa://tessaclient.EPD/?Action=OpenCard&ID=c40076f5-daa9-4929-8f66-d3fd6ae2dcb1", AscCommon.c_oAscUrlType.Unsafe],
 
