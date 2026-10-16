@@ -3075,6 +3075,22 @@
 		}
 		return true;
 	}
+	function isSafeHyperlink(url)
+	{
+		if (typeof url !== 'string' || /[\x00-\x1f\x7f]/.test(url))
+			return false;
+		url = url.trim();
+		return /^(https?:|ftp:|mailto:|tel:|#)/i.test(url);
+	}
+	function getSafeHyperlink(url)
+	{
+		if (typeof url !== 'string' || /[\x00-\x1f\x7f]/.test(url))
+			return null;
+		url = url.trim();
+		if (/^www\./i.test(url))
+			url = 'http://' + url;
+		return isSafeHyperlink(url) ? url : null;
+	}
 	function getUrlType(url)
 	{
 		//todo validate blob, ftp, http, https, ws, wss, file with new URL https://nodejs.org/api/url.html#special-schemes
@@ -15670,6 +15686,8 @@
 	window["AscCommon"].uploadDataUrlAsFile = uploadDataUrlAsFile;
 	window["AscCommon"].DownloadFileFromBytes = DownloadFileFromBytes;
 	window["AscCommon"].CanDropFiles = CanDropFiles;
+	window["AscCommon"].isSafeHyperlink = isSafeHyperlink;
+	window["AscCommon"].getSafeHyperlink = getSafeHyperlink;
 	window["AscCommon"].getUrlType = getUrlType;
 	window["AscCommon"].prepareUrl = prepareUrl;
 	window["AscCommon"].getUserColorById = getUserColorById;

@@ -7,10 +7,12 @@
 self.onmessage = async function (event) {
 	try {
 		var job = event.data, start = performance.now();
+		if(job.progress===true)self.postMessage({type:'progress',stage:'loading-runtime'});
 		importScripts(job.runtime + 'x2t.js');
 		var response = await fetch(job.runtime + 'x2t.wasm', { credentials: 'same-origin', cache: 'force-cache' });
 		if (!response.ok) throw new Error('cannot load wasm module');
 		var compiled = await WebAssembly.compile(await response.arrayBuffer());
+		if(job.progress===true)self.postMessage({type:'progress',stage:'initializing'});
 		var mod = await createX2t({
 			noInitialRun: true, print: function () {}, printErr: function () {},
 			instantiateWasm: function (imports, receive) {
@@ -29,10 +31,11 @@ self.onmessage = async function (event) {
 			'<m_bIsNoBase64>true</m_bIsNoBase64><m_sFontDir>/fonts</m_sFontDir>' +
 			'<m_sTempDir>/tmp/pdf</m_sTempDir></TaskQueueDataConvert>');
 		var initMs = performance.now() - start, at = performance.now(), rc;
+		if(job.progress===true)self.postMessage({type:'progress',stage:'converting'});
 		try { rc = mod.callMain(['/task.xml']); } catch (e) { if (typeof e.status === 'number') rc = e.status; else throw e; }
 		if (rc !== 0) throw new Error('native PDF conversion failed: ' + rc);
 		var bytes = FS.readFile('/p/out.pdf');
 		if (bytes.length < 8 || String.fromCharCode.apply(null, bytes.subarray(0, 5)) !== '%PDF-') throw new Error('invalid PDF output');
-		self.postMessage({ bytes: bytes, initMs: Math.round(initMs), convertMs: Math.round(performance.now() - at), heapBytes: mod.HEAPU8.length }, [bytes.buffer]);
+		self.postMessage({ type:'result',bytes: bytes, initMs: Math.round(initMs), convertMs: Math.round(performance.now() - at), heapBytes: mod.HEAPU8.length }, [bytes.buffer]);
 	} catch (e) { self.postMessage({ error: String(e.message || e), code: 'wasm' }); }
 };

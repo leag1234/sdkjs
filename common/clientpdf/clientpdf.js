@@ -221,11 +221,15 @@
 		return { bytes: new Uint8Array(await response.arrayBuffer()) };
 	}
 
+	function checkCancelled(signal){if(signal&&signal.aborted)throw Object.assign(new Error('PDF export cancelled'),{name:'AbortError',code:'aborted'});}
+	function reportProgress(options,value){try{if(options.onProgress){var result=options.onProgress(value);if(result&&result.catch)result.catch(function(){});}}catch(_error){}}
+
 	// ---- capture + write -------------------------------------------------------------------------
 	async function buildOnce(api, options, onProgress, id) {
+		checkCancelled(options.signal);
 		var backend = backends[id];
 		if (!backend) throw unsupported('backend', id);
-		await backend.load();
+		await backend.load();checkCancelled(options.signal);
 		var t0 = now();
 		var dd = api.WordControl.m_oDrawingDocument;
 		var logic = api.WordControl.m_oLogicDocument;
@@ -245,7 +249,7 @@
 			fonts: FontSource, getFont: FontSource.get, getImage: getImage, getRawImage: getRawImage,
 			title: api.documentTitle ? String(api.documentTitle).replace(/\.[^.]+$/, '') : '',
 			lang: api.asc_getLocale ? (function () { try { var l = api.asc_getLocale(); return typeof l === 'string' ? l : ''; } catch (e) { return ''; } })() : '',
-			producer: 'ElixirOffice', creator: 'ElixirOffice'
+			producer: 'ElixirOffice', creator: 'ElixirOffice',signal:options.signal,onProgress:options.onProgress
 		});
 
 		var watermark = api.watermarkDraw;
@@ -260,7 +264,9 @@
 			r.Memory.Seek(0);
 			r.DocInfo(api.asc_getCoreProps());
 			await writer.feed(r.Memory.GetDataUint8(0, r.Memory.GetCurPosition()));
+			reportProgress(options,{stage:'converting',completed:0,total:list.length});
 			for (var k = 0; k < list.length; k++) {
+				checkCancelled(options.signal);
 				var i = list[k], page = src.m_arrPages[i], tc = now();
 				r.Memory.Seek(0);
 				r.VectorMemoryForPrint.ClearNoAttack();
@@ -274,7 +280,9 @@
 				captureMs += now() - tc;
 				writer.nextPageIndex = i;
 				await writer.feed(r.Memory.GetDataUint8(0, r.Memory.GetCurPosition()));
+				checkCancelled(options.signal);
 				if (onProgress) onProgress(k + 1, list.length);
+				reportProgress(options,{stage:'converting',completed:k+1,total:list.length});
 				if (now() - last > YIELD_MS) { await nextFrame(); last = now(); }
 			}
 			r.Memory.Seek(0);
@@ -285,7 +293,7 @@
 			api.ShowParaMarks = oldMarks;
 			dd.printedDocument = null;
 		}
-		var bytes = await writer.finish();
+		checkCancelled(options.signal);var bytes = await writer.finish();checkCancelled(options.signal);
 		var stats = writer.stats || {};
 		stats.backend = backend.id;
 		stats.captureMs = Math.round(captureMs);
@@ -300,7 +308,7 @@
 		backendId = id;
 		try { return await buildOnce(api, options, onProgress, id); }
 		catch (error) {
-			if (id !== 'wasm') throw error;
+			if (id !== 'wasm'||error.name==='AbortError'||error.code==='aborted'||options.signal&&options.signal.aborted) throw error;
 			var result = await buildOnce(api, options, onProgress, 'js');
 			result.stats.fallbacks = [{ from: 'wasm', to: 'js', reason: error.code || 'wasm', detail: error.detail || error.message }];
 			result.stats.totalMs = Math.round(now() - start);

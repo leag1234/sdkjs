@@ -93,26 +93,44 @@
 			}
 		} catch (e) { if (e.eoUnsupported) throw e; throw unsupported('font', 'invalid font data'); }
 	}
-	function convert(job, runtime) {
+
+	function cancelled() { return Object.assign(new Error('PDF export cancelled'), {name:'AbortError',code:'aborted'}); }
+	function check(signal) { if(signal && signal.aborted) throw cancelled(); }
+	function progress(env,value) { try { if(env.onProgress) { var result=env.onProgress(value); if(result&&result.catch)result.catch(function(){}); } } catch(_error) {} }
+	function abortable(promise,signal) {
+		if(!signal)return promise;
+		return new Promise(function(resolve,reject){
+			var done=false;
+			function finish(error,value){if(done)return;done=true;signal.removeEventListener('abort',cancel);error?reject(error):resolve(value);}
+			function cancel(){finish(cancelled());}
+			signal.addEventListener('abort',cancel,{once:true});
+			Promise.resolve(promise).then(function(value){finish(null,value);},function(error){finish(error);});
+			if(signal.aborted)cancel();
+		});
+	}
+	function convert(job, runtime, env) {
 		return new Promise(function (resolve, reject) {
-			var worker, timer;
-			function done(error, result) { clearTimeout(timer); if (worker) worker.terminate(); if (error) reject(error); else resolve(result); }
-			try { worker = new Worker(BASE + 'wasm-worker.js'); } catch (e) { done(unsupported('wasm-worker', e.message)); return; }
-			timer = setTimeout(function () { done(unsupported('wasm-timeout')); }, 120000);
-			worker.onerror = function () { done(unsupported('wasm-worker', 'worker failed')); };
-			worker.onmessage = function (event) {
-				var m = event.data;
-				if (m.error) done(unsupported(m.code || 'wasm', m.error));
-				else done(null, m);
+			var worker,timer,done=false,signal=env.signal;
+			function finish(error,result){if(done)return;done=true;clearTimeout(timer);if(signal)signal.removeEventListener('abort',cancel);if(worker)worker.terminate();error?reject(error):resolve(result);}
+			function cancel(){finish(cancelled());}
+			if(signal&&signal.aborted){cancel();return;}
+			try { worker = new Worker(BASE + 'wasm-worker.js'); } catch (e) { finish(unsupported('wasm-worker', e.message)); return; }
+			timer=setTimeout(function(){finish(unsupported('wasm-timeout'));},120000);
+			worker.onerror=function(event){if(event&&event.preventDefault)event.preventDefault();finish(unsupported('wasm-worker','worker failed'));};
+			worker.onmessage=function(event){
+				if(done)return;var m=event.data;
+				if(m&&m.type==='progress'){if(['loading-runtime','initializing','converting'].indexOf(m.stage)>=0)progress(env,{stage:m.stage});return;}
+				if(!m||!(m.bytes instanceof Uint8Array)&&!m.error){finish(unsupported('wasm-worker','invalid worker response'));return;}
+				if(m.error)finish(unsupported(m.code||'wasm',m.error));else finish(null,m);
 			};
-			job.runtime = runtime;
-			var transfers = [job.stream.buffer];
-			job.files.forEach(function (f) { transfers.push(f.bytes.buffer); });
-			try { worker.postMessage(job, transfers); } catch (e) { done(unsupported("wasm-worker", e.message)); }
+			if(signal)signal.addEventListener('abort',cancel,{once:true});
+			job.runtime=runtime;job.progress=typeof env.onProgress==='function';
+			var transfers=[job.stream.buffer];job.files.forEach(function(f){transfers.push(f.bytes.buffer);});
+			try{worker.postMessage(job,transfers);}catch(e){finish(unsupported('wasm-worker',e.message));}
 		});
 	}
 	function Writer(env) { this.env = env; this.scanner = new Scanner(); this.parts = []; this.stats = {}; }
-	Writer.prototype.feed = async function (u) { this.parts.push(this.scanner.feed(u)); };
+	Writer.prototype.feed = async function (u) { check(this.env.signal);this.parts.push(this.scanner.feed(u)); };
 	var fontLibrary;
 	function loadFonts() {
 		if (!fontLibrary) fontLibrary = new Promise(function (resolve, reject) {
@@ -126,33 +144,39 @@
 		return fontLibrary;
 	}
 	Writer.prototype.finish = async function () {
+		try{
 		var files = [], fonts = [], fontBytes = 0, imageBytes = 0;
-		var service = await loadFonts();
+		check(this.env.signal);progress(this.env,{stage:'preparing'});
+		var service = await abortable(loadFonts(),this.env.signal);check(this.env.signal);
 		// The same prepareFS interface is used by local conversion modules. Collect
 		// isolated copies here; the PDF worker receives them through transferables.
-		var selected = await service.prepareFS({ FS: {
+		var selected = await abortable(service.prepareFS({ FS: {
 			mkdirTree: function () {},
 			writeFile: function (path, bytes) { files.push({ path: path, bytes: bytes.slice() }); }
-		} }, Array.from(this.scanner.fonts.values()));
+		} }, Array.from(this.scanner.fonts.values())),this.env.signal);check(this.env.signal);
 		fontBytes = selected.bytes;
 		selected.written.forEach(function (font) {
 			embeddingAllowed(font.bytes, font.faceIndex || 0);
 			fonts.push({ name: font.name, style: font.style, source: font.source });
 		});
 		for (var image of this.scanner.images.values()) {
+			check(this.env.signal);
 			var raw;
-			try { raw = await this.env.getRawImage(image.source); } catch (e) { throw unsupported('image', image.source); }
+			try { raw = await abortable(this.env.getRawImage(image.source),this.env.signal); } catch (e) { if(e.name==='AbortError')throw e;throw unsupported('image', image.source); }
 			if (!raw || !raw.bytes.length) throw unsupported('image', image.source);
 			imageBytes += raw.bytes.length; files.push({ path: '/p/' + image.path, bytes: raw.bytes.slice() });
 			// The native renderer uses the original vector sidecar when one exists.
 			if (/\.svg$/i.test(image.path)) {
 				for (var ext of ['emf', 'wmf']) {
-					var side = await this.env.getRawImage(image.source.replace(/\.svg(?=[?#]|$)/i, '.' + ext)).catch(function () { return null; });
+					var side = await abortable(this.env.getRawImage(image.source.replace(/\.svg(?=[?#]|$)/i, '.' + ext)),this.env.signal).catch(function (error) { if(error.name==='AbortError')throw error;return null; });
 					if (side) { imageBytes += side.bytes.length; files.push({ path: '/p/' + image.path.replace(/\.svg$/i, '.' + ext), bytes: side.bytes.slice() }); }
 				}
 			}
 		}
-		var result = await convert({ stream: join(this.parts), files: files }, this.env['wasmRuntime']);
+		check(this.env.signal);
+		var result;
+		try{result=await convert({stream:join(this.parts),files:files},this.env['wasmRuntime'],this.env);}finally{this.parts=[];}
+		check(this.env.signal);
 		this.parts = [];
 		this.stats = { pages: this.scanner.pages, images: this.scanner.images.size, links: this.scanner.links,
 			fonts: fonts, fontBytes: fontBytes, fontFiles: new Set(selected.written.map(function (font) { return font.path; })).size,
@@ -160,6 +184,7 @@
 			imageBytes: imageBytes, worker: true,
 			convertMs: result.convertMs, initMs: result.initMs, heapBytes: result.heapBytes };
 		return result.bytes;
+		}finally{this.parts=[];}
 	};
 	window.EOWasmPdf = window['EOWasmPdf'] = { Writer: Writer, Scanner: Scanner };
 })(window);
