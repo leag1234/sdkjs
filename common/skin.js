@@ -505,7 +505,10 @@ function updateGlobalSkinColors(theme)
 		if (undefined === theme[colorMap[color]])
 			continue;
 
-		if(typeof GlobalSkin[color] === "number")
+		// A canvas shadow is translucent CSS, independent of the previous skin value.
+		if (color === "PageShadow")
+			GlobalSkin[color] = theme[colorMap[color]] || "rgba(0,0,0,0)";
+		else if(typeof GlobalSkin[color] === "number")
 			GlobalSkin[color] = parseFloat(theme[colorMap[color]]);
 		else if (0 === GlobalSkin[color].indexOf("rgb"))
 			GlobalSkin[color] = theme[colorMap[color]];

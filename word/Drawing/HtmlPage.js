@@ -2945,6 +2945,11 @@ function CEditorPage(api)
 		if (this.m_oApi.isDocumentRenderer() || this.m_oDrawingDocument.m_lDrawingFirst < 0 || this.m_oDrawingDocument.m_lDrawingEnd < 0)
 			return;
 
+		// Composite page shadows only when visible Word pages will be redrawn.
+		var pageShadow = String(GlobalSkin.PageShadow || "").replace(/\s/g, "").toLowerCase();
+		if (pageShadow && pageShadow !== "transparent" && pageShadow !== "rgba(0,0,0,0)" && !this.m_oApi.isDarkMode)
+			context.fillRect(0, 0, canvas.width, canvas.height);
+
 		// сначала посморим, изменились ли ректы страниц
 		var rectsPages = [];
 		for (var i = this.m_oDrawingDocument.m_lDrawingFirst; i <= this.m_oDrawingDocument.m_lDrawingEnd; i++)
