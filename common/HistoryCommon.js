@@ -2075,6 +2075,7 @@
 	window['AscDFH'].historyitem_Table_TableCaption          = window['AscDFH'].historyitem_type_Table | 27;
 	window['AscDFH'].historyitem_Table_TableGridChange       = window['AscDFH'].historyitem_type_Table | 28;
 	window['AscDFH'].historyitem_Table_PrChange              = window['AscDFH'].historyitem_type_Table | 29;
+	window['AscDFH'].historyitem_Table_BidiVisual            = window['AscDFH'].historyitem_type_Table | 30;
 	//------------------------------------------------------------------------------------------------------------------
 	// Типы изменений в классе CTableRow
 	//------------------------------------------------------------------------------------------------------------------

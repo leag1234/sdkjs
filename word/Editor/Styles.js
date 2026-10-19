@@ -10862,6 +10862,7 @@ function CTablePr()
     this.TableStyleColBandSize = undefined;
     this.TableStyleRowBandSize = undefined;
     this.Jc                    = undefined;
+    this.BidiVisual            = undefined;
     this.Shd                   = undefined;
     this.TableBorders          =
     {
@@ -10896,6 +10897,7 @@ CTablePr.prototype.Copy = function(bCopyPrChange)
 	TablePr.TableStyleColBandSize = this.TableStyleColBandSize;
 	TablePr.TableStyleRowBandSize = this.TableStyleRowBandSize;
 	TablePr.Jc                    = this.Jc;
+	TablePr.BidiVisual            = this.BidiVisual;
 
 	if (undefined != this.Shd)
 		TablePr.Shd = this.Shd.Copy();
@@ -10962,6 +10964,9 @@ CTablePr.prototype.Merge = function(TablePr)
 	if (undefined != TablePr.Jc)
 		this.Jc = TablePr.Jc;
 
+	if (undefined !== TablePr.BidiVisual)
+		this.BidiVisual = TablePr.BidiVisual;
+
 	if (undefined != TablePr.Shd)
 		this.Shd = TablePr.Shd.Copy();
 
@@ -11020,6 +11025,7 @@ CTablePr.prototype.Is_Equal = function(TablePr)
 	if (this.TableStyleColBandSize !== TablePr.TableStyleColBandSize
 		|| this.TableStyleRowBandSize !== TablePr.TableStyleRowBandSize
 		|| this.Jc !== TablePr.Jc
+		|| this.BidiVisual !== TablePr.BidiVisual
 		|| true !== IsEqualStyleObjects(this.TableBorders.Bottom, TablePr.TableBorders.Bottom)
 		|| true !== IsEqualStyleObjects(this.TableBorders.Left, TablePr.TableBorders.Left)
 		|| true !== IsEqualStyleObjects(this.TableBorders.Right, TablePr.TableBorders.Right)
@@ -11046,6 +11052,7 @@ CTablePr.prototype.InitDefault = function(nCompatibilityMode)
 	this.TableStyleColBandSize = 1;
 	this.TableStyleRowBandSize = 1;
 	this.Jc                    = align_Left;
+	this.BidiVisual            = undefined;
 	this.Shd                   = new CDocumentShd();
 	this.TableBorders.Bottom   = new CDocumentBorder();
 	this.TableBorders.Left     = new CDocumentBorder();
@@ -11071,6 +11078,7 @@ CTablePr.prototype.Set_FromObject = function(TablePr)
 	this.TableStyleColBandSize = TablePr.TableStyleColBandSize;
 	this.TableStyleRowBandSize = TablePr.TableStyleRowBandSize;
 	this.Jc                    = TablePr.Jc;
+	this.BidiVisual            = TablePr.BidiVisual;
 
 	if (undefined != TablePr.Shd)
 	{
@@ -11355,6 +11363,15 @@ CTablePr.prototype.Write_ToBinary = function(Writer)
 		Flags |= 1048576;
 	}
 
+	// Keep this boolean in the flag word: older readers cannot skip an
+	// appended payload in this unframed internal property record.
+	if (undefined !== this.BidiVisual)
+	{
+		Flags |= 2097152;
+		if (this.BidiVisual)
+			Flags |= 4194304;
+	}
+
 	var EndPos = Writer.GetCurPosition();
 	Writer.Seek(StartPos);
 	Writer.WriteLong(Flags);
@@ -11363,6 +11380,9 @@ CTablePr.prototype.Write_ToBinary = function(Writer)
 CTablePr.prototype.Read_FromBinary = function(Reader)
 {
 	var Flags = Reader.GetLong();
+
+	if (2097152 & Flags)
+		this.BidiVisual = !!(4194304 & Flags);
 
 	if (1 & Flags)
 		this.TableStyleColBandSize = Reader.GetLong();

@@ -6512,10 +6512,22 @@ CDocument.prototype.MoveCursorLeft = function(AddToSelect, Word)
 		isRtl = (curPara ? curPara.isRtlDirection() : false);
 	}
 
-	if (isRtl)
-		this.Controller.MoveCursorRight(AddToSelect, Word);
-	else
-		this.Controller.MoveCursorLeft(AddToSelect, Word);
+	let previousTableMove = this._tableCursorMove;
+	let useTableDirection = this.GetCurrentTablesStack().some(function(table) { return table.IsRTL(); });
+	if (useTableDirection)
+		this._tableCursorMove = {physicalRight : false, characterRight : isRtl};
+	try
+	{
+		if (isRtl)
+			this.Controller.MoveCursorRight(AddToSelect, Word);
+		else
+			this.Controller.MoveCursorLeft(AddToSelect, Word);
+	}
+	finally
+	{
+		if (useTableDirection)
+			this._tableCursorMove = previousTableMove;
+	}
 
 	this.CorrectCursorPosition(false);
 	this.Document_UpdateInterfaceState();
@@ -6541,10 +6553,23 @@ CDocument.prototype.MoveCursorRight = function(AddToSelect, Word, FromPaste)
 		isRtl = (curPara ? curPara.isRtlDirection() : false);
 	}
 
-	if (isRtl)
-		this.Controller.MoveCursorLeft(AddToSelect, Word);
-	else
-		this.Controller.MoveCursorRight(AddToSelect, Word, FromPaste);
+	let previousTableMove = this._tableCursorMove;
+	let useTableDirection = this.GetCurrentTablesStack().some(function(table) { return table.IsRTL(); });
+	// Paste uses the existing programmatic movement contract.
+	if (useTableDirection)
+		this._tableCursorMove = FromPaste ? undefined : {physicalRight : true, characterRight : !isRtl};
+	try
+	{
+		if (isRtl)
+			this.Controller.MoveCursorLeft(AddToSelect, Word);
+		else
+			this.Controller.MoveCursorRight(AddToSelect, Word, FromPaste);
+	}
+	finally
+	{
+		if (useTableDirection)
+			this._tableCursorMove = previousTableMove;
+	}
 
 	this.CorrectCursorPosition(true);
 	this.Document_UpdateInterfaceState();
@@ -20161,8 +20186,10 @@ CDocument.prototype.controller_MoveCursorToEndPos = function(AddToSelect)
 		this.Content[this.CurPos.ContentPos].MoveCursorToEndPos(false);
 	}
 };
-CDocument.prototype.controller_MoveCursorLeft = function(AddToSelect, Word)
+CDocument.prototype.controller_MoveCursorLeft = function(AddToSelect, Word, InternalTableDirection)
 {
+	if (!InternalTableDirection && AscWord.TableDirection.parentMovesRight(this, false))
+		return this.controller_MoveCursorRight(AddToSelect, Word, true);
 	if (this.CurPos.ContentPos < 0)
 		return false;
 
@@ -20265,8 +20292,10 @@ CDocument.prototype.controller_MoveCursorLeft = function(AddToSelect, Word)
 		}
 	}
 };
-CDocument.prototype.controller_MoveCursorRight = function(AddToSelect, Word)
+CDocument.prototype.controller_MoveCursorRight = function(AddToSelect, Word, InternalTableDirection)
 {
+	if (!InternalTableDirection && AscWord.TableDirection.parentMovesRight(this, true) === false)
+		return this.controller_MoveCursorLeft(AddToSelect, Word, true);
 	if (this.CurPos.ContentPos < 0)
 		return false;
 

@@ -147,7 +147,7 @@ CTable.prototype.private_DrawTableBackgroundAndOuterBorder = function(pGraphics,
 		}
 	}
 
-    var TableBorders = this.Get_Borders();
+    var TableBorders = AscWord.TableDirection.physicalBorders(this.Get_Borders(), this.IsRTL());
 
     // Заголовок
     var bHeader = false;
@@ -155,8 +155,8 @@ CTable.prototype.private_DrawTableBackgroundAndOuterBorder = function(pGraphics,
     {
         let Row         = this.Content[0];
         let CellsCount  = Row.Get_CellsCount();
-        let X_left_new  = Page.X + Row.Get_CellInfo(0).X_grid_start;
-        let X_right_new = Page.X + Row.Get_CellInfo(CellsCount - 1).X_grid_end;
+        let X_left_new  = Page.X + Row.Get_CellInfo(this.IsRTL() ? CellsCount - 1 : 0).X_grid_start;
+        let X_right_new = Page.X + Row.Get_CellInfo(this.IsRTL() ? 0 : CellsCount - 1).X_grid_end;
 		let XCell = Math.min(X_left_new, X_right_new);
 		let YCell = Math.min(Y_top, Y_bottom);
 		let WCell = Math.abs(X_right_new - X_left_new);
@@ -175,8 +175,8 @@ CTable.prototype.private_DrawTableBackgroundAndOuterBorder = function(pGraphics,
             var Row         = HeaderPage.Rows[CurRow];
             var CellSpacing = Row.Get_CellSpacing();
             var CellsCount  = Row.Get_CellsCount();
-            var X_left_new  = Page.X + Row.Get_CellInfo(0).X_grid_start;
-            var X_right_new = Page.X + Row.Get_CellInfo(CellsCount - 1).X_grid_end;
+            var X_left_new  = Page.X + Row.Get_CellInfo(this.IsRTL() ? CellsCount - 1 : 0).X_grid_start;
+            var X_right_new = Page.X + Row.Get_CellInfo(this.IsRTL() ? 0 : CellsCount - 1).X_grid_end;
 
             if (!CellSpacing)
             	continue;
@@ -201,8 +201,8 @@ CTable.prototype.private_DrawTableBackgroundAndOuterBorder = function(pGraphics,
         var Row         = this.GetRow(CurRow);
         var CellSpacing = Row.Get_CellSpacing();
         var CellsCount  = Row.Get_CellsCount();
-        var X_left_new  = Page.X + Row.Get_CellInfo(0).X_grid_start;
-        var X_right_new = Page.X + Row.Get_CellInfo(CellsCount - 1).X_grid_end;
+        var X_left_new  = Page.X + Row.Get_CellInfo(this.IsRTL() ? CellsCount - 1 : 0).X_grid_start;
+        var X_right_new = Page.X + Row.Get_CellInfo(this.IsRTL() ? 0 : CellsCount - 1).X_grid_end;
 
         if (null === CellSpacing)
         	continue;
@@ -668,6 +668,9 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
 {
     var CurPage = PNum;
     var Page = this.Pages[CurPage];
+	if (this.IsRTL())
+		pGraphics = AscWord.TableDirection.createBorderGraphics(pGraphics, Page.X, this.TableSumGrid[this.TableSumGrid.length - 1]);
+
 
     var TableBorders = this.Get_Borders();
     var Theme = this.Get_Theme();
@@ -694,7 +697,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                 var Cell = Row.Get_Cell( CurCell );
                 var GridSpan = Cell.Get_GridSpan();
                 var VMerge = Cell.GetVMerge();
-                var CurGridCol = Row.Get_CellInfo( CurCell ).StartGridCol;
+                var CurGridCol = this.private_GetLogicalCellInfo(Row, CurCell).StartGridCol;
 
                 if ( vmerge_Continue === VMerge )
                 {
@@ -702,7 +705,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                     continue;
                 }
 
-                var CellInfo     = Row.Get_CellInfo( CurCell );
+                var CellInfo     = this.private_GetLogicalCellInfo(Row, CurCell);
                 var X_cell_start = Page.X + CellInfo.X_cell_start;
                 var X_cell_end   = Page.X + CellInfo.X_cell_end;
                 var VMergeCount  = this.Internal_GetVertMergeCount( CurRow, CurGridCol, GridSpan );
@@ -878,7 +881,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                                 for ( var TempIndex = 0; TempIndex < Prev_CellsCount; TempIndex++ )
                                 {
                                     var Prev_Cell = Prev_Row.Get_Cell( TempIndex );
-                                    var Prev_GridCol = Prev_Row.Get_CellInfo( TempIndex ).StartGridCol;
+                                    var Prev_GridCol = this.private_GetLogicalCellInfo(Prev_Row, TempIndex).StartGridCol;
                                     var Prev_GridSpan = Prev_Cell.Get_GridSpan();
 
                                     var bLeft = null;
@@ -944,7 +947,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                                 for ( var TempIndex = 0; TempIndex < Prev_CellsCount; TempIndex++ )
                                 {
                                     var Prev_Cell = Prev_Row.Get_Cell( TempIndex );
-                                    var Prev_GridCol = Prev_Row.Get_CellInfo( TempIndex ).StartGridCol;
+                                    var Prev_GridCol = this.private_GetLogicalCellInfo(Prev_Row, TempIndex).StartGridCol;
                                     var Prev_GridSpan = Prev_Cell.Get_GridSpan();
 
                                     var bLeft = null;
@@ -1049,7 +1052,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
             var Cell = Row.Get_Cell( CurCell );
             var GridSpan = Cell.Get_GridSpan();
             var VMerge = Cell.GetVMerge();
-            var CurGridCol = Row.Get_CellInfo( CurCell ).StartGridCol;
+            var CurGridCol = this.private_GetLogicalCellInfo(Row, CurCell).StartGridCol;
 
             if ( vmerge_Continue === VMerge )
             {
@@ -1071,7 +1074,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                 }
             }
 
-            var CellInfo     = Row.Get_CellInfo( CurCell );
+            var CellInfo     = this.private_GetLogicalCellInfo(Row, CurCell);
             var X_cell_start = Page.X + CellInfo.X_cell_start;
             var X_cell_end   = Page.X + CellInfo.X_cell_end;
 
@@ -1273,7 +1276,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                             for ( var TempIndex = 0; TempIndex < Prev_CellsCount; TempIndex++ )
                             {
                                 var Prev_Cell = Prev_Row.Get_Cell( TempIndex );
-                                var Prev_GridCol = Prev_Row.Get_CellInfo( TempIndex ).StartGridCol;
+                                var Prev_GridCol = this.private_GetLogicalCellInfo(Prev_Row, TempIndex).StartGridCol;
                                 var Prev_GridSpan = Prev_Cell.Get_GridSpan();
 
                                 var bLeft = null;
@@ -1342,7 +1345,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                             for ( var TempIndex = 0; TempIndex < Prev_CellsCount; TempIndex++ )
                             {
                                 var Prev_Cell = Prev_Row.Get_Cell( TempIndex );
-                                var Prev_GridCol = Prev_Row.Get_CellInfo( TempIndex ).StartGridCol;
+                                var Prev_GridCol = this.private_GetLogicalCellInfo(Prev_Row, TempIndex).StartGridCol;
                                 var Prev_GridSpan = Prev_Cell.Get_GridSpan();
 
                                 var bLeft = null;
@@ -1436,7 +1439,7 @@ CTable.prototype.private_DrawCellsBorders = function(pGraphics, PNum, Row_start,
                     var X0 = X_cell_start;
                     var X1 = X_cell_end;
 
-                    var LowerCell = this.private_GetCellIndexByStartGridCol( CurRow + VMergeCount - 1, Row.Get_CellInfo( CurCell ).StartGridCol );
+                    var LowerCell = this.private_GetCellIndexByStartGridCol( CurRow + VMergeCount - 1, this.private_GetLogicalCellInfo(Row, CurCell).StartGridCol );
 
                     var BottomBorder = ( -1 === LowerCell ? this.Pages[PNum].BotBorders[0] : this.Pages[PNum].BotBorders[LowerCell] );
                     if ( border_Single === BottomBorder.Value )

@@ -1841,18 +1841,21 @@
 			var fontManager = pFontFile.m_oFontManager;
 
 			var name = AscFonts.FontPickerByCharacter.getFontBySymbol(symbol);
+			var policy = AscFonts.DesktopFontPolicy;
+			var _style = policy && pFontFile.eoRequestedStyle !== undefined ? pFontFile.eoRequestedStyle :
+				(pFontFile.IsBold() ? 1 : 0) | (pFontFile.IsItalic() ? 2 : 0);
+			if (policy)
+				name = policy.pick(pFontFile, symbol, _style, name);
 			if (undefined === name || name == "")
 				return null;
 
-			var _fontFilePick = this.FontFiles[name];
+			var cacheKey = policy ? policy.id + "|" + name + "|" + _style : name;
+			var _fontFilePick = this.FontFiles[cacheKey];
 			if (!_fontFilePick)
 			{
 				var _font_info = AscFonts.g_font_infos[AscFonts.g_map_font_index[name]];
-				var _style = AscFonts.FontStyle.FontStyleRegular;
-				if (pFontFile.IsBold())
-					_style |= AscFonts.FontStyle.FontStyleBold;
-				if (pFontFile.IsItalic())
-					_style |= AscFonts.FontStyle.FontStyleItalic;
+				if (!_font_info)
+					return null;
 
 				_fontFilePick = _font_info.LoadFont(AscCommon.g_font_loader, fontManager, pFontFile.m_fSize, _style, pFontFile.m_unHorDpi, pFontFile.m_unVerDpi, undefined, true);
 
@@ -1860,7 +1863,7 @@
 					return null;
 
 				_fontFilePick.CheckHintsSupport();
-				this.FontFiles[name] = _fontFilePick;
+				this.FontFiles[cacheKey] = _fontFilePick;
 			}
 
 			return _fontFilePick;

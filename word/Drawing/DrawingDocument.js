@@ -149,6 +149,52 @@ function CTableOutlineDr()
 	this.AddResizeMinW     = 0;
 	this.AddResizeMinH     = 0;
 
+	this.ResizeRTL = false;
+	this.ResizeStart = null;
+	this.ResizeBounds = null;
+	this.ResizeGeometry = undefined;
+	this.ResizeCancelled = false;
+	this.setResizeStart = function(x, y, bounds)
+	{
+		let table = this.TableOutline.Table;
+		this.ResizeRTL = table.IsRTL();
+		this.ResizeStart = {X : x, Y : y};
+		this.ResizeBounds = bounds;
+		this.ResizeGeometry = this.ResizeRTL ? table.GetInteractionGeometry() : undefined;
+		this.ResizeCancelled = false;
+		if (this.ResizeRTL)
+		{
+			this.AddResizeMinW = table.GetMinWidth() - bounds.W;
+			this.AddResizeMinH = Math.max(1 - bounds.H, table.GetMinHeight() - table.GetSummaryHeight());
+		}
+	};
+	this.getResizeHandleSize = function(wordControl)
+	{
+		let size = 6 * g_dKoef_pix_to_mm * 100 / wordControl.m_nZoomValue;
+		if (this.TableOutline.Table.IsRTL() && this.TableMatrix
+			&& !global_MatrixTransformer.IsIdentity(this.TableMatrix))
+			size /= this.TableMatrix.GetScaleValue();
+		return size;
+	};
+	this.getResizeDelta = function(X, Y, wordControl)
+	{
+		let koef = g_dKoef_pix_to_mm * 100 / wordControl.m_nZoomValue;
+		if (!this.ResizeRTL)
+			return {W : (X - this.CurPos.X) * koef - this.TrackOffsetX,
+				H : (Y - this.CurPos.Y) * koef - this.TrackOffsetY};
+		// Use displacement in the same screen frame as the existing LTR path.
+		// Page-local cursor coordinates reset at page boundaries and also change
+		// when selection updates scroll the viewport during a multi-page drag.
+		let point = {X : (X - this.CurPos.X) * koef, Y : (Y - this.CurPos.Y) * koef};
+		if (this.TableMatrix && !global_MatrixTransformer.IsIdentity(this.TableMatrix))
+		{
+			let inverse = global_MatrixTransformer.Invert(this.TableMatrix);
+			point = {X : inverse.TransformPointX(point.X, point.Y) - inverse.TransformPointX(0, 0),
+				Y : inverse.TransformPointY(point.X, point.Y) - inverse.TransformPointY(0, 0)};
+		}
+		return AscWord.TableDirection.resizePointerDelta({X : 0, Y : 0}, point, true);
+	};
+
 	this.getLastPageBounds = function()
 	{
 		var _bounds = { Page: 0, X : 0, Y : 0, W : 0, H : 0 };
@@ -319,15 +365,14 @@ function CTableOutlineDr()
 				}
 			}
 
-			if (true)
 			{
 				var _lastBounds = this.getLastPageBounds();
-				var _x = _lastBounds.X + _lastBounds.W;
-				var _y = _lastBounds.Y + _lastBounds.H;
-				_d = 6 * g_dKoef_pix_to_mm * 100 / word_control.m_nZoomValue;
-
-				var _r = _x + _d;
-				var _b = _y + _d;
+				_d = this.getResizeHandleSize(word_control);
+				let resizeBounds = AscWord.TableDirection.resizeHandleBounds(_lastBounds, this.TableOutline.Table.IsRTL(), _d);
+				var _x = resizeBounds.Left;
+				var _y = resizeBounds.Top;
+				var _r = resizeBounds.Right;
+				var _b = resizeBounds.Bottom;
 
 				if ((_lastBounds.Page == pos.Page) && (pos.X > _x) && (pos.X < _r) && (pos.Y > _y) && (pos.Y < _b))
 				{
@@ -358,7 +403,8 @@ function CTableOutlineDr()
 						this.AddResizeMinW = _table.GetMinWidth() - _lastBounds.W;
 					}
 
-					word_control.m_oDrawingDocument.LockCursorType("se-resize");
+					this.setResizeStart(pos.X, pos.Y, _lastBounds);
+					word_control.m_oDrawingDocument.LockCursorType(this.ResizeRTL ? "sw-resize" : "se-resize");
 					return true;
 				}
 			}
@@ -473,15 +519,14 @@ function CTableOutlineDr()
 				}
 			}
 
-			if (true)
 			{
 				var _lastBounds = this.getLastPageBounds();
-				var _x = _lastBounds.X + _lastBounds.W;
-				var _y = _lastBounds.Y + _lastBounds.H;
-				_d = 6 * g_dKoef_pix_to_mm * 100 / word_control.m_nZoomValue;
-
-				var _r = _x + _d;
-				var _b = _y + _d;
+				_d = this.getResizeHandleSize(word_control);
+				let resizeBounds = AscWord.TableDirection.resizeHandleBounds(_lastBounds, this.TableOutline.Table.IsRTL(), _d);
+				var _x = resizeBounds.Left;
+				var _y = resizeBounds.Top;
+				var _r = resizeBounds.Right;
+				var _b = resizeBounds.Bottom;
 
 				if ((_posx > _x) && (_posx < _r) && (_posy > _y) && (_posy < _b))
 				{
@@ -495,7 +540,8 @@ function CTableOutlineDr()
 					this.AddResizeCurrentH = 0;
 					this.IsResizeTableTrack = true;
 
-					word_control.m_oDrawingDocument.LockCursorType("se-resize");
+					this.setResizeStart(_posx, _posy, _lastBounds);
+					word_control.m_oDrawingDocument.LockCursorType(this.ResizeRTL ? "sw-resize" : "se-resize");
 					return true;
 				}
 			}
@@ -642,10 +688,11 @@ function CTableOutlineDr()
 
 		if (this.IsResizeTableTrack)
 		{
-			var _addW = (X - this.CurPos.X) * _koef - this.TrackOffsetX;
-			var _addH = (Y - this.CurPos.Y) * _koef - this.TrackOffsetY;
-
-			_table.ResizeTableInDocument(this.TableOutline.W + _addW, this.TableOutline.H + _addH);
+			let delta = this.getResizeDelta(X, Y, word_control);
+			let bounds = this.ResizeRTL ? this.ResizeBounds : this.TableOutline;
+			if (!this.ResizeCancelled && this.ResizeRTL === _table.IsRTL()
+				&& (!this.ResizeRTL || _table.IsInteractionGeometryCurrent(this.ResizeGeometry)))
+				_table.ResizeTableInDocument(bounds.W + (this.ResizeRTL ? Math.max(this.AddResizeMinW, delta.W) : delta.W), bounds.H + (this.ResizeRTL ? Math.max(this.AddResizeMinH, delta.H) : delta.H), this.ResizeRTL);
 
 			this.AddResizeCurrentW = 0;
 			this.AddResizeCurrentH = 0;
@@ -762,8 +809,17 @@ function CTableOutlineDr()
 		if (this.IsResizeTableTrack)
 		{
 			var _koef = g_dKoef_pix_to_mm * 100 / word_control.m_nZoomValue;
-			this.AddResizeCurrentW = Math.max(this.AddResizeMinW, (X - this.CurPos.X) * _koef - this.TrackOffsetX);
-			this.AddResizeCurrentH = Math.max(this.AddResizeMinH, (Y - this.CurPos.Y) * _koef - this.TrackOffsetY);
+			if (this.ResizeRTL && (this.ResizeRTL !== this.TableOutline.Table.IsRTL()
+				|| !this.TableOutline.Table.IsInteractionGeometryCurrent(this.ResizeGeometry)))
+			{
+				this.ResizeCancelled = true;
+				this.AddResizeCurrentW = 0;
+				this.AddResizeCurrentH = 0;
+				return true;
+			}
+			let delta = this.getResizeDelta(X, Y, word_control);
+			this.AddResizeCurrentW = Math.max(this.AddResizeMinW, delta.W);
+			this.AddResizeCurrentH = Math.max(this.AddResizeMinH, delta.H);
 
 			return true;
 		}
@@ -824,16 +880,13 @@ function CTableOutlineDr()
 
 		if (!this.TableMatrix || global_MatrixTransformer.IsIdentity(this.TableMatrix))
 		{
-			var _x = _lastBounds.X + _lastBounds.W;
-			var _y = _lastBounds.Y + _lastBounds.H;
-			var _d = 6 * g_dKoef_pix_to_mm * 100 / word_control.m_nZoomValue;
-
-			var _r = _x + _d;
-			var _b = _y + _d;
+			var _d = this.getResizeHandleSize(word_control);
+			let resizeBounds = AscWord.TableDirection.resizeHandleBounds(_lastBounds, this.TableOutline.Table.IsRTL(), _d);
+			var _x = resizeBounds.Left, _r = resizeBounds.Right, _y = resizeBounds.Top, _b = resizeBounds.Bottom;
 
 			if ((pos.X > _x) && (pos.X < _r) && (pos.Y > _y) && (pos.Y < _b))
 			{
-				word_control.m_oDrawingDocument.SetCursorType("se-resize");
+				word_control.m_oDrawingDocument.SetCursorType(this.TableOutline.Table.IsRTL() ? "sw-resize" : "se-resize");
 				return true;
 			}
 		}
@@ -843,16 +896,13 @@ function CTableOutlineDr()
 			var _posx = _invert.TransformPointX(pos.X, pos.Y);
 			var _posy = _invert.TransformPointY(pos.X, pos.Y);
 
-			var _x = _lastBounds.X + _lastBounds.W;
-			var _y = _lastBounds.Y + _lastBounds.H;
-			_d = 6 * g_dKoef_pix_to_mm * 100 / word_control.m_nZoomValue;
-
-			var _r = _x + _d;
-			var _b = _y + _d;
+			var _d = this.getResizeHandleSize(word_control);
+			let resizeBounds = AscWord.TableDirection.resizeHandleBounds(_lastBounds, this.TableOutline.Table.IsRTL(), _d);
+			var _x = resizeBounds.Left, _r = resizeBounds.Right, _y = resizeBounds.Top, _b = resizeBounds.Bottom;
 
 			if ((_posx > _x) && (_posx < _r) && (_posy > _y) && (_posy < _b))
 			{
-				word_control.m_oDrawingDocument.SetCursorType("se-resize");
+				word_control.m_oDrawingDocument.SetCursorType(this.TableOutline.Table.IsRTL() ? "sw-resize" : "se-resize");
 				return true;
 			}
 		}
@@ -1684,7 +1734,8 @@ CPage.prototype.DrawTableOutline = function (overlay, xDst, yDst, wDst, hDst, ta
 		}
 		else
 		{
-			var _xLast = (xDst + dKoefX * (lastBounds.X + lastBounds.W + _offX) + 0.5 * Math.round(rPR)) >> 0;
+			let resizeRTL = table_outline_dr.TableOutline.Table.IsRTL();
+			var _xLast = (xDst + dKoefX * (lastBounds.X + (resizeRTL ? 0 : lastBounds.W) + _offX) + 0.5 * Math.round(rPR)) >> 0;
 			var _yLast = (yDst + dKoefY * (lastBounds.Y + lastBounds.H + _offY) + 0.5 * Math.round(rPR)) >> 0;
 
 			var ctx = overlay.m_oContext;
@@ -1692,7 +1743,7 @@ CPage.prototype.DrawTableOutline = function (overlay, xDst, yDst, wDst, hDst, ta
 			ctx.lineWidth = Math.round(rPR);
 			ctx.beginPath();
 
-			overlay.AddRect(_xLast - 0.5 * Math.round(rPR), _yLast - 0.5 * Math.round(rPR), Math.round(6 * rPR), Math.round(6 * rPR));
+			overlay.AddRect(_xLast - (resizeRTL ? 6 : 0) * rPR - 0.5 * Math.round(rPR), _yLast - 0.5 * Math.round(rPR), Math.round(6 * rPR), Math.round(6 * rPR));
 
 			ctx.stroke();
 			ctx.beginPath();
@@ -1767,7 +1818,8 @@ CPage.prototype.DrawTableOutline = function (overlay, xDst, yDst, wDst, hDst, ta
 		}
 		else
 		{
-			var _xLast = (lastBounds.X + lastBounds.W);
+			let resizeRTL = table_outline_dr.TableOutline.Table.IsRTL();
+			var _xLast = lastBounds.X + (resizeRTL ? 0 : lastBounds.W);
 			var _yLast = (lastBounds.Y + lastBounds.H);
 
 			var ctx = overlay.m_oContext;
@@ -1776,17 +1828,18 @@ CPage.prototype.DrawTableOutline = function (overlay, xDst, yDst, wDst, hDst, ta
 			ctx.lineWidth = 1;
 			ctx.beginPath();
 
-			var _dist = 6 / _ft.GetScaleValue();
+			var _distX = (resizeRTL ? -6 * rPR : 6) / _ft.GetScaleValue();
+			var _distY = (resizeRTL ? 6 * rPR : 6) / _ft.GetScaleValue();
 
 			var _arr = [
 				_ft.TransformPointX(_xLast, _yLast),
 				_ft.TransformPointY(_xLast, _yLast),
-				_ft.TransformPointX(_xLast + _dist, _yLast),
-				_ft.TransformPointY(_xLast + _dist, _yLast),
-				_ft.TransformPointX(_xLast + _dist, _yLast + _dist),
-				_ft.TransformPointY(_xLast + _dist, _yLast + _dist),
-				_ft.TransformPointX(_xLast, _yLast + _dist),
-				_ft.TransformPointY(_xLast, _yLast + _dist)
+				_ft.TransformPointX(_xLast + _distX, _yLast),
+				_ft.TransformPointY(_xLast + _distX, _yLast),
+				_ft.TransformPointX(_xLast + _distX, _yLast + _distY),
+				_ft.TransformPointY(_xLast + _distX, _yLast + _distY),
+				_ft.TransformPointX(_xLast, _yLast + _distY),
+				_ft.TransformPointY(_xLast, _yLast + _distY)
 			];
 
 			overlay.CheckPoint(_arr[0], _arr[1]);
@@ -5341,7 +5394,7 @@ function CDrawingDocument()
 				if (this.TableOutlineDr.IsResizeTableTrack)
 				{
 					var _lastBounds = this.TableOutlineDr.getLastPageBounds();
-					var _lastX = _lastBounds.X;
+					var _lastX = _lastBounds.X - (this.TableOutlineDr.ResizeRTL ? this.TableOutlineDr.AddResizeCurrentW : 0);
 					var _lastY = this.TableOutlineDr.getFullTopPosition(_lastBounds);
 					var _lastYStart = _lastBounds.Y;
 
@@ -5426,6 +5479,8 @@ function CDrawingDocument()
 					_x = this.TableOutlineDr.TableOutline.X;
 					_y = this.TableOutlineDr.TableOutline.Y;
 
+					if (this.TableOutlineDr.ResizeRTL)
+						_x -= this.TableOutlineDr.AddResizeCurrentW;
 					_r = _x + (this.TableOutlineDr.TableOutline.W + this.TableOutlineDr.AddResizeCurrentW);
 					_b = _y + (this.TableOutlineDr.TableOutline.H + this.TableOutlineDr.AddResizeCurrentH);
 				}
@@ -5947,6 +6002,15 @@ function CDrawingDocument()
 
 		hor_ruler.CurrentObjectType = RULER_OBJECT_TYPE_TABLE;
 		hor_ruler.m_oTableMarkup = markup.CreateDublicate();
+		if (markup.Table && markup.Table.IsRTL())
+		{
+			let table = markup.Table;
+			let axis = 2 * table.Pages[markup.Internal.PageNum].X + table.TableSumGrid[table.TableSumGrid.length - 1];
+			AscWord.TableDirection.reflectRulerMarkup(hor_ruler.m_oTableMarkup, axis);
+			hor_ruler.m_oTableMarkup.TableDirectionRTL = true;
+			hor_ruler.m_oTableMarkup.TableDirectionAxis = axis;
+			hor_ruler.m_oTableMarkup.TableDirectionGeometry = table.GetInteractionGeometry();
+		}
 
 		ver_ruler.CurrentObjectType = RULER_OBJECT_TYPE_TABLE;
 		ver_ruler.m_oTableMarkup = markup.CreateDublicate();

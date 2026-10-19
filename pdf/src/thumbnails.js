@@ -1034,6 +1034,18 @@
         return this.blocks[block].pages[pageInBlock];
     };
 
+    // Hosted permissions are unchanged; local page moves require verified persistence.
+    function canReorderPages() {
+        const api = Asc.editor;
+        if (api["eoLocalMode"] !== true)
+            return !api.isRestrictionView();
+        try {
+            return typeof api["eoLocalPdfCanReorder"] === "function" && api["eoLocalPdfCanReorder"]() === true;
+        } catch (error) {
+            return false;
+        }
+    }
+
     // UI-EVENTS
     CDocument.prototype.onMouseDown = function(e) {
         AscCommon.check_MouseDownEvent(e, true);
@@ -1072,7 +1084,7 @@
         let my = AscCommon.global_mouseEvent.Y;
     
         // Если зажата ЛКМ и мы еще не начали drag, проверяем порог смещения
-        if (this.pendingDrag && !this.isDragging && !Asc.editor.isRestrictionView()) {
+        if (this.pendingDrag && !this.isDragging && canReorderPages()) {
             this.isDragging = true;
             this.canvas.style.cursor = AscCommon.Cursors.Grabbing;
 
@@ -1099,7 +1111,10 @@
                 // Определяем позицию для вставки (до или после dp.num)
                 let bottom = dp.pageRect.y + dp.pageRect.h;
                 let yLocal = (my - this.coordsOffset.y + this.scrollY);
-                if (yLocal > bottom) {
+                if (Asc.editor["eoLocalMode"] === true) {
+                    const localY = AscCommon.AscBrowser.convertToRetinaValue(my - this.coordsOffset.y, true) + this.scrollY;
+                    this.dropInsertPosition = dp.num + (localY > dp.pageRect.y + dp.pageRect.h / 2 ? 1 : 0);
+                } else if (yLocal > bottom) {
                     this.dropInsertPosition = dp.num + 1;
                 } else {
                     this.dropInsertPosition = dp.num;
@@ -1321,6 +1336,37 @@
     
     // Multiple page rearrangement
     CDocument.prototype.reorderPagesMultiple = function(selectedIndices, toIndex) {
+        if (Asc.editor["eoLocalMode"] === true) {
+            if (!canReorderPages())
+                return;
+            const doc = this.viewer.doc, count = doc.GetPagesCount();
+            if (!Array.isArray(selectedIndices) || !selectedIndices.length ||
+                !Number.isInteger(toIndex) || toIndex < 0 || toIndex > count ||
+                selectedIndices.some(index => !Number.isInteger(index) || index < 0 || index >= count))
+                return;
+            const selected = Array.from(new Set(selectedIndices)).sort((a, b) => a - b);
+            const order = Array.from({length:count}, (_value, index) => index);
+            const remaining = order.filter(index => !selected.includes(index));
+            const position = remaining.filter(index => index < toIndex).length;
+            const desired = remaining.slice(0, position).concat(selected, remaining.slice(position));
+            const changed = order.filter(index => order[index] !== desired[index]);
+            if (!changed.length)
+                return;
+            const locks = [];
+            for (let index = changed[0]; index <= changed[changed.length - 1]; index++)
+                locks.push(index);
+            doc.DoAction(function() {
+                for (let index = 0; index < count; index++) {
+                    const from = order.indexOf(desired[index]);
+                    if (from === index)
+                        continue;
+                    doc.MovePages([from], index);
+                    order.splice(index, 0, order.splice(from, 1)[0]);
+                }
+                doc.Viewer.navigateToPage(desired.indexOf(selected[0]), undefined, doc.Viewer.scrollMaxX / 2);
+            }, AscDFH.historydescription_Pdf_MovePage, null, locks);
+            return;
+        }
         if (selectedIndices.includes(toIndex)) {
             return;
         }
@@ -1355,7 +1401,9 @@
     // Draw drop indicator line
     CDocument.prototype.drawDropPosition = function(ctx) {
         if (this.dropInsertPosition < 0) return;
-        let dp = this.getDrawingPage(this.dropInsertPosition);
+        const count = Asc.editor["eoLocalMode"] === true ? this.viewer.doc.GetPagesCount() : 0;
+        const localEnd = count > 0 && this.dropInsertPosition === count;
+        let dp = this.getDrawingPage(localEnd ? count - 1 : this.dropInsertPosition);
         if (!dp) return;
     
         let isAfter = (this.dropInsertPosition === dp.num + 1);
@@ -1363,7 +1411,7 @@
         let lineX2 = dp.pageRect.x + dp.pageRect.w + 10;
         let yPos = dp.pageRect.y - this.scrollY - this.betweenH / 2;
         if (isAfter) {
-            yPos += dp.pageRect.h;
+            yPos += dp.pageRect.h + (localEnd ? this.betweenH : 0);
         }
         ctx.save();
         ctx.beginPath();

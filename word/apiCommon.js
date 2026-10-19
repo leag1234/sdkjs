@@ -394,6 +394,7 @@
 			this.CellMargins = (undefined != tblProp.CellMargins && null != tblProp.CellMargins) ? new CMargins(tblProp.CellMargins) : null;
 
 			this.TableAlignment = (undefined != tblProp.TableAlignment) ? tblProp.TableAlignment : null;
+			this.BidiVisual = tblProp.BidiVisual;
 			this.TableIndent = (undefined != tblProp.TableIndent) ? tblProp.TableIndent : null;
 			this.TableWrappingStyle = (undefined != tblProp.TableWrappingStyle) ? tblProp.TableWrappingStyle : null;
 
@@ -541,6 +542,14 @@
 	CTableProp.prototype.put_TableAlignment = function (v)
 	{
 		this.TableAlignment = v;
+	};
+	CTableProp.prototype.get_BidiVisual = function ()
+	{
+		return this.BidiVisual;
+	};
+	CTableProp.prototype.put_BidiVisual = function (v)
+	{
+		this.BidiVisual = v;
 	};
 	CTableProp.prototype.get_TableIndent = function ()
 	{
@@ -788,6 +797,8 @@
 	CTableProp.prototype['put_CellMargins'] = CTableProp.prototype.put_CellMargins;
 	CTableProp.prototype['get_TableAlignment'] = CTableProp.prototype.get_TableAlignment;
 	CTableProp.prototype['put_TableAlignment'] = CTableProp.prototype.put_TableAlignment;
+	CTableProp.prototype['get_BidiVisual'] = CTableProp.prototype.get_BidiVisual;
+	CTableProp.prototype['put_BidiVisual'] = CTableProp.prototype.put_BidiVisual;
 	CTableProp.prototype['get_TableIndent'] = CTableProp.prototype.get_TableIndent;
 	CTableProp.prototype['put_TableIndent'] = CTableProp.prototype.put_TableIndent;
 	CTableProp.prototype['get_TableWrap'] = CTableProp.prototype.get_TableWrap;

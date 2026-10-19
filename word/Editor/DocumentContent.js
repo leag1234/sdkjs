@@ -3812,8 +3812,10 @@ CDocumentContent.prototype.GetCursorPosXY = function()
 		}
 	}
 };
-CDocumentContent.prototype.MoveCursorLeft = function(AddToSelect, Word)
+CDocumentContent.prototype.MoveCursorLeft = function(AddToSelect, Word, InternalTableDirection)
 {
+	if (!InternalTableDirection && AscWord.TableDirection.parentMovesRight(this, false))
+		return this.MoveCursorRight(AddToSelect, Word, undefined, true);
 	if (docpostype_DrawingObjects === this.CurPos.Type)
 	{
 		return this.LogicDocument.DrawingObjects.cursorMoveLeft(AddToSelect, Word);
@@ -3964,8 +3966,10 @@ CDocumentContent.prototype.MoveCursorLeftWithSelectionFromEnd = function(Word)
 
 	this.Content[this.Content.length - 1].MoveCursorLeftWithSelectionFromEnd(Word);
 };
-CDocumentContent.prototype.MoveCursorRight = function(AddToSelect, Word, FromPaste)
+CDocumentContent.prototype.MoveCursorRight = function(AddToSelect, Word, FromPaste, InternalTableDirection)
 {
+	if (!InternalTableDirection && AscWord.TableDirection.parentMovesRight(this, true) === false)
+		return this.MoveCursorLeft(AddToSelect, Word, true);
 	if (docpostype_DrawingObjects === this.CurPos.Type)
 	{
 		return this.LogicDocument.DrawingObjects.cursorMoveRight(AddToSelect, Word);

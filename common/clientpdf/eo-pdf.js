@@ -298,6 +298,7 @@
 		if (f !== undefined) return f;
 		var r = this.env.getFont ? await this.env.getFont(name, style) : null;
 		if (!r || !r.bytes) throw Unsupported('font-missing', name);
+		if (r.variableUnsupported) throw Unsupported('font-variable-instance', name + ': nondefault variable instance requires static embedding');
 		var entry = this.fonts.get(r.key);
 		if (!entry) {
 			var fk;

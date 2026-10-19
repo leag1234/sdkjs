@@ -77,20 +77,9 @@
 		parts.push(u.subarray(last)); return join(parts);
 	};
 	function embeddingAllowed(bytes, face) {
-		var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), offset = 0;
 		try {
-			if (dv.getUint32(0) === 0x74746366) offset = dv.getUint32(12 + face * 4);
-			var count = dv.getUint16(offset + 4);
-			for (var i = 0; i < count; i++) {
-				var at = offset + 12 + i * 16;
-				if (dv.getUint32(at) === 0x4f532f32) {
-					var fsType = dv.getUint16(dv.getUint32(at + 8) + 8);
-					if (fsType & (2 | 0x200)) throw unsupported('font-license');
-					// A no-subsetting font cannot be used by the native subset writer.
-					if (fsType & 0x100) throw unsupported('font-license');
-					return;
-				}
-			}
+			var fsType = window.EOWasmFonts.inspectFace(bytes, face).embedding;
+			if (fsType & (2 | 0x200 | 0x100)) throw unsupported('font-license');
 		} catch (e) { if (e.eoUnsupported) throw e; throw unsupported('font', 'invalid font data'); }
 	}
 

@@ -85,6 +85,10 @@ jobs:
           npm ci --prefix build
           npm run --prefix build develop
 
+      - name: Test RTL table properties and geometry
+        working-directory: sdkjs
+        run: node --test tests/word/table-direction*.test.cjs
+
       - name: Run unit tests
         working-directory: sdkjs
         run: node tests/runAll.js

@@ -4294,6 +4294,9 @@
 		this.CurCol = 0; // текущая колонка
 		this.CurRow = 0; // текущая строка
 
+		this.TableDirectionRTL = false;
+		this.TableDirectionAxis = 0;
+		this.TableDirectionGeometry = undefined;
 		this.TransformX = 0;
 		this.TransformY = 0;
 	}
@@ -4321,6 +4324,9 @@
 
 			obj.CurRow = this.CurRow;
 			obj.CurCol = this.CurCol;
+			obj.TableDirectionRTL = this.TableDirectionRTL;
+			obj.TableDirectionAxis = this.TableDirectionAxis;
+			obj.TableDirectionGeometry = this.TableDirectionGeometry;
 
 			return obj;
 		},

@@ -25,6 +25,77 @@
 
 (function(){
 
+
+	// Hosted PDF uses modern wheel events. Offline clients retain their existing
+	// binding because the desktop shell installs its own capture adapter.
+	function bindMouseWheel(viewer)
+	{
+		let parent = viewer.parent;
+		let api = viewer.Api;
+		if (!api.DocInfo || api.DocInfo.get_OfflineApp() || !("onwheel" in parent))
+		{
+			parent.onmousewheel = viewer.onMouseWhell;
+			if (parent.addEventListener)
+				parent.addEventListener("DOMMouseScroll", viewer.onMouseWhell, false);
+			return;
+		}
+
+		let zoomDelta = 0;
+		let zoomTime = 0;
+		parent.addEventListener("wheel", function(event)
+		{
+			if (event.ctrlKey || event.metaKey)
+			{
+				if (event.deltaY)
+				{
+					// Block both the holder and document zoom handlers, including
+					// sub-threshold trackpad deltas.
+					event.preventDefault();
+					event.stopPropagation();
+					event.stopImmediatePropagation();
+					let now = Date.now();
+					let scale = event.deltaMode === 1 ? 45 : event.deltaMode === 2 ? (viewer.height || 800) : 1;
+					let delta = Math.max(-300, Math.min(300, event.deltaY * scale));
+					if (now - zoomTime > 250 || Math.sign(delta) !== Math.sign(zoomDelta))
+						zoomDelta = 0;
+					zoomTime = now;
+					zoomDelta += delta;
+					while (Math.abs(zoomDelta) >= 100)
+					{
+						zoomDelta < 0 ? api.zoomIn() : api.zoomOut();
+						zoomDelta += zoomDelta < 0 ? 100 : -100;
+					}
+				}
+				return;
+			}
+
+			zoomDelta = 0;
+			let scale = event.deltaMode === 1 ? 45 : event.deltaMode === 2 ? (viewer.height || parent.clientHeight || 800) : 1;
+			let x = event.deltaX * scale;
+			let y = event.deltaY * scale;
+			if (event.shiftKey && viewer.isVisibleHorScroll)
+			{
+				x = x || y;
+				y = 0;
+			}
+			// Preserve the existing form-field scrolling, axis choice and
+			// pointer updates through the viewer's original handler.
+			viewer.onMouseWhell({
+				wheelDelta: y ? -y * 120 / 45 : 0,
+				wheelDeltaY: y ? -y * 120 / 45 : 0,
+				wheelDeltaX: x ? -x * 120 / 45 : 0,
+				deltaX: x, deltaY: y,
+				ctrlKey: false, metaKey: false,
+				altKey: event.altKey, shiftKey: event.shiftKey,
+				pageX: event.pageX, pageY: event.pageY,
+				clientX: event.clientX, clientY: event.clientY,
+				target: event.target, srcElement: event.target,
+				preventDefault: function() { event.preventDefault(); },
+				stopPropagation: function() { event.stopPropagation(); }
+			});
+		}, {passive: false, capture: true});
+	}
+
 	function CCacheManager()
 	{
 		this.images = [];
@@ -1099,9 +1170,7 @@
 
 					global_mouseEvent.Sender = _t.canvasForms;
 
-					_t.parent.onmousewheel = _t.onMouseWhell;
-					if (_t.parent.addEventListener)
-						_t.parent.addEventListener("DOMMouseScroll", _t.onMouseWhell, false);
+					bindMouseWheel(_t);
 
 					_t.startTimer();
 				}

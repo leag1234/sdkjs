@@ -1237,6 +1237,14 @@ function CHorRuler()
             case AscWord.RULER_DRAG_TYPE.table:
             {
                 var newVal = RulerCorrectPosition(this, _x, this.TableMarginLeftTrackStart);
+				if (this.m_oTableMarkup.TableDirectionRTL)
+				{
+					newVal = AscWord.TableDirection.moveRtlRulerBoundary(this.m_oTableMarkup, this.DragTablePos, newVal, this.m_oPage.width_mm);
+					this.CalculateMargins();
+					word_control.UpdateHorRulerBack();
+					word_control.m_oOverlayApi.VertLine(left + newVal * dKoef_mm_to_pix);
+					break;
+				}
 
                 // сначала определим граничные условия
                 var _min = 0;
@@ -1799,6 +1807,11 @@ function CHorRuler()
         var _y = (global_mouseEvent.Y - word_control.Y) * g_dKoef_pix_to_mm;
 
         this.DragType = this.CheckMouseType(_x, _y, true, true);
+        this.TableDirectionDrag = (this.DragType === AscWord.RULER_DRAG_TYPE.table
+            && this.m_oTableMarkup && this.m_oTableMarkup.TableDirectionRTL)
+            ? {markup : this.m_oTableMarkup, geometry : this.m_oTableMarkup.Table.GetInteractionGeometry()} : null;
+        if (this.TableDirectionDrag)
+            this.m_oTableMarkup.TableDirectionGeometry = this.TableDirectionDrag.geometry;
         if (this.DragType < 0)
         {
 			this.DragTypeMouseDown = -this.DragType;
@@ -2300,6 +2313,14 @@ function CHorRuler()
 
     this.SetTableProperties = function()
     {
+        let drag = this.TableDirectionDrag;
+        this.TableDirectionDrag = null;
+        if (drag && (drag.markup !== this.m_oTableMarkup
+            || !this.m_oTableMarkup.Table.IsInteractionGeometryCurrent(drag.geometry)))
+        {
+            this.m_oWordControl.m_oLogicDocument.UpdateRulers();
+            return;
+        }
         if ( false === this.m_oWordControl.m_oLogicDocument.Document_Is_SelectionLocked(AscCommon.changestype_Table_Properties) )
         {
             this.m_oWordControl.m_oLogicDocument.StartAction(AscDFH.historydescription_Document_SetTableMarkup_Hor);

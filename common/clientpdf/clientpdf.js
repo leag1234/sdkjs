@@ -87,17 +87,38 @@
 	async function getFont(name, style) {
 		var idx = AscFonts.g_map_font_index[name];
 		if (idx === undefined) return null;
-		var info = AscFonts.g_font_infos[idx];
-		var id = info.GetFontID(AscCommon.g_font_loader, style);
+		var info = AscFonts.g_font_infos[idx], loader = AscCommon.g_font_loader;
+		var lf = window.Common && window.Common.ElixirLocalFonts;
+		var id = info.GetFontID(loader, style), epoch = lf && lf.desktopPolicy && typeof lf.desktopPolicy.epoch === 'function' && lf.desktopPolicy.epoch();
 		if (!id || !id.file) return null;
-		if (!(await ensureLoaded(id.file))) return null;
-		var bytes = streamBytes(id.file.stream_index);
-		if (!bytes) return null;
-		var need = info.GetNeedInfo ? info.GetNeedInfo(style) : {};
-		var lf = window['Common'] && window['Common']['ElixirLocalFonts'];
-		var local = !!(lf && lf.isLocal && lf.isLocal(name));
-		return { key: id.file.Id + '#' + (id.faceIndex || 0), bytes: bytes, faceIndex: id.faceIndex || 0, needBold: !!need.needB, needItalic: !!need.needI,
-			source: local ? 'local' : 'server' };
+		var local = !!(info.isLocalFont || id.file.localFontData || lf && lf.isLocal && lf.isLocal(name));
+		async function permitted() {
+			if (!local) return true;
+			if (!lf || !lf.hasConsent || !lf.hasConsent()) return false;
+			var bridge = lf.desktopBridge && lf.desktopBridge();
+			if (bridge && (!bridge.fontPermission || !(await bridge.fontPermission()))) return false;
+			return !lf.desktopPolicy || typeof lf.desktopPolicy.epoch !== 'function' || lf.desktopPolicy.epoch() === epoch;
+		}
+		if (!(await permitted())) return null;
+		// A lazy collection/variable loader updates the selected face after reading bytes.
+		for (var attempt = 0; attempt < 3; attempt++) {
+			if (!(await ensureLoaded(id.file)) || !(await permitted())) return null;
+			var current = info.GetFontID(loader, style);
+			if (!current || !current.file) return null;
+			if (current.file !== id.file) { id = current; continue; }
+			id = current;
+			var bytes = streamBytes(id.file.stream_index);
+			if (!bytes) return null;
+			var need = info.GetNeedInfo ? info.GetNeedInfo(style) : {};
+			var fileKey = id.file.localFontData && id.file.localFontData.fileId || id.file.Id;
+			return { key: fileKey + '#' + (id.faceIndex || 0), fileKey: fileKey,
+				bytes: bytes, faceIndex: id.faceIndex || 0,
+				variableUnsupported: !!(local && lf && lf.desktopPolicy && id.file.localFontData &&
+					id.file.localFontData.variable && (id.faceIndex >>> 16) && id.file.localFontData.instanceDefault !== true),
+				needBold: !!need.needB, needItalic: !!need.needI,
+				source: local ? 'local' : 'server' };
+		}
+		return null;
 	}
 	var FontSource = { get: getFont };
 

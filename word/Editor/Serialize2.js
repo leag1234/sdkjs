@@ -218,7 +218,8 @@ var c_oSerProp_tblPrType = {
 	tblDescription: 18,
 	TableIndTwips: 19,
 	TableCellSpacingTwips: 20,
-	tblOverlap: 21
+	tblOverlap: 21,
+	bidiVisual: 22
 };
 var c_oSer_tblpPrType = {
     Page:0,
@@ -4538,6 +4539,10 @@ Binary_tblPrWriter.prototype =
     WriteTblPr: function(tblPr, table)
     {
         var oThis = this;
+		if (undefined !== tblPr.BidiVisual)
+		{
+			this.bs.WriteItem(c_oSerProp_tblPrType.bidiVisual, function(){oThis.memory.WriteBool(tblPr.BidiVisual);});
+		}
 		if (null != tblPr.TableStyleRowBandSize) {
 			this.bs.WriteItem(c_oSerProp_tblPrType.RowBandSize, function(){oThis.memory.WriteLong(tblPr.TableStyleRowBandSize);});
 		}
@@ -10426,7 +10431,11 @@ Binary_tblPrReader.prototype =
     {
         var res = c_oSerConstants.ReadOk;
         var oThis = this;
-		if ( c_oSerProp_tblPrType.RowBandSize === type ) {
+		if (c_oSerProp_tblPrType.bidiVisual === type)
+		{
+			Pr.BidiVisual = this.stream.GetBool();
+		}
+		else if ( c_oSerProp_tblPrType.RowBandSize === type ) {
 			Pr.TableStyleRowBandSize = this.stream.GetLongLE();
 		} else if ( c_oSerProp_tblPrType.ColBandSize === type ) {
 			Pr.TableStyleColBandSize = this.stream.GetLongLE();

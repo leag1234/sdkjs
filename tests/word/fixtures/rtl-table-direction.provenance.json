@@ -1,0 +1,17 @@
+{
+  "license": "CC0-1.0",
+  "kind": "Original synthetic public regression fixture, no private or Word-produced content",
+  "sha256": "8f579bd9e50d0b1329f02cde4ad2404b063e210947f06dce9f03c61c3857909a",
+  "logicalFirstRow": [
+    "R1A",
+    "R1B",
+    "R1C"
+  ],
+  "expectedEffectiveTableRTL": true,
+  "expectedPhysicalFirstRow": [
+    "R1C",
+    "R1B",
+    "R1A"
+  ],
+  "actualWordGolden": false
+}

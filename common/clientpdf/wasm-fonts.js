@@ -126,6 +126,7 @@
 		var lf = window.Common && window.Common.ElixirLocalFonts;
 		var local = !!(info.isLocalFont || id.file.localFontData || (lf && lf.isLocal && lf.isLocal(entry.name)));
 		if (local && !(await consent(lf))) throw failure(entry.name + ': local font consent not granted');
+		var epoch = lf && lf.desktopPolicy && typeof lf.desktopPolicy.epoch === 'function' ? lf.desktopPolicy.epoch() : undefined;
 		var need = info.GetNeedInfo ? info.GetNeedInfo(entry.style) : {};
 		var meta = { name: entry.name, style: entry.style, faceIndex: id.faceIndex || 0,
 			key: id.file.Id + '#' + (id.faceIndex || 0), source: local ? 'local' : 'server',
@@ -152,13 +153,21 @@
 			if (cache && !meta.cacheHit) {
 				try { await cache.put(cacheKey, new Response(bytes)); } catch (e) {}
 			}
-		} else if (!bytes) {
+		} else {
 			// Reuse the editor's consented lazy loader; never enumerate or prompt here.
 			var source = options.getFont || common.ClientPdf && common.ClientPdf.fonts.get;
 			var font = source && await source(entry.name, entry.style);
-			if (font) { bytes = font.bytes; meta.faceIndex = font.faceIndex || 0; meta.key = font.key; }
+			if (font) {
+				if (font.variableUnsupported) throw failure(entry.name + ': nondefault variable instance requires static embedding');
+				bytes = font.bytes; meta.faceIndex = font.faceIndex || 0; meta.key = font.key;
+				meta.fileKey = font.fileKey || id.file.localFontData && id.file.localFontData.fileId || font.key.split('#')[0];
+				meta.needBold = font.needBold === undefined ? meta.needBold : !!font.needBold;
+				meta.needItalic = font.needItalic === undefined ? meta.needItalic : !!font.needItalic;
+			} else bytes = null;
+			if (!(await consent(lf)) || epoch !== undefined && lf.desktopPolicy.epoch() !== epoch) throw failure(entry.name + ': local font consent changed');
 		}
 		if (!bytes || !bytes.length) throw failure(entry.name + ': font data unavailable');
+		if (bytes.length > 128 * 1024 * 1024) throw failure(entry.name + ': font exceeds 128 MiB limit');
 		meta.bytes = bytes; return meta;
 	}
 	async function ensureFonts(names, options) {
@@ -173,14 +182,63 @@
 					promise.finally(function (k) { return function () { pending.delete(k); }; }(key)).catch(function () {});
 				}
 				var font = await promise;
-				if (!files.has(font.key.split('#')[0])) {
-					files.set(font.key.split('#')[0], '/fonts/font' + files.size + '.ttf');
+				var fileKey = font.fileKey || font.key.split('#')[0];
+				if (!files.has(fileKey)) {
+					if (bytes + font.bytes.length > 192 * 1024 * 1024) throw failure('selected fonts exceed 192 MiB limit');
+					files.set(fileKey, '/fonts/font' + files.size + '.ttf');
 					bytes += font.bytes.length;
 				}
-				written.push(Object.assign({}, font, { path: files.get(font.key.split('#')[0]) }));
+				written.push(Object.assign({}, font, { path: files.get(fileKey) }));
 			} catch (e) { missing.push({ name: entry.name, style: entry.style, reason: e.detail || e.message }); }
 		}
 		return { written: written, missing: missing, bytes: bytes };
+	}
+	// FreeType encodes named instance + 1 in high16, collection face in low16.
+	function inspectFace(data, faceIndex) {
+		if (!Number.isInteger(faceIndex) || faceIndex < 0 || faceIndex > 0x7fffffff) throw failure('invalid encoded face index');
+		var dv = new DataView(data.buffer, data.byteOffset, data.byteLength), collection = faceIndex & 65535, instance = faceIndex >>> 16;
+		function bounds(at, n) { if (!Number.isSafeInteger(at) || at < 0 || n < 0 || at + n > data.length) throw failure('invalid font bounds'); }
+		bounds(0, 12);
+		var offset = 0;
+		if (dv.getUint32(0) === 0x74746366) {
+			var count = dv.getUint32(8);
+			if (!count || count > 64 || collection >= count) throw failure('invalid collection face');
+			bounds(12, count * 4); offset = dv.getUint32(12 + collection * 4);
+		} else if (collection) throw failure('noncollection face index');
+		bounds(offset, 12);
+		var signature = dv.getUint32(offset), n = dv.getUint16(offset + 4), tables = {};
+		if ([0x00010000, 0x4f54544f, 0x74727565].indexOf(signature) < 0 || n > 256) throw failure('invalid SFNT');
+		bounds(offset + 12, n * 16);
+		for (var i = 0; i < n; i++) {
+			var at = offset + 12 + i * 16, start = dv.getUint32(at + 8), length = dv.getUint32(at + 12);
+			bounds(start, length);
+			tables[String.fromCharCode.apply(null, data.subarray(at, at + 4))] = {start: start, length: length};
+		}
+		function table(tag, min) { var t = tables[tag]; if (t && t.length < min) throw failure('truncated ' + tag); return t && t.start; }
+		var head = table('head', 54), os = table('OS/2', 78), post = table('post', 16), fvar = table('fvar', 16);
+		if (os !== undefined) table('OS/2', dv.getUint16(os) >= 2 ? 96 : dv.getUint16(os) >= 1 ? 86 : 78);
+		var physical = head === undefined ? 0 : dv.getUint16(head + 44);
+		var weight = os === undefined ? 400 : dv.getUint16(os + 4), axes = {}, nonDefault = false;
+		if (fvar !== undefined) {
+			var axisOffset = dv.getUint16(fvar + 4), axisCount = dv.getUint16(fvar + 8), axisSize = dv.getUint16(fvar + 10);
+			var instanceCount = dv.getUint16(fvar + 12), instanceSize = dv.getUint16(fvar + 14), end = fvar + tables.fvar.length;
+			if (axisOffset < 16 || axisCount > 64 || axisSize < 20 || instanceCount > 4096 || instanceSize < 4 + axisCount * 4 ||
+				fvar + axisOffset + axisCount * axisSize + instanceCount * instanceSize > end || instance > instanceCount) throw failure('invalid variable face');
+			for (var a = 0; a < axisCount; a++) {
+				var axis = fvar + axisOffset + a * axisSize;
+				var tag = String.fromCharCode.apply(null, data.subarray(axis, axis + 4));
+				var value = instance ? fvar + axisOffset + axisCount * axisSize + (instance - 1) * instanceSize + 4 + a * 4 : axis + 8;
+				axes[tag] = dv.getInt32(value) / 65536;
+				if (dv.getInt32(value) !== dv.getInt32(axis + 8)) nonDefault = true;
+				var min = dv.getInt32(axis + 4) / 65536, max = dv.getInt32(axis + 12) / 65536;
+				if (axes[tag] < min || axes[tag] > max || min > max) throw failure('invalid variable coordinate');
+			}
+		} else if (instance) throw failure('named instance without fvar');
+		if (axes.wght !== undefined && (axes.wght < 1 || axes.wght > 1000)) throw failure('invalid variable weight');
+		if (axes.wght !== undefined) { weight = Math.round(axes.wght); physical = (physical & ~1) | (weight >= 700 ? 1 : 0); }
+		if (axes.ital !== undefined || axes.slnt !== undefined) physical = (physical & ~2) | (axes.ital || axes.slnt ? 2 : 0);
+		return {offset: offset, tables: tables, head: head, os: os, post: post, physical: physical, weight: weight,
+			embedding: os === undefined ? 0 : dv.getUint16(os + 8), axes: axes, nonDefault: nonDefault};
 	}
 	function selection(fonts) {
 		var parts = [], total = 4;
@@ -193,19 +251,17 @@
 			}
 			function str(value) { var u = new TextEncoder().encode(value); num(u.length, 4); add(u); }
 			var data = font.bytes, dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
-			var offset = dv.getUint32(0) === 0x74746366 ? dv.getUint32(12 + font.faceIndex * 4) : 0;
-			var tables = {};
-			for (var i = 0; i < dv.getUint16(offset + 4); i++) {
-				var tablePos = offset + 12 + i * 16;
-				tables[String.fromCharCode.apply(null, data.subarray(tablePos, tablePos + 4))] = dv.getUint32(tablePos + 8);
-			}
-			var os = tables['OS/2'], head = tables.head, post = tables.post;
+			var inspected = inspectFace(data, font.faceIndex), offset = inspected.offset;
+			var desktop = window.Common && window.Common.ElixirLocalFonts && window.Common.ElixirLocalFonts.desktopPolicy;
+			if (desktop && font.source === 'local' && inspected.nonDefault) throw failure(font.name + ': nondefault variable instance requires static embedding');
+			var os = inspected.os, head = inspected.head, post = inspected.post;
 			function u16(at, fallback) { return at === undefined ? fallback : dv.getUint16(at); }
 			function s16(at, fallback) { return at === undefined ? fallback : dv.getInt16(at); }
 			function at(base, n) { return base === undefined ? undefined : base + n; }
 			num(0, 4); str(font.name); num(0, 4); str(font.path);
-			num(font.faceIndex, 4);
-			var style = u16(at(head, 44), font.style);
+			// Default named aliases are the same instance; native readers require the collection ordinal.
+			num(desktop && font.source === 'local' && !inspected.nonDefault ? font.faceIndex & 65535 : font.faceIndex, 4);
+			var style = inspected.physical;
 			num(!!(style & 2), 4); num(!!(style & 1), 4);
 			num(post === undefined ? 0 : dv.getUint32(post + 12) !== 0, 4);
 			num(10, 4); add(os === undefined ? new Uint8Array(10) : data.slice(os + 32, os + 42));
@@ -213,7 +269,7 @@
 				var p = j < 4 ? at(os, 42 + j * 4) : os !== undefined && dv.getUint16(os) >= 1 ? os + 78 + (j - 4) * 4 : undefined;
 				num(p === undefined ? 0 : dv.getUint32(p), 4);
 			}
-			num(u16(at(os, 4), 400), 2); num(u16(at(os, 6), 5), 2);
+			num(inspected.weight, 2); num(u16(at(os, 6), 5), 2);
 			num(s16(at(os, 30), 0), 2); num(dv.getUint32(offset) === 0x4f54544f ? 2 : 1, 2);
 			var scale = 1000 / u16(at(head, 18), 1000);
 			[2, 68, 70, 72].forEach(function (n) { num(Math.trunc(s16(at(os, n), 0) * scale), 2); });
@@ -227,6 +283,21 @@
 		var unique = new Map();
 		fonts.forEach(function (f) { unique.set(f.name + '|' + f.path + '|' + f.faceIndex, f); });
 		unique.forEach(function (f) { var u = record(f); parts.push(u); total += u.length; });
+		var lf = window.Common && window.Common.ElixirLocalFonts, policy = lf && lf.desktopPolicy;
+		var ranges = policy && policy.nativeRanges ? policy.nativeRanges(fonts) : [];
+		if (ranges.length) {
+			if (ranges.length > 100000) throw failure('too many selected font ranges');
+			var rangeParts = [], length = 4;
+			ranges.forEach(function (range) {
+				var name = new TextEncoder().encode(range.name), row = new Uint8Array(12 + name.length), view = new DataView(row.buffer);
+				view.setInt32(0, name.length, true); row.set(name, 4);
+				view.setInt32(4 + name.length, range.start, true); view.setInt32(8 + name.length, range.end, true);
+				rangeParts.push(row); length += row.length;
+			});
+			var suffix = new Uint8Array(length), at = 4; new DataView(suffix.buffer).setInt32(0, ranges.length, true);
+			rangeParts.forEach(function (row) { suffix.set(row, at); at += row.length; });
+			parts.push(suffix); total += suffix.length;
+		}
 		var result = new Uint8Array(total), pos = 4;
 		new DataView(result.buffer).setInt32(0, unique.size, true);
 		parts.forEach(function (u) { result.set(u, pos); pos += u.length; }); return result;
@@ -289,6 +360,6 @@
 	}
 	window.EOWasmFonts = window['EOWasmFonts'] = {
 		ensureFonts: ensureFonts, prepareFS: prepareFS, fontsOfDocument: fontsOfDocument,
-		cacheName: CACHE, selection: selection
+		cacheName: CACHE, selection: selection, inspectFace: inspectFace
 	};
 })(window);

@@ -54,6 +54,7 @@ AscDFH.changesFactory[AscDFH.historyitem_Table_TableDescription]      = CChanges
 AscDFH.changesFactory[AscDFH.historyitem_Table_TableCaption]          = CChangesTableTableCaption;
 AscDFH.changesFactory[AscDFH.historyitem_Table_TableGridChange]       = CChangesTableTableGridChange;
 AscDFH.changesFactory[AscDFH.historyitem_Table_PrChange]              = CChangesTablePrChange;
+AscDFH.changesFactory[AscDFH.historyitem_Table_BidiVisual]            = CChangesTableBidiVisual;
 //----------------------------------------------------------------------------------------------------------------------
 // Карта зависимости изменений
 //----------------------------------------------------------------------------------------------------------------------
@@ -159,6 +160,7 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Table_Pr]                    = [
 	AscDFH.historyitem_Table_TableLayout,
 	AscDFH.historyitem_Table_TableDescription,
 	AscDFH.historyitem_Table_TableCaption,
+	AscDFH.historyitem_Table_BidiVisual,
 	AscDFH.historyitem_Table_PrChange
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_Table_TableLayout]           = [
@@ -179,6 +181,11 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Table_TableGridChange] = [
 AscDFH.changesRelationMap[AscDFH.historyitem_Table_PrChange] = [
 	AscDFH.historyitem_Table_Pr,
 	AscDFH.historyitem_Table_PrChange
+];
+
+AscDFH.changesRelationMap[AscDFH.historyitem_Table_BidiVisual] = [
+	AscDFH.historyitem_Table_BidiVisual,
+	AscDFH.historyitem_Table_Pr
 ];
 
 /**
@@ -1347,6 +1354,11 @@ CChangesTablePr.prototype.Merge = function(oChange)
 			this.New.TableDescription = oChange.New;
 			break;
 		}
+		case AscDFH.historyitem_Table_BidiVisual:
+		{
+			this.New.BidiVisual = oChange.New;
+			break;
+		}
 		case AscDFH.historyitem_Table_TableCaption:
 		{
 			this.New.TableCaption = oChange.New;
@@ -1395,6 +1407,24 @@ CChangesTableTableDescription.prototype.private_SetValue = function(Value)
 };
 CChangesTableTableDescription.prototype.Merge = private_TableChangesOnMergePr;
 CChangesTableTableDescription.prototype.CheckLock = private_TableChangesCheckLock;
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
+function CChangesTableBidiVisual(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+}
+CChangesTableBidiVisual.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesTableBidiVisual.prototype.constructor = CChangesTableBidiVisual;
+CChangesTableBidiVisual.prototype.Type = AscDFH.historyitem_Table_BidiVisual;
+CChangesTableBidiVisual.prototype.private_SetValue = function(Value)
+{
+	this.Class.Pr.BidiVisual = Value;
+	this.Class.Recalc_CompiledPr2();
+};
+CChangesTableBidiVisual.prototype.Merge = private_TableChangesOnMergePr;
+CChangesTableBidiVisual.prototype.CheckLock = private_TableChangesCheckLock;
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseStringProperty}

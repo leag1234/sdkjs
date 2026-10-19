@@ -28,6 +28,7 @@ var c_oAscSectionBreakType    = Asc.c_oAscSectionBreakType;
 var c_oPresentationMinRowHeight = 25400 / 36000;
 CTable.prototype.Recalculate_Page = function(PageIndex)
 {
+	this.InvalidateInteractionGeometry();
 	//-------------------------------------------------------------------------------------------------------------
 	// Обрабатываем настройку "не отрывать от следующего"
 	//-------------------------------------------------------------------------------------------------------------
@@ -72,6 +73,7 @@ CTable.prototype.Recalculate_Page = function(PageIndex)
 };
 CTable.prototype.Recalculate_SkipPage = function(PageIndex)
 {
+	this.InvalidateInteractionGeometry();
 	if (0 === PageIndex)
 	{
 		this.StartFromNewPage();
@@ -101,6 +103,7 @@ CTable.prototype.Recalculate_SkipPage = function(PageIndex)
 };
 CTable.prototype.Recalculate_Grid = function()
 {
+	this.InvalidateInteractionGeometry();
 	this.private_RecalculateGrid();
 };
 CTable.prototype.SaveRecalculateObject = function()
@@ -111,10 +114,12 @@ CTable.prototype.SaveRecalculateObject = function()
 };
 CTable.prototype.LoadRecalculateObject = function(RecalcObj)
 {
+	this.InvalidateInteractionGeometry();
 	RecalcObj.Load(this);
 };
 CTable.prototype.PrepareRecalculateObject = function()
 {
+	this.InvalidateInteractionGeometry();
 	this.TableSumGrid  = [];
 	this.TableGridCalc = [];
 
@@ -144,6 +149,7 @@ CTable.prototype.PrepareRecalculateObject = function()
 };
 CTable.prototype.StartFromNewPage = function()
 {
+	this.InvalidateInteractionGeometry();
 	this.Pages.length     = 1;
 	this.Pages[0]         = new CTablePage(0, 0, 0, 0, 0, 0);
 	this.Pages[0].LastRow = -1;
@@ -1424,6 +1430,8 @@ CTable.prototype.private_RecalculateBorders = function()
     this.MaxBotMargin = MaxBotMargin;
 	
 	let layoutCoeff = this.getLayoutScaleCoefficient();
+	const rtl = this.IsRTL();
+	const tableWidth = this.TableSumGrid[this.TableSumGrid.length - 1];
 
     // Также для каждой ячейки обсчитаем ее метрики и левую и правую границы
     for ( var CurRow = 0; CurRow < this.Content.length; CurRow++  )
@@ -1683,12 +1691,25 @@ CTable.prototype.private_RecalculateBorders = function()
                 }
             }
 
-            Cell.Set_Metrics( CurGridCol, X_grid_start, X_grid_end, X_cell_start, X_cell_end, X_content_start, X_content_end );
+			if (rtl)
+			{
+				const metrics = AscWord.TableDirection.reflectMetrics({
+					X_grid_start: X_grid_start, X_grid_end: X_grid_end,
+					X_cell_start: X_cell_start, X_cell_end: X_cell_end,
+					X_content_start: X_content_start, X_content_end: X_content_end
+				}, tableWidth);
+				Cell.Set_Metrics(CurGridCol, metrics.X_grid_start, metrics.X_grid_end, metrics.X_cell_start, metrics.X_cell_end, metrics.X_content_start, metrics.X_content_end);
+			}
+			else
+				Cell.Set_Metrics(CurGridCol, X_grid_start, X_grid_end, X_cell_start, X_cell_end, X_content_start, X_content_end);
 
             CurGridCol += GridSpan;
         }
 
-        Row.Set_Metrics_X( Row_x_min, Row_x_max );
+		if (rtl)
+			Row.Set_Metrics_X(tableWidth - Row_x_max, tableWidth - Row_x_min);
+		else
+			Row.Set_Metrics_X(Row_x_min, Row_x_max);
     }
 
     this.RecalcInfo.TableBorders = false;
@@ -1956,6 +1977,13 @@ CTable.prototype.private_RecalculatePositionX = function(CurPage)
                 break;
             }
         }
+		if (this.IsRTL())
+		{
+			const width = this.TableSumGrid[this.TableSumGrid.length - 1];
+			Page.X = AscWord.TableDirection.reflectTablePosition(Page.X, Page.X_origin, Page.XLimit, width);
+			if (0 === CurPage)
+				this.AnchorPosition.CalcX = AscWord.TableDirection.reflectTablePosition(this.AnchorPosition.CalcX, Page.X_origin, Page.XLimit, width);
+		}
     }
     else
     {
@@ -3787,13 +3815,16 @@ function CTableRecalcInfo()
 
     this.CellsToRecalc = {};
     this.CellsAll      = true;
+    this.InteractionRevision = 0;
 }
 CTableRecalcInfo.prototype.RecalcBorders = function()
 {
+    ++this.InteractionRevision;
     this.TableBorders = true;
 };
 CTableRecalcInfo.prototype.Add_Cell = function(Cell)
 {
+    ++this.InteractionRevision;
     this.CellsToRecalc[Cell.Get_Id()] = Cell;
 };
 CTableRecalcInfo.prototype.Check_Cell = function(Cell)
@@ -3805,10 +3836,12 @@ CTableRecalcInfo.prototype.Check_Cell = function(Cell)
 };
 CTableRecalcInfo.prototype.Recalc_AllCells = function()
 {
+    ++this.InteractionRevision;
     this.CellsAll = true;
 };
 CTableRecalcInfo.prototype.Reset = function(isNeedRecalculate)
 {
+    ++this.InteractionRevision;
     this.TableGrid     = isNeedRecalculate;
     this.TableBorders  = isNeedRecalculate;
     this.CellsAll      = isNeedRecalculate;

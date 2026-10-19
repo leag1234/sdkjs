@@ -378,7 +378,8 @@
                 (0 !== (style & FontStyle.FontStyleBold)) ? true : false,
                 (0 !== (style & FontStyle.FontStyleItalic)) ? true : false,
                 info.needB, info.needI,
-                isNoSetupToManager);
+                isNoSetupToManager,
+                AscFonts.DesktopFontPolicy && this.isLocalFont ? {name: this.Name, style: style} : null);
 
             if (!pFontFile && -1 === fontfile.stream_index && true === AscFonts.IsLoadFontOnCheckSymbols && true != AscFonts.IsLoadFontOnCheckSymbolsWait)
             {

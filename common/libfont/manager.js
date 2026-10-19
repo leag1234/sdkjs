@@ -535,7 +535,7 @@
 				this.IsAdvanceNeedBoldFonts = value;
 			},
 
-			LoadFont : function(fontFile, faceIndex, size, isBold, isItalic, needBold, needItalic, isNoSetupToManager)
+			LoadFont : function(fontFile, faceIndex, size, isBold, isItalic, needBold, needItalic, isNoSetupToManager, desktopIdentity)
 			{
 				var _ext = "";
 				if (needBold)
@@ -543,11 +543,22 @@
 				if (needItalic)
 					_ext += "nitalic";
 
+				// Keep desktop variant aliases distinct through shaping's family-name relookup.
+				if (desktopIdentity)
+					_ext += "desktop:" + desktopIdentity.name.length + ":" + desktopIdentity.name;
+
 				var pFontFile = this.m_oFontsCache.LockFont(fontFile.stream_index, fontFile.Id, faceIndex, size, _ext, this);
 				if (!pFontFile)
 					return null;
 
 				pFontFile.m_oFontManager = this;
+				if (AscFonts.DesktopFontPolicy)
+					pFontFile.eoRequestedStyle = (isBold ? 1 : 0) | (isItalic ? 2 : 0);
+				if (desktopIdentity)
+				{
+					pFontFile.m_pFaceInfo = Object.assign({}, pFontFile.m_pFaceInfo, {family_name: desktopIdentity.name});
+					pFontFile.eoFamily = desktopIdentity.name;
+				}
 
 				pFontFile.SetNeedBold(needBold);
 				pFontFile.SetNeedItalic(needItalic);
@@ -576,6 +587,7 @@
 			}
 		}
 
+	window['AscFonts'].DesktopFontPolicyVersion = 1;
 	window['AscFonts'].CFontManager = CFontManager;
 	window['AscFonts'].CFontFilesCache = CFontFilesCache;
 })(window);
