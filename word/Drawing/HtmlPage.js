@@ -985,6 +985,7 @@ function CEditorPage(api)
 
 		oWordControl.m_oApi.sync_zoomChangeCallback(this.m_nZoomValue, type);
 		oWordControl.m_bIsUpdateTargetNoAttack = true;
+
 		oWordControl.m_bIsRePaintOnScroll      = true;
 
 
@@ -1409,8 +1410,13 @@ function CEditorPage(api)
 		oWordControl.m_bIsUpdateVerRuler       = true;
 		oWordControl.m_bIsUpdateTargetNoAttack = true;
 
+
 		if (oWordControl.m_bIsRePaintOnScroll === true)
 			oWordControl.OnScroll();
+
+		if (sender && sender.getIsLockedMouse && sender.getIsLockedMouse() && oWordControl.m_oLogicDocument
+			&& typeof oWordControl.m_oLogicDocument.UpdateLocalFontRelayoutView === "function")
+			oWordControl.m_oLogicDocument.UpdateLocalFontRelayoutView();
 
 		if (oWordControl.MobileTouchManager && oWordControl.MobileTouchManager.iScroll)
 		{
@@ -1904,6 +1910,8 @@ function CEditorPage(api)
 				oWordControl.m_oDrawingDocument.NeedScrollToTargetFlag = true;
 				if(!oThis.m_oApi.isEyedropperStarted())
 				{
+					if (typeof oWordControl.m_oLogicDocument.CancelLocalFontRelayoutView === "function")
+						oWordControl.m_oLogicDocument.CancelLocalFontRelayoutView();
 					oWordControl.m_oLogicDocument.OnMouseDown(global_mouseEvent, pos.X, pos.Y, pos.Page);
 				}
 				oWordControl.m_oDrawingDocument.NeedScrollToTargetFlag = false;
@@ -2430,6 +2438,10 @@ function CEditorPage(api)
 		if (0 !== values.y)
 			oThis.m_oScrollVerApi.scrollBy(0, values.y, false);
 
+		if (0 !== values.y && oThis.m_oLogicDocument
+			&& typeof oThis.m_oLogicDocument.UpdateLocalFontRelayoutView === "function")
+			oThis.m_oLogicDocument.UpdateLocalFontRelayoutView();
+
 		// здесь - имитируем моус мув ---------------------------
 		var _e   = {};
 		_e.pageX = global_mouseEvent.X;
@@ -2691,6 +2703,10 @@ function CEditorPage(api)
 		oWordControl.StartUpdateOverlay();
 
 		oWordControl.IsKeyDownButNoPress = true;
+		if ((global_keyboardEvent.KeyCode >= 33 && global_keyboardEvent.KeyCode <= 40)
+			|| [8, 9, 13, 46].indexOf(global_keyboardEvent.KeyCode) !== -1)
+			if (typeof oWordControl.m_oLogicDocument.CancelLocalFontRelayoutView === "function")
+				oWordControl.m_oLogicDocument.CancelLocalFontRelayoutView();
 		var _ret_mouseDown               = oWordControl.m_oLogicDocument.OnKeyDown(global_keyboardEvent);
 		oWordControl.bIsUseKeyPress      = ((_ret_mouseDown & keydownresult_PreventKeyPress) != 0) ? false : true;
 
@@ -2781,6 +2797,8 @@ function CEditorPage(api)
 		AscCommon.check_KeyboardEvent(e);
 
 		oWordControl.StartUpdateOverlay();
+		if (typeof oWordControl.m_oLogicDocument.CancelLocalFontRelayoutView === "function")
+			oWordControl.m_oLogicDocument.CancelLocalFontRelayoutView();
 		var retValue = oWordControl.m_oLogicDocument.OnKeyPress(global_keyboardEvent);
 		oWordControl.EndUpdateOverlay();
 		oWordControl.paintMessageLoop.requestUrgent(); // caret and text in the next frame

@@ -61,6 +61,15 @@
 			correct : false
 		};
 
+
+		// ElixirOffice's preload bridge identifies its own desktop surface.
+		// Keep OS/browser fractional density; ordinary hosted scaling is unchanged.
+		try {
+			var desktopBridge = window.eoDesktop || (window.parent && window.parent.eoDesktop);
+			if (desktopBridge && typeof desktopBridge.interfaceSize === "function")
+				return retValue;
+		} catch (desktopAccessError) {}
+
 		if (!isCorrectApplicationScaleEnabled)
 			return retValue;
 

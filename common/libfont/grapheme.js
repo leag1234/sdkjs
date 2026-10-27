@@ -162,17 +162,35 @@
 			GRAPHEMES_CACHE[nFontId] = {};
 
 		let result = GRAPHEMES_CACHE[nFontId];
+		let hasMissingGlyph = false;
 
 		let nPos = 3;
 		while (nPos < GRAPHEME_LEN)
 		{
 			let nGID = GRAPHEME_BUFFER[nPos];
 			nPos += 6;
+			if (0 === nGID)
+				hasMissingGlyph = true;
 
 			if (!result[nGID])
 				result[nGID] = {};
 
 			result = result[nGID];
+		}
+		if (hasMissingGlyph)
+		{
+			// The GID alone cannot distinguish missing characters. Include the full shaped
+			// buffer (font, advances and offsets) plus Unicode, while reusing exact repeats.
+			let unicode = [];
+			for (let nIndex = 0; nIndex < codePoints.getCount(); ++nIndex)
+				unicode.push(codePoints.get(nIndex));
+			FillCodePoints(codePoints);
+			let key = JSON.stringify([unicode, GRAPHEME_BUFFER]);
+			if (!result.MissingGraphemes)
+				result.MissingGraphemes = Object.create(null);
+			if (!result.MissingGraphemes[key])
+				result.MissingGraphemes[key] = GetGraphemeIndex(codePoints);
+			return result.MissingGraphemes[key];
 		}
 
 		// TODO: Для скорости проверку совпадения отключили (всегда совпадает)

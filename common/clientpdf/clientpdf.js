@@ -31,6 +31,15 @@
 	var MAX_PAGES = 3000;          // above this, the server path (memory of the tab)
 	var YIELD_MS = 40;             // give the browser a frame at least every YIELD_MS of work
 
+	// Scripts covered by the bundled pan-CJK faces. Both PDF backends use this one predicate.
+	var CJK_RANGES = [[0x1100, 0x11FF], [0x2E80, 0xA4CF], [0xAC00, 0xD7FF],
+		[0xF900, 0xFAFF], [0xFF61, 0xFF9F], [0x20000, 0x323AF]];
+	function isCjkCodePoint(codepoint) {
+		for (var i = 0; i < CJK_RANGES.length; i++)
+			if (codepoint >= CJK_RANGES[i][0] && codepoint <= CJK_RANGES[i][1]) return true;
+		return false;
+	}
+
 	var enabled = true;
 	try { if (window.localStorage && window.localStorage.getItem('elixir.clientpdf') === 'off') enabled = false; } catch (e) { /* private mode */ }
 
@@ -391,6 +400,8 @@
 		fonts: FontSource,
 		getImage: getImage, getRawImage: getRawImage,
 		unsupported: unsupported,
+		cjkRanges: CJK_RANGES,
+		isCjkCodePoint: isCjkCodePoint,
 		registerBackend: registerBackend,
 		setBackend: function (id) { preferredBackend = id; backendId = id === 'wasm' && !runtimeUrl ? 'js' : id; },
 		discoverRuntime: discoverRuntime,
@@ -408,6 +419,8 @@
 	FontSource['get'] = FontSource.get;
 	ClientPdf['getImage'] = getImage;
 	ClientPdf['unsupported'] = unsupported;
+	ClientPdf['cjkRanges'] = CJK_RANGES;
+	ClientPdf['isCjkCodePoint'] = isCjkCodePoint;
 	ClientPdf['registerBackend'] = ClientPdf.registerBackend;
 	ClientPdf['setBackend'] = ClientPdf.setBackend;
 	ClientPdf['getBackend'] = ClientPdf.getBackend;

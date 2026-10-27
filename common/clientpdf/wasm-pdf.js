@@ -28,6 +28,26 @@
 			return s;
 		}
 		function font() { self.fonts.set(self.font + '|' + self.style, { name: self.font, style: self.style }); }
+		function isCjk(codepoint) {
+			return !!(AscCommon.ClientPdf.isCjkCodePoint && AscCommon.ClientPdf.isCjkCodePoint(codepoint));
+		}
+		function text() {
+			var value = str(false); skip(8);
+			for (var i = 0; i < value.length; i++) {
+				var codepoint = value.charCodeAt(i);
+				if (codepoint >= 0xD800 && codepoint <= 0xDBFF && i + 1 < value.length)
+					codepoint = ((codepoint - 0xD800) << 10) + (value.charCodeAt(++i) - 0xDC00) + 0x10000;
+				if (isCjk(codepoint)) throw unsupported('cjk', 'use JS font fallback');
+			}
+			font();
+		}
+		function glyphRun() {
+			skip(12); var count = int(), cjk = false;
+			if (count < 0 || count > Math.floor((u.length - p) / 4)) throw unsupported('command', 'invalid glyph count');
+			for (var i = 0; i < count; i++) if (isCjk(int())) cjk = true;
+			if (cjk) throw unsupported('cjk', 'use JS font fallback');
+			font();
+		}
 		function image(wide) {
 			var start = p, path = str(wide), entry = self.images.get(path);
 			if (!entry) {
@@ -59,8 +79,8 @@
 					} break;
 				case 41: this.font = str(false); break;
 				case 43: this.style = int(); break;
-				case 80: str(false); skip(8); font(); break;
-				case 83: skip(12); skip(int() * 4); font(); break;
+				case 80: text(); break;
+				case 83: glyphRun(); break;
 				case 91: case 92: case 104: case 105: skip(8); break;
 				case 94: case 130: skip(24); break;
 				case 111: image(true); skip(16); break;

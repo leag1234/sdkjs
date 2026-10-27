@@ -53,8 +53,18 @@
    finally{api.ShowParaMarks=marks;}
    memory=renderer.Memory;
   }
-  cancelled(signal);await writer.feed(memory.GetDataUint8(0,memory.GetCurPosition()));
-  var bytes=await writer.finish();cancelled(signal);
-  return {bytes:bytes,stats:Object.assign({},writer.stats,{backend:'wasm'})};
+  var data=memory.GetDataUint8(0,memory.GetCurPosition()),bytes,backend='wasm',fallbacks;
+  cancelled(signal);
+  try{await writer.feed(data);bytes=await writer.finish();}
+  catch(error){
+   if(!error||error.code!=='cjk')throw error;
+   await AscCommon.ClientPdf.loadLibs();cancelled(signal);
+   writer=new EOPdf.Writer({fontkit:window.fontkit,getFont:AscCommon.ClientPdf.fonts.get,
+    getImage:AscCommon.ClientPdf.getImage,signal:signal,producer:'ElixirOffice',creator:'ElixirOffice'});
+   await writer.feed(data);bytes=await writer.finish();backend='js';
+   fallbacks=[{from:'wasm',to:'js',reason:'cjk',detail:error.detail||error.message}];
+  }
+  cancelled(signal);
+  return {bytes:bytes,stats:Object.assign({},writer.stats,{backend:backend},fallbacks?{fallbacks:fallbacks}:{})};
  };
 })(window);

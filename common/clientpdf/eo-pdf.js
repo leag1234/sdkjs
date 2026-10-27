@@ -635,6 +635,18 @@
 					var gid = r.uint(), gx = r.dbl(), gy = r.dbl(), nu = r.int(), cps = [];
 					for (var u = 0; u < nu; u++) cps.push(r.int());
 					var f = this.fontByName.get(st.font + '|' + st.style) || await this.font(st.font, st.style);
+					var picker = root.AscFonts && root.AscFonts.FontPickerByCharacter;
+					var cjk = root.AscCommon && root.AscCommon.ClientPdf && root.AscCommon.ClientPdf.isCjkCodePoint;
+					if ((!gid || gid >= (f.entry.fk.numGlyphs || 65535)) && picker && cjk) {
+						for (var cpIndex = 0; cpIndex < cps.length; cpIndex++) {
+							var cp = cps[cpIndex];
+							if (!cjk(cp)) continue;
+							var fallbackName = picker.getFontBySymbol(cp);
+							if (fallbackName) f = this.fontByName.get(fallbackName + '|' + st.style) || await this.font(fallbackName, st.style);
+							gid = f.entry.gidForCodePoint(cp);
+							break;
+						}
+					}
 					this.glyph(f, gid, gx, gy, cps);
 					break;
 				}

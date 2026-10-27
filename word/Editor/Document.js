@@ -1374,6 +1374,7 @@ function CDocument(DrawingDocument, isMainLogicDocument)
 
     this.NeedUpdateTarget = false;
 	this.ViewPosition     = null;  // Позиция, куда мы должны проскроллиться после пересчета (если задана)
+	this.LocalFontRelayoutViewPosition = null;
 
     // Флаг, который контролирует нужно ли обновлять наш курсор у остальных редакторов нашего документа.
     // Также следим за частотой обновления, чтобы оно проходило не чаще одного раза в секунду.
@@ -5190,6 +5191,19 @@ CDocument.prototype.CheckTargetUpdate = function()
 };
 CDocument.prototype.CheckViewPosition = function()
 {
+	if (this.ViewPosition && this.ViewPosition === this.LocalFontRelayoutViewPosition
+		&& !this.ViewPosition.AnchorPos)
+	{
+		// Geometry was unavailable after newer input. Keep its current pixel viewport.
+		this.FullRecalc.ScrollToTarget = false;
+		if (this.FullRecalc.Id)
+			return;
+		this.ViewPosition = null;
+		this.LocalFontRelayoutViewPosition = null;
+		this.NeedUpdateTarget = false;
+		return;
+	}
+
 	if (!this.ViewPosition || !this.ViewPosition.AnchorPos)
 	{
 		this.RecalculateCurPos();
@@ -5207,6 +5221,7 @@ CDocument.prototype.CheckViewPosition = function()
 		this.RecalculateCurPos();
 		
 		this.ViewPosition     = null;
+		this.LocalFontRelayoutViewPosition = null;
 		this.NeedUpdateTarget = false;
 		return;
 	}
@@ -5216,6 +5231,7 @@ CDocument.prototype.CheckViewPosition = function()
 		return;
 	
 	this.ViewPosition     = null;
+	this.LocalFontRelayoutViewPosition = null;
 	this.NeedUpdateTarget = false;
 	
 	function GetXY(docPos)
@@ -14842,8 +14858,25 @@ CDocument.prototype.SetUseTextShd = function(isUse)
 {
 	this.UseTextShd = isUse;
 };
-CDocument.prototype.RecalculateFromStart = function(bUpdateStates)
+CDocument.prototype.RecalculateFromStart = function(bUpdateStates, isKeepView)
 {
+	// Optional font refresh is a layout operation, not a request to reveal the caret.
+	// The SDK view anchor survives pagination; selection is restored synchronously.
+	if (true === isKeepView
+		&& (!this.ViewPosition || this.ViewPosition === this.LocalFontRelayoutViewPosition))
+	{
+		let state = this.Save_DocumentStateBeforeLoadChanges(false, true);
+		this.Load_DocumentStateAfterLoadChanges(state, false);
+		if (!this.ViewPosition)
+			this.ViewPosition = {AnchorPos: null};
+		this.LocalFontRelayoutViewPosition = this.ViewPosition;
+	}
+	else if (this.LocalFontRelayoutViewPosition && this.ViewPosition === this.LocalFontRelayoutViewPosition)
+	{
+		this.ViewPosition = null;
+		this.LocalFontRelayoutViewPosition = null;
+	}
+
 	var RecalculateData = {
 		Inline   : {Pos : 0, PageNum : 0},
 		Flow     : [],
@@ -14857,9 +14890,58 @@ CDocument.prototype.RecalculateFromStart = function(bUpdateStates)
 
 	if (true === bUpdateStates)
 	{
-		this.Document_UpdateInterfaceState();
-		this.Document_UpdateSelectionState();
+		// Selection UI also updates the drawing target after the view anchor is consumed.
+		// Keep its paint-time target update from revealing the old caret during font refresh.
+		let scrollLock = this.Api.isLockScrollToTarget;
+		if (true === isKeepView)
+			this.Api.asc_LockScrollToTarget(true);
+		try
+		{
+			this.Document_UpdateInterfaceState();
+			this.Document_UpdateSelectionState();
+		}
+		finally
+		{
+			if (true === isKeepView)
+				this.Api.asc_LockScrollToTarget(scrollLock);
+		}
 	}
+};
+/** Update only the viewport owned by an unfinished local-font refresh. */
+CDocument.prototype.UpdateLocalFontRelayoutView = function()
+{
+	if (!this.LocalFontRelayoutViewPosition || this.ViewPosition !== this.LocalFontRelayoutViewPosition)
+		return;
+
+	// private_StoreViewPositions reuses existing anchors; take the newer viewport.
+	this.ViewPosition = null;
+	try
+	{
+		let state = this.Save_DocumentStateBeforeLoadChanges(false, true);
+		this.Load_DocumentStateAfterLoadChanges(state, false);
+		if (!this.ViewPosition)
+			this.ViewPosition = {AnchorPos: null};
+		this.LocalFontRelayoutViewPosition = this.ViewPosition;
+	}
+	finally
+	{
+		if (!this.ViewPosition)
+		{
+			// An unavailable layout must not resurrect the stale pre-input anchor.
+			this.ViewPosition = {AnchorPos: null};
+			this.LocalFontRelayoutViewPosition = this.ViewPosition;
+		}
+	}
+};
+/** Explicit editing/navigation takes priority over the background reading anchor. */
+CDocument.prototype.CancelLocalFontRelayoutView = function()
+{
+	if (this.LocalFontRelayoutViewPosition && this.ViewPosition === this.LocalFontRelayoutViewPosition)
+	{
+		this.ViewPosition = null;
+		this.FullRecalc.ScrollToTarget = true;
+	}
+	this.LocalFontRelayoutViewPosition = null;
 };
 CDocument.prototype.Register_Field = function(oField)
 {
@@ -16030,6 +16112,7 @@ CDocument.prototype.private_StoreViewPositions = function(state)
 };
 CDocument.prototype.Load_DocumentStateAfterLoadChanges = function(State, updateSelection)
 {
+	this.LocalFontRelayoutViewPosition = null;
 	this.CollaborativeEditing.UpdateDocumentPositionsByState(State);
 
 	this.RemoveSelection();
