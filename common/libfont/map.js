@@ -3143,6 +3143,16 @@
 				oSelect.wsName = this.GetSubstituteName(name);
 
 				var _font = this.GetFontIndex(oSelect, true);
+				if (undefined === AscFonts.g_map_font_index[_font.m_wsFontName])
+				{
+					var sFallback = this.GetInstalledSubstitute(this.g_fontDictionary.FD_UnknownFontSubstitute)
+						|| this.GetInstalledSubstitute("Arial");
+					if (sFallback)
+					{
+						oSelect.wsName = sFallback;
+						_font = this.GetFontIndex(oSelect, true);
+					}
+				}
 				this.FontPickerMap[name] = _font;
 
 				if (window["onLogPickFont"])

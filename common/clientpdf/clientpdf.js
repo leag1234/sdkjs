@@ -263,6 +263,11 @@
 		var t0 = now();
 		var dd = api.WordControl.m_oDrawingDocument;
 		var logic = api.WordControl.m_oLogicDocument;
+		var mergedPrint = false;
+		if (options.oDocumentMailMerge && (!dd.GenerateMailMergePrint || !dd.GenerateMailMergePrint(options.oDocumentMailMerge)))
+			throw unsupported('mail-merge-layout');
+		mergedPrint = !!options.oDocumentMailMerge;
+		try {
 		var adv = options.advancedOptions;
 		var isSelection = !!(adv && adv.asc_getPrintType && Asc.c_oAscPrintType && Asc.c_oAscPrintType.Selection === adv.asc_getPrintType());
 		if (isSelection) dd.GenerateSelectionPrint();
@@ -330,6 +335,10 @@
 		stats.totalMs = Math.round(now() - t0);
 		stats.bytes = bytes.length;
 		return { bytes: bytes, stats: stats };
+		} finally {
+			if (mergedPrint)
+				dd.printedDocument = null;
+		}
 	}
 
 	async function build(api, options, onProgress) {

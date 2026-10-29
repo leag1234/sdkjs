@@ -4418,7 +4418,9 @@ CDocument.prototype.private_RecalculateFlowTable             = function(RecalcIn
 
     // Когда у нас колонки мы не разбиваем плавающую таблицу на страницы.
     var isColumns = ColumnsCount > 1 ? true : false;
-    if (true === isColumns)
+	// Ordinary floats may split; only columns or an explicit compatibility policy keep the table whole.
+	var keepTogether = isColumns || true === this.GetDocumentSettings().DoNotBreakWrappedTables;
+    if (true === keepTogether)
         YLimit = 10000;
 
     if (true === this.RecalcInfo.Can_RecalcObject())
@@ -4448,7 +4450,7 @@ CDocument.prototype.private_RecalculateFlowTable             = function(RecalcIn
             YLimit : YLimit
         });
 
-        if (((0 === Index && 0 === PageIndex) || Index != StartIndex) && true != Element.IsContentOnFirstPage() && true !== isColumns)
+        if (((0 === Index && 0 === PageIndex) || Index != StartIndex) && true != Element.IsContentOnFirstPage() && true !== keepTogether)
         {
             this.RecalcInfo.Set_PageBreakBefore(true);
             RecalcResult = recalcresult_NextPage | recalcresultflags_LastFromNewPage;
@@ -4481,7 +4483,7 @@ CDocument.prototype.private_RecalculateFlowTable             = function(RecalcIn
                 RecalcResult = Element.Recalculate_Page(0);
                 this.RecalcInfo.FlowObjectPage++;
 
-                if (true === isColumns)
+                if (true === keepTogether)
                     RecalcResult = recalcresult_NextElement;
 
                 if (RecalcResult & recalcresult_NextElement)

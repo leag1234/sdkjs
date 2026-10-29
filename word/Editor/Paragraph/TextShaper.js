@@ -438,12 +438,30 @@
 			
 			return AscFonts.GetGraphemeWidth(grapheme) / 2;
 		}
+
+		function getProbeWidth(codePoint, flags)
+		{
+			let picker = AscFonts.FontPickerByCharacter;
+			if (!picker)
+				return getWidth(codePoint, flags);
+
+			// This Hangul lookup measures a metric; it is not document content.
+			picker.__elixirEastAsiaWidthProbe = (picker.__elixirEastAsiaWidthProbe || 0) + 1;
+			try
+			{
+				return getWidth(codePoint, flags);
+			}
+			finally
+			{
+				picker.__elixirEastAsiaWidthProbe--;
+			}
+		}
 		
 		let w = getWidth(0xE400, 0x160000); // (1 << 17) | (1 << 18) | (1 << 20);
 		if (0 !== w)
 			return w;
 		
-		w = getWidth(0xAC00, 0x280000); // (1 << 19) | (1 << 21);
+		w = getProbeWidth(0xAC00, 0x280000); // (1 << 19) | (1 << 21);
 		w = 0 !== w ? w : 25.4 / 72 / 2;
 		enWidth[fontName][fontStyle] = w;
 		return w;

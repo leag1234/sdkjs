@@ -5,7 +5,7 @@
 (function (window) {
  'use strict';
  var script = document.currentScript.src, base = new URL('.', script).href;
- var formats = {docx:65,doc:66,odt:67,rtf:68,txt:69,docm:75,dotx:76,pptx:129,ppt:130,odp:131,ppsx:132,potx:135,xlsx:257,xls:258,ods:259,csv:260,xlsm:261,xltx:262,doct:8193,xlst:8194,pptt:8195};
+ var formats = {docx:65,doc:66,odt:67,rtf:68,txt:69,docm:75,dotx:76,pptx:129,ppt:130,odp:131,ppsx:132,potx:135,xlsx:257,xls:258,ods:259,csv:260,xlsm:261,xltx:262,json:2056,doct:8193,xlst:8194,pptt:8195};
  function error(code,message) { var e=new Error(message); e.code=code; return e; }
  function passwordError(){return error('password-options','Invalid document password options');}
  function passwordOption(value){

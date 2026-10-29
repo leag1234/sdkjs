@@ -7267,6 +7267,62 @@ function CDrawingDocument()
 	};
 
 	// print selection
+	this.GenerateMailMergePrint = function (logicDocument)
+	{
+		if (!logicDocument)
+			return false;
+
+		History.TurnOff();
+		var tableState = g_oTableId.m_bTurnOff;
+		g_oTableId.m_bTurnOff = true;
+		this.printedDocument = null;
+		var sourceLogic = editor.WordControl.m_oLogicDocument;
+		var sourceDrawing = editor.WordControl.m_oDrawingDocument;
+		var documentDrawing = logicDocument.DrawingDocument;
+		var syncRecalc = window["NATIVE_EDITOR_ENJINE_SYNC_RECALC"];
+		var drawingDocument = {
+			m_lCountCalculatePages : 0,
+			m_lPagesCount : 0,
+			m_arrPages : [],
+			TargetStart : function () {}, TargetEnd : function () {}, TargetShow : function () {},
+			GetVisibleMMHeight : function () { return sourceDrawing.GetVisibleMMHeight(); },
+			UpdateTargetTransform : function () {}, UpdateTarget : function () {}, SetTargetColor : function () {},
+			SetTargetSize : function () {}, SetTextSelectionOutline : function () {}, ClearCachePages : function () {},
+			FirePaint : function () {}, ConvetToPageCoords : function () { return {Page : -1, X : 0, Y : 0}; },
+			GetDotsPerMM : function (value) { return value * g_dKoef_mm_to_pix; },
+			GetMMPerDot : function (value) { return value / this.GetDotsPerMM(1); }, scrollToTarget : function () {},
+			OnStartRecalculate : function (pagesCount) { this.m_lCountCalculatePages = pagesCount; this.m_arrPages = []; },
+			OnRecalculatePage : function (pageIndex, pageObject) {
+				this.m_lCountCalculatePages = pageIndex + 1;
+				this.m_arrPages[pageIndex] = {width_mm : pageObject.Width, height_mm : pageObject.Height};
+			},
+			OnEndRecalculate : function (isFull, isBreak) {
+				if (isFull && !isBreak)
+					this.m_lPagesCount = this.m_lCountCalculatePages;
+			}
+		};
+		drawingDocument.m_oLogicDocument = logicDocument;
+		try
+		{
+			logicDocument.DrawingDocument = drawingDocument;
+			editor.WordControl.m_oLogicDocument = logicDocument;
+			editor.WordControl.m_oDrawingDocument = drawingDocument;
+			window["NATIVE_EDITOR_ENJINE_SYNC_RECALC"] = true;
+			logicDocument.RecalculateFromStart(false);
+			this.printedDocument = {DrawingDocument : drawingDocument};
+			return true;
+		}
+		finally
+		{
+			window["NATIVE_EDITOR_ENJINE_SYNC_RECALC"] = syncRecalc;
+			editor.WordControl.m_oLogicDocument = sourceLogic;
+			editor.WordControl.m_oDrawingDocument = sourceDrawing;
+			logicDocument.DrawingDocument = documentDrawing;
+			g_oTableId.m_bTurnOff = tableState;
+			History.TurnOn();
+		}
+	};
+
     this.GenerateSelectionPrint = function ()
     {
         History.TurnOff();

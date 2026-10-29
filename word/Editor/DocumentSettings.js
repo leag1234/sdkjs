@@ -61,6 +61,7 @@
 
 		// Compatibility
 		this.SplitPageBreakAndParaMark        = false;
+		this.DoNotBreakWrappedTables          = false;
 		this.DoNotExpandShiftReturn           = false;
 		this.BalanceSingleByteDoubleByteWidth = false;
 		this.UlTrailSpace                     = false;
