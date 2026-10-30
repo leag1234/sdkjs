@@ -13942,6 +13942,7 @@ background-repeat: no-repeat;\
 
 	window["asc_docs_api"].prototype["asc_nativePrint"] = function(_printer, _page, _options)
 	{
+		AscWord.CellWidowReplay.assertLayoutReady(this.WordControl.m_oLogicDocument);
 		let layoutOptions = _options ? _options["documentLayout"] : null;
 		if (undefined === _printer && _page === undefined)
 		{
@@ -14005,6 +14006,7 @@ background-repeat: no-repeat;\
 
 	window["asc_docs_api"].prototype["asc_nativePrintPagesCount"] = function()
 	{
+		AscWord.CellWidowReplay.assertLayoutReady(this.WordControl.m_oLogicDocument);
 		return this.WordControl.m_oDrawingDocument.m_lPagesCount;
 	};
 

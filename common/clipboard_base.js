@@ -59,6 +59,119 @@
 	AscCommon.c_oAscClipboardDataFormat = c_oAscClipboardDataFormat;
 	AscCommon.c_oClipboardPastedFrom = c_oClipboardPastedFrom;
 
+	function getClipboardImageFiles(items)
+	{
+		let images = [];
+		if (!items)
+			return images;
+
+		for (let i = 0; i < items.length; ++i)
+		{
+			let item = items[i];
+			if (!item || item.kind !== "file" || 0 !== item.type.indexOf("image/") || !item.getAsFile)
+				continue;
+
+			let image = item.getAsFile();
+			if (image)
+				images.push(image);
+		}
+		return images;
+	}
+
+	function isClipboardImageOnlyTree(root)
+	{
+		let hasImage = false;
+		const allowedElements = {
+			"a": true,
+			"body": true,
+			"br": true,
+			"div": true,
+			"figure": true,
+			"html": true,
+			"img": true,
+			"meta": true,
+			"p": true,
+			"picture": true,
+			"source": true,
+			"span": true
+		};
+
+		function visit(node)
+		{
+			if (Node.TEXT_NODE === node.nodeType)
+				return !node.nodeValue || "" === node.nodeValue.trim();
+			if (Node.COMMENT_NODE === node.nodeType)
+				return true;
+			if (Node.ELEMENT_NODE !== node.nodeType && Node.DOCUMENT_FRAGMENT_NODE !== node.nodeType)
+				return false;
+
+			if (Node.ELEMENT_NODE === node.nodeType)
+			{
+				let name = node.nodeName.toLowerCase();
+				if (!allowedElements[name])
+					return false;
+				if ("img" === name)
+					hasImage = true;
+			}
+
+			for (let i = 0; i < node.childNodes.length; ++i)
+			{
+				if (!visit(node.childNodes[i]))
+					return false;
+			}
+			return true;
+		}
+
+		return !!root && visit(root) && hasImage;
+	}
+
+	function shouldPreferClipboardImages(htmlRoot, images)
+	{
+		return !!(images && images.length) && isClipboardImageOnlyTree(htmlRoot);
+	}
+
+	function readClipboardImagesAsHtml(images, callback)
+	{
+		let remaining = images.length;
+		let htmlImages = new Array(remaining);
+		let successful = 0;
+		if (!remaining)
+		{
+			callback(null);
+			return;
+		}
+
+		function complete()
+		{
+			if (0 !== --remaining)
+				return;
+			callback(successful ? "<html><body>" + htmlImages.join("") + "</body></html>" : null);
+		}
+
+		images.forEach(function(image, index)
+		{
+			let reader = new FileReader();
+			reader.onload = function(event)
+			{
+				if (event.target && "string" === typeof event.target.result && 0 === event.target.result.indexOf("data:image/"))
+				{
+					htmlImages[index] = "<img src=\"" + event.target.result + "\"/>";
+					++successful;
+				}
+				complete();
+			};
+			reader.onabort = reader.onerror = complete;
+			try
+			{
+				reader.readAsDataURL(image);
+			}
+			catch (error)
+			{
+				complete();
+			}
+		});
+	}
+
 	function CClipboardBase()
 	{
 		this.PasteFlag = false;
@@ -308,13 +421,22 @@
 					if (-1 != nIndex)
 						_html_format = _html_format.substring(0, nIndex + "</html>".length);
 
-					let _images = [];
-					checkImages(function (_item) {
-						if (_item && _item.getAsFile) {
-							_images.push(_item.getAsFile());
-						}
-					});
+					let _images = getClipboardImageFiles(_clipboard.items);
 					AscCommon.g_specialPasteHelper.specialPasteData.images = _images.length ? _images : null;
+					let htmlTemplate = document.createElement("template");
+					htmlTemplate.innerHTML = _html_format;
+					if (shouldPreferClipboardImages(htmlTemplate.content, _images))
+					{
+						let clipboardBase = this;
+						readClipboardImagesAsHtml(_images, function(imageHtml)
+						{
+							if (imageHtml)
+								clipboardBase.CommonIframe_PasteStart(imageHtml);
+							else
+								clipboardBase.CommonIframe_PasteStart(_html_format, _text_format);
+						});
+						return false;
+					}
 
 					this.CommonIframe_PasteStart(_html_format, _text_format);
 					return false;

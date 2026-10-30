@@ -2442,6 +2442,7 @@
 		{
 			if (img.startsWith("blob:"))
 			{
+				this.Memory.WriteByte(CommandType.ctDrawImageFromFile);
 				this.Memory.WriteString2(AscCommon.g_oDocumentBlobUrls.getImageBase64(img));
 				this.Memory.WriteDouble(x);
 				this.Memory.WriteDouble(y);

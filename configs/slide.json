@@ -318,6 +318,8 @@
 			"word/Editor/document/document-page-section.js",
 			"word/Editor/document/element-section.js",
 			"word/Editor/DocumentContentBase.js",
+		"word/Editor/CellWidowReplay.js",
+		"word/Editor/CellWidowReplayController.js",
 			"word/Editor/Document.js",
 			"word/Editor/document-composite-input.js",
 			"word/Editor/ChangeCase.js",

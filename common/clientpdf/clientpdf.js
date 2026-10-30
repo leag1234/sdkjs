@@ -342,6 +342,8 @@
 	}
 
 	async function build(api, options, onProgress) {
+		if (window.AscWord && window.AscWord.CellWidowReplay)
+			window.AscWord.CellWidowReplay.assertLayoutReady(api.WordControl && api.WordControl.m_oLogicDocument);
 		var id = preferredBackend, start = now();
 		if (id === 'wasm' && !(await discoverRuntime())) id = 'js';
 		backendId = id;
@@ -397,6 +399,11 @@
 			}, function (err) {
 				t.last = { error: String(err && err.message || err), code: err && err.code };
 				if (actionType) api.sync_EndAction(Asc.c_oAscAsyncActionType.BlockInteraction, actionType);
+				var replay = window.AscWord && window.AscWord.CellWidowReplay;
+				if (replay && replay.reportLayoutFailure(api.WordControl && api.WordControl.m_oLogicDocument, err)) {
+					api.sendEvent('asc_onClientPdf', { state: 'error', reason: 'layout', detail: err.message });
+					return;
+				}
 				if (window.console) console.warn('[client PDF] falling back to the server:', err);
 				api.sendEvent('asc_onClientPdf', { state: 'fallback', reason: (err && err.eoUnsupported) ? err.code : 'error', detail: err && (err.detail || err.message) || '' });
 				options.eoClientPdfSkip = true;    // stays set: a delayed retry (layout not finished) must not loop

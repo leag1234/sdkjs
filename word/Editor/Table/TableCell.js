@@ -1349,6 +1349,7 @@ CTableCell.prototype =
 
         // NoWrap
         this.SetNoWrap(OtherPr.NoWrap);
+        this.SetHideMark(OtherPr.HideMark);
     },
 
     Get_W : function()
@@ -1614,6 +1615,18 @@ CTableCell.prototype =
 			this.Pr.NoWrap = Value;
 			this.Recalc_CompiledPr();
 		}
+	},
+
+	SetHideMark : function(value)
+	{
+		if (this.Pr.HideMark === value)
+			return;
+
+		// Reuse the existing complete-property history and recalc path.
+		this.private_AddPrChange();
+		let cellPr = this.Pr.Copy(true);
+		cellPr.HideMark = value;
+		this.Set_Pr(cellPr);
 	},
 
 	IsVerticalText : function()

@@ -113,6 +113,11 @@ var recalcresult2_CurPage         = 0x02; // Нужно заново перес�
 var recalcresult2_NextSection     = 0x03; // Рассчитали до конца, но в конце был разрыв секции
 var recalcresult2_NextSection_Cur = 0x04; // Рассчитали не до конца, остановились на разрыве секции
 
+// Main-body content controls propagate the paragraph's previous-page request.
+var recalcresult2_PrevPage = 0x05;
+// Content-domain request; translate explicitly to element-domain PrevPage.
+var recalcresult2_CellReplayRequested = 0x08;
+
 var document_EditingType_Common = 0x00; // Обычный режим редактирования
 var document_EditingType_Review = 0x01; // Режим рецензирования
 
@@ -2843,6 +2848,8 @@ CDocument.prototype.RecalculateAllAtOnce = function(isFromStart, nPagesCount)
  */
 CDocument.prototype.private_Recalculate = function(_RecalcData, isForceStrictRecalc, nNoTimerPageIndex)
 {
+	try
+	{
 	if (true !== this.Is_OnRecalculate())
 		return document_recalcresult_NoRecal;
 	
@@ -2866,6 +2873,11 @@ CDocument.prototype.private_Recalculate = function(_RecalcData, isForceStrictRec
 
     // Увеличиваем номер пересчета
     this.RecalcId++;
+    if (AscWord.CellWidowReplay.beginGeneration(this))
+    {
+        this.RecalculateFromStart();
+        return document_recalcresult_LongRecalc;
+    }
 
     // Если задан параметр _RecalcData, тогда мы не можем ориентироваться на историю
     if (undefined === _RecalcData)
@@ -3181,6 +3193,13 @@ CDocument.prototype.private_Recalculate = function(_RecalcData, isForceStrictRec
 	
 	this.UpdatePlaceholders();
 	return document_recalcresult_LongRecalc;
+
+	}
+	catch (error)
+	{
+		AscWord.CellWidowReplay.failLayout(this, error);
+		throw error;
+	}
 };
 CDocument.prototype.ContinueRecalculationLoopTimer = function(noTimer)
 {
@@ -3192,7 +3211,12 @@ CDocument.prototype.ContinueRecalculationLoopTimer = function(noTimer)
 	
 	let _t = this;
 	let timerId = setTimeout(function(){
-		_t.ContinueRecalculationLoop(timerId);
+		try {
+			_t.ContinueRecalculationLoop(timerId);
+		} catch (error) {
+			if (!AscWord.CellWidowReplay.reportLayoutFailure(_t, error))
+				throw error;
+		}
 	}, 10);
 	return timerId;
 };
@@ -3205,7 +3229,12 @@ CDocument.prototype.ContinueRecalculationLoop = function(timerId)
 	{
 		this.FullRecalc.Continue = false;
 		
-		this.Recalculate_Page();
+		try {
+			this.Recalculate_Page();
+		} catch (error) {
+			AscWord.CellWidowReplay.failLayout(this, error);
+			throw error;
+		}
 		
 		// Такое возможно, если пересчет сам вызвал пересчет, и у нас крутится несколько таких циклов
 		// завершаем все неактуальные
@@ -3234,6 +3263,8 @@ CDocument.prototype.RecalculateWithParams = function(oRecalcData, isForceStrictR
 };
 CDocument.prototype.RecalculateByChanges = function(arrChanges, nStartIndex, nEndIndex, isForceStrictRecalc, nNoTimerPageIndex)
 {
+	try
+	{
 	this.private_ClearSearchOnRecalculate();
 
 	// Обновляем позицию курсора
@@ -3241,6 +3272,11 @@ CDocument.prototype.RecalculateByChanges = function(arrChanges, nStartIndex, nEn
 
 	// Увеличиваем номер пересчета
 	this.RecalcId++;
+	if (AscWord.CellWidowReplay.beginGeneration(this))
+	{
+		this.RecalculateFromStart();
+		return;
+	}
 
 	if (this.private_RecalculateFastRunRange(arrChanges, nStartIndex, nEndIndex))
 		return;
@@ -3250,6 +3286,13 @@ CDocument.prototype.RecalculateByChanges = function(arrChanges, nStartIndex, nEn
 
 	var oRecalcData = this.History.Get_RecalcData(null, arrChanges, nStartIndex, nEndIndex);
 	this.RecalculateWithParams(oRecalcData, isForceStrictRecalc, nNoTimerPageIndex);
+
+	}
+	catch (error)
+	{
+		AscWord.CellWidowReplay.failLayout(this, error);
+		throw error;
+	}
 };
 CDocument.prototype.private_RecalculateFastRunRange = function(arrChanges, nStartIndex, nEndIndex)
 {
@@ -3800,7 +3843,7 @@ CDocument.prototype.Recalculate_PageColumn                   = function()
 				else
 				{
 					var ElementPageIndex = this.private_GetElementPageIndex(Index, PageIndex, ColumnIndex, ColumnsCount, sectionAbs);
-					RecalcResult         = Element.Recalculate_Page(ElementPageIndex);
+					RecalcResult         = AscWord.CellWidowReplay.calculateElement(this, Element, ElementPageIndex, PageIndex, ColumnIndex, ColumnsCount);
 				}
 			}
 
@@ -5326,10 +5369,14 @@ CDocument.prototype.ReDraw                                   = function(StartPag
 };
 CDocument.prototype.DrawPage                                 = function(nPageIndex, pGraphics)
 {
+    if (pGraphics instanceof AscCommon.CDocumentRenderer)
+        AscWord.CellWidowReplay.assertLayoutReady(this);
     this.Draw(nPageIndex, pGraphics);
 };
 CDocument.prototype.CanDrawPage = function(nPageAbs)
 {
+	if (AscWord.CellWidowReplay.isLayoutFailed(this))
+		return false;
 	if (null !== this.FullRecalc.Id && nPageAbs >= this.FullRecalc.PageIndex - 1)
 		return false;
 

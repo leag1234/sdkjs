@@ -234,6 +234,8 @@ CWordCollaborativeEditing.prototype.OnEnd_Load_Objects = function()
 		nPageIndex     = oParagraph ? Math.max(oParagraph.GetAbsoluteCurrentPage(), editor.GetCurrentVisiblePage()) : undefined;
 	}
 	
+	try
+	{
 	this.m_oLogicDocument.ResumeRecalculate();
 	this.m_oLogicDocument.RecalculateByChanges(this.CoHistory.GetAllChanges(), this.m_nRecalcIndexStart, this.m_nRecalcIndexEnd, false, nPageIndex);
 	this.m_oLogicDocument.UpdateTracks();
@@ -241,6 +243,14 @@ CWordCollaborativeEditing.prototype.OnEnd_Load_Objects = function()
 	let oform = this.m_oLogicDocument.GetOFormDocument();
 	if (oform)
 		oform.onEndLoadChanges();
+
+	}
+	catch (error)
+	{
+		if (AscWord.CellWidowReplay.failLayout(this.m_oLogicDocument, error))
+			editor.sync_EndAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.ApplyChanges);
+		throw error;
+	}
 
     editor.sync_EndAction(Asc.c_oAscAsyncActionType.BlockInteraction, Asc.c_oAscAsyncAction.ApplyChanges);
 };
@@ -430,7 +440,16 @@ CWordCollaborativeEditing.prototype._PreUndo = function()
 CWordCollaborativeEditing.prototype._PostUndo = function(state, changes)
 {
 	this.private_RestoreDocumentState(state);
-	this.private_RecalculateDocument(changes);
+	try
+	{
+		this.private_RecalculateDocument(changes);
+	}
+	catch (error)
+	{
+		if (AscWord.CellWidowReplay.failLayout(this.m_oLogicDocument, error))
+			this.m_oLogicDocument.TurnOnCheckChartSelection();
+		throw error;
+	}
 	
 	let logicDocument = this.m_oLogicDocument;
 	logicDocument.TurnOnCheckChartSelection();

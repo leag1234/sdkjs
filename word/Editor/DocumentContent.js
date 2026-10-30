@@ -750,6 +750,10 @@ CDocumentContent.prototype.Reset_RecalculateCache = function()
 		this.Content[Index].Reset_RecalculateCache();
 	}
 };
+CDocumentContent.prototype.HasCellWidowReplayRequest = function()
+{
+    return AscWord.CellWidowReplay.hasRequest(this);
+};
 CDocumentContent.prototype.Recalculate_Page = function(PageIndex, bStart)
 {
 	this.Recalculated = true;
@@ -795,6 +799,7 @@ CDocumentContent.prototype.Recalculate_Page = function(PageIndex, bStart)
     let contentFrame = this.GetPageContentFrame(PageIndex);
 
     this.Pages[PageIndex].Update_Limits(contentFrame);
+    AscWord.CellWidowReplay.tickContent(this);
 
     var X      = contentFrame.X;
     var StartY = contentFrame.Y;
@@ -1246,7 +1251,31 @@ CDocumentContent.prototype.Recalculate_Page = function(PageIndex, bStart)
                 Element.SetUseYLimit(this.UseYLimit);
             }
 			
-			if (this.IsEmptyParagraphAfterTableInTableCell(Index)
+
+			if (this.IsHiddenCellEndParagraph(Index))
+			{
+				// Keep the paragraph editable, but exclude its nonprinting cell mark
+				// from row height, including a marker that would otherwise spill.
+				if (Index > 0)
+				{
+					RecalcResult = this.private_RecalculateEmptySectionParagraph(Element, this.Content[Index - 1], PageIndex, 0, 1);
+				}
+				else
+				{
+					Element.Reset(X, Y, XLimit, 10000, PageIndex, 0, 1);
+					Element.Recalculate_Page(0);
+					Element.Pages[0].Y = Y;
+					Element.Pages[0].Bounds.Top = Y;
+					Element.Pages[0].Bounds.Bottom = Y;
+					Element.Lines[0].Top = 0;
+					Element.Lines[0].Bottom = 0;
+					Element.Lines[0].Y = 0;
+					RecalcResult = recalcresult_NextElement;
+				}
+				this.Pages[PageIndex].EndSectionParas.push(Element);
+				bFlow = true;
+			}
+			else if (this.IsEmptyParagraphAfterTableInTableCell(Index)
 				|| (allowSectionBreak && (Index !== StartIndex || !resetStartElement) && this.IsEmptySectionFlowParagraph(Index)))
 			{
 				RecalcResult = this.private_RecalculateEmptySectionParagraph(Element, this.Content[Index - 1], PageIndex, 0, 1);
@@ -1275,7 +1304,18 @@ CDocumentContent.prototype.Recalculate_Page = function(PageIndex, bStart)
 			Y                    = Element.Get_PageBounds(ElementPageIndex).Bottom;
 		}
 		
-        if (RecalcResult & recalcresult_CurPage)
+        if ((RecalcResult & recalcresult_PrevPage) && this.HasCellWidowReplayRequest())
+            return recalcresult2_CellReplayRequested
+                | (RecalcResult & (recalcresultflags_Column | recalcresultflags_Page));
+
+        if ((RecalcResult & recalcresult_PrevPage)
+            && this.IsBlockLevelSdtContent()
+            && this.GetDocumentContentForRecalcInfo() instanceof CDocument)
+        {
+            return recalcresult2_PrevPage
+                | (RecalcResult & (recalcresultflags_Column | recalcresultflags_Page));
+        }
+        else if (RecalcResult & recalcresult_CurPage)
         {
         	if (true === this.IsBlockLevelSdtContent())
         		return recalcresult2_CurPage;
@@ -1418,6 +1458,30 @@ CDocumentContent.prototype.IsEmptyParagraphAfterTableInTableCell = function(nInd
 
 	var nCompatibilityMode = oLogicDocument.GetCompatibilityMode();
 	return !(nCompatibilityMode <= AscCommon.document_compatibility_mode_Word14 && oElement.HaveNumbering());
+};
+/**
+ * Only the final nonprinting paragraph mark of an opted-in cell may collapse.
+ * Printing list labels, objects, borders and explicit breaks keep their flow.
+ */
+CDocumentContent.prototype.IsHiddenCellEndParagraph = function(nIndex)
+{
+	if (nIndex < 0 || nIndex !== this.Content.length - 1)
+		return false;
+
+	let element = this.Content[nIndex];
+	if (!element || !element.IsParagraph() || !element.IsEmpty({SkipPlcHldr : false})
+		|| element.HaveNumbering() || element.Get_SectionPr())
+		return false;
+
+	let cell = this.IsTableCellContent(true);
+	if (!cell || true !== cell.Get_CompiledPr(false).HideMark
+		|| cell.GetContent().GetLastParagraph() !== element)
+		return false;
+
+	let paraPr = element.Get_CompiledPr2(false).ParaPr;
+	return !paraPr.PageBreakBefore
+		&& element.Internal_Is_NullBorders(paraPr.Brd)
+		&& element.GetAllDrawingObjects().length === 0;
 };
 CDocumentContent.prototype.SaveRecalculateObject = function()
 {

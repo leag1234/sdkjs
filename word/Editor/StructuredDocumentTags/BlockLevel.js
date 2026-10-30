@@ -148,11 +148,23 @@ CBlockLevelSdt.prototype.Recalculate_Page = function(CurPage)
 	this.Content.RecalcInfo = this.Parent.RecalcInfo;
 
 	let recalcResult = this.Content.Recalculate_Page(CurPage, true);
+	if ((recalcResult & 0xffff) === recalcresult2_CellReplayRequested)
+	{
+		if (!this.Content.HasCellWidowReplayRequest())
+			throw new AscWord.CCellWidowReplayProtocol.QualificationError("Unauthenticated cell replay in content control");
+		return recalcresult_PrevPage
+			| (recalcResult & (recalcresultflags_Column | recalcresultflags_Page));
+	}
 	
 	this.Sections[this.Sections.length - 1].endPage = this.Content.GetPagesCount() - 1;
 
 	if (recalcresult2_End === recalcResult && window['AscCommon'].g_specialPasteHelper && window['AscCommon'].g_specialPasteHelper.showButtonIdParagraph === this.GetId())
 		window['AscCommon'].g_specialPasteHelper.SpecialPasteButtonById_Show();
+
+	// Preserve the rollback direction through every nested body content control.
+	if ((recalcResult & 0xffff) === recalcresult2_PrevPage)
+		return recalcresult_PrevPage
+			| (recalcResult & (recalcresultflags_Column | recalcresultflags_Page));
 
 	switch (recalcResult)
 	{

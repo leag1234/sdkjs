@@ -282,7 +282,12 @@ CDocumentContentElementBase.prototype.Reset_RecalculateCache = function()
  */
 CDocumentContentElementBase.prototype.RecalculateKeepNext = function(iPage)
 {
-	if (!(this.Parent instanceof CDocument))
+	// Body content controls are transparent to the paragraph/table flow.
+	// Cells, shapes, headers and notes retain their own pagination rules.
+	let owner = this.Parent instanceof CDocument ? this.Parent
+		: this.Parent && this.Parent.GetDocumentContentForRecalcInfo
+			? this.Parent.GetDocumentContentForRecalcInfo() : null;
+	if (!(owner instanceof CDocument))
 		return recalcresult_NextElement;
 	
 	// Такая настройка срабатывает в единственном случае:
@@ -294,22 +299,26 @@ CDocumentContentElementBase.prototype.RecalculateKeepNext = function(iPage)
 		// И сам параграф не разбит на несколько страниц и не начинается с новой страницы,
 		// тогда мы должны пересчитать предыдущую страницу, с учетом того, что предыдущий параграф
 		// надо начать с новой страницы.
-		let curr = this.Get_DocumentPrev();
+		let curr = this.GetPrevDocumentElement();
+		while (curr instanceof CBlockLevelSdt)
+			curr = curr.GetLastElement();
 		while (curr && curr.IsParagraph() && !curr.Get_SectionPr())
 		{
 			let currKeepNext = curr.Get_CompiledPr2(false).ParaPr.KeepNext;
 			if (!currKeepNext || curr.getPageCount() > 1 || !curr.IsInline() || curr.Check_PageBreak())
 				break;
 			
-			let prev = curr.Get_DocumentPrev();
+			let prev = curr.GetPrevDocumentElement();
+			while (prev instanceof CBlockLevelSdt)
+				prev = prev.GetLastElement();
 			if (!prev || (prev.IsParagraph() && prev.Get_SectionPr()))
 				break;
 			
 			if (!prev.IsParagraph() || !prev.Get_CompiledPr2(false).ParaPr.KeepNext)
 			{
-				if (this.Parent.RecalcInfo.Can_RecalcObject())
+				if (owner.RecalcInfo.Can_RecalcObject())
 				{
-					this.Parent.RecalcInfo.Set_KeepNext(curr, this);
+					owner.RecalcInfo.Set_KeepNext(curr, this);
 					return recalcresult_PrevPage | recalcresultflags_Column;
 				}
 				
@@ -320,11 +329,11 @@ CDocumentContentElementBase.prototype.RecalculateKeepNext = function(iPage)
 		}
 	}
 	
-	if (this.Parent.RecalcInfo.Check_KeepNextEnd(this))
+	if (owner.RecalcInfo.Check_KeepNextEnd(this))
 	{
 		// Дошли до сюда, значит уже пересчитали данную ситуацию.
 		// Делаем Reset здесь, потому что Reset надо делать в том же месте, гды мы запросили пересчет заново.
-		this.Parent.RecalcInfo.Reset();
+		owner.RecalcInfo.Reset();
 	}
 	
 	return recalcresult_NextElement;

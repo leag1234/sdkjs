@@ -4908,6 +4908,13 @@ Binary_tblPrWriter.prototype =
             this.memory.WriteByte(c_oSerPropLenType.Byte);
             this.memory.WriteBool(cellPr.NoWrap);
 		}
+		if (null != cellPr.HideMark)
+		{
+			this.memory.WriteByte(c_oSerProp_cellPrType.hideMark);
+			this.memory.WriteByte(c_oSerPropLenType.Byte);
+			this.memory.WriteBool(cellPr.HideMark);
+		}
+
 		if (cellPr.PrChange && cellPr.ReviewInfo) {
 			this.memory.WriteByte(c_oSerProp_cellPrType.tcPrChange);
 			this.memory.WriteByte(c_oSerPropLenType.Variable);
@@ -10938,6 +10945,9 @@ Binary_tblPrReader.prototype =
         }
         else if( c_oSerProp_cellPrType.textDirection === type ){
             Pr.TextDirection = this.stream.GetUChar();
+        }
+        else if( c_oSerProp_cellPrType.hideMark === type ){
+            Pr.HideMark = (this.stream.GetUChar() != 0);
         }
         else if( c_oSerProp_cellPrType.noWrap === type ){
             Pr.NoWrap = (this.stream.GetUChar() != 0);

@@ -56,7 +56,7 @@ CTable.prototype.Recalculate_Page = function(PageIndex)
 	this.private_RecalculatePositionX(PageIndex);
 	
 	result = this.private_RecalculatePage(PageIndex);
-	if (result & recalcresult_CurPage)
+	if (result & (recalcresult_CurPage | recalcresult_PrevPage))
 		return result;
 
 	this.private_RecalculatePositionY(PageIndex);
@@ -2920,7 +2920,17 @@ CTable.prototype.private_RecalculatePage = function(CurPage)
                 }
                 else
                 {
-					var RecalcResult = Cell.Content.Recalculate_Page(CellPageIndex, true);
+					var cellReplay = AscWord.CellWidowReplay.calculateCell(this, Cell, CurPage, CellPageIndex);
+					var RecalcResult = cellReplay.result;
+					if ((RecalcResult & 0xffff) === recalcresult2_CellReplayRequested)
+					{
+						var rewind = AscWord.CellWidowReplay.rewind(cellReplay.context);
+						this.RecalcInfo.Recalc_AllCells();
+						this.TurnOffRecalc = false;
+						return rewind.result;
+					}
+					if (AscWord.CellWidowReplay.requiresRecalculation(cellReplay.context))
+						this.RecalcInfo.Recalc_AllCells();
 					if (recalcresult2_CurPage & RecalcResult)
 					{
 						var _RecalcResult = recalcresult_CurPage;

@@ -54,11 +54,23 @@ Paragraph.prototype.Recalculate_FastWholeParagraph = function()
     // TODO: Отключаем это ускорение в таблицах, т.к. в таблицах и так есть свое ускорение. Но можно и это ускорение
     // подключить, для этого надо проверять изменились ли MinMax ширины и набираем ли мы в строке заголовков.
 	var oCell = this.IsTableCellContent(true);
+    if (oCell && AscWord.CellWidowReplay.shouldUseSlowParagraph(this))
+        return [];
     if (oCell && oCell.GetTable())
 	{
 		if (tbllayout_AutoFit === oCell.GetTable().Get_CompiledPr(false).TablePr.TableLayout || oCell.IsInHeader(true))
 			return [];
 	}
+
+    // Cell-local collapsed markers need their content owner on both transitions:
+    // the current semantic marker may differ from the last layout registration.
+    if (oCell)
+    {
+        let parentPage = this.Parent.Pages[this.GetRelativeStartPage()];
+        if (this.Parent.IsHiddenCellEndParagraph(this.Index)
+            || (parentPage && parentPage.Check_EndSectionPara(this)))
+            return [];
+    }
 
     // Если изменения происходят в специальном пустом параграфе-конце секции, тогда запускаем обычный пересчет
     if (this.bFromDocument && this.LogicDocument && (!this.LogicDocument.Pages[this.GetAbsoluteStartPage()] || true === this.LogicDocument.Pages[this.GetAbsoluteStartPage()].Check_EndSectionPara(this)))
@@ -838,6 +850,7 @@ Paragraph.prototype.private_RecalculatePageBreak       = function(CurLine, CurPa
 		&& this.Parent.Parent instanceof CBlockLevelSdt
 		&& PRS.GetTopDocument() instanceof CDocument
 		&& !PRS.IsInTable();
+	var keepNextOwner = this.private_GetWidowControlOwner();
 
     if (isParentDocument || isParentBlockSdt)
     {
@@ -895,7 +908,7 @@ Paragraph.prototype.private_RecalculatePageBreak       = function(CurLine, CurPa
                 return false;
             }
         }
-        else if (isParentDocument && true === this.Parent.RecalcInfo.Check_KeepNext(this) && 0 === CurPage && null != this.Get_DocumentPrev())
+        else if (keepNextOwner && true === keepNextOwner.RecalcInfo.Check_KeepNext(this) && 0 === CurPage && null != this.GetPrevDocumentElement())
         {
             this.Pages[CurPage].Set_EndLine( CurLine - 1 );
             if ( 0 === CurLine )
@@ -1083,12 +1096,24 @@ Paragraph.prototype.private_RecalculateLine            = function(CurLine, CurPa
     this.private_RecalculateLineCheckEndnotes(CurLine, CurPage, PRS, ParaPr);
 };
 
+// Body controls share the document owner; eligible live cells use their
+// authenticated scheduler frame. Other containers retain their existing rules.
+Paragraph.prototype.private_GetWidowControlOwner = function()
+{
+    var owner = this.Parent instanceof CDocument ? this.Parent
+        : this.Parent && this.Parent.GetDocumentContentForRecalcInfo
+            ? this.Parent.GetDocumentContentForRecalcInfo() : null;
+    return owner instanceof CDocument ? owner : AscWord.CellWidowReplay.getOwner(this.Parent);
+};
+
 Paragraph.prototype.private_RecalculateLineWidow       = function(CurLine, CurPage, PRS, ParaPr)
 {
-    // Висячие строки обрабатываются только внутри основного документа
-    if ( this.Parent instanceof CDocument && true === this.Parent.RecalcInfo.Check_WidowControl(this, CurLine) )
+    var owner = this.private_GetWidowControlOwner();
+    if (owner && true === owner.RecalcInfo.Check_WidowControl(this, CurLine))
     {
-        this.Parent.RecalcInfo.Need_ResetWidowControl();
+        owner.RecalcInfo.Need_ResetWidowControl();
+        if (!(owner instanceof CDocument))
+            AscWord.CellWidowReplay.consumeCut(owner, this, CurLine);
 
         this.Pages[CurPage].Set_EndLine(CurLine - 1);
         if (0 === CurLine)
@@ -1841,10 +1866,11 @@ Paragraph.prototype.private_RecalculateLineEnd         = function(CurLine, CurPa
             // Проверим не встречается ли в предыдущей строке BreakPage, если да, тогда не учитываем WidowControl
             var BreakPagePrevLine = (this.Lines[CurLine - 1].Info & paralineinfo_BreakPage) | 0;
 
-            if (this.Parent instanceof CDocument
-                && true === this.Parent.RecalcInfo.Can_RecalcWidowControl()
+            var owner = this.private_GetWidowControlOwner();
+            if (owner
+                && true === owner.RecalcInfo.Can_RecalcWidowControl()
                 && 0 === BreakPagePrevLine
-                && (1 === CurPage && null != this.Get_DocumentPrev())
+                && (1 === CurPage && (null != this.GetPrevDocumentElement() || !(owner instanceof CDocument)))
                 && this.Lines[CurLine - 1].Ranges.length <= 1)
             {
                 var bBreakPageFromStart = false;
@@ -1871,7 +1897,10 @@ Paragraph.prototype.private_RecalculateLineEnd         = function(CurLine, CurPa
                 else
                     CurLine = CurLine - 1;
 
-                this.Parent.RecalcInfo.Set_WidowControl(this, CurLine);
+                if (owner instanceof CDocument)
+                    owner.RecalcInfo.Set_WidowControl(this, CurLine);
+                else
+                    AscWord.CellWidowReplay.request(owner, this, CurLine, CurPage, "previous");
                 PRS.RecalcResult = recalcresult_PrevPage | recalcresultflags_Column;
                 return false;
             }
@@ -2515,19 +2544,23 @@ Paragraph.prototype.private_RecalculateMoveLineToNextPage = function(CurLine, Cu
 	var bSkipWidowAndKeepLines = this.private_CheckSkipKeepLinesAndWidowControl(CurPage);
 
 	// Проверим висячую строку
-	if (this.Parent instanceof CDocument
+	var owner = this.private_GetWidowControlOwner();
+	if (owner
 		&& false === bSkipWidowAndKeepLines
-		&& true === this.Parent.RecalcInfo.Can_RecalcWidowControl()
+		&& true === owner.RecalcInfo.Can_RecalcWidowControl()
 		&& true === ParaPr.WidowControl
 		&& CurLine - this.Pages[CurPage].StartLine <= 1
 		&& CurLine >= 1 && true != PRS.BreakPageLine
-		&& ( 0 === CurPage && null != this.Get_DocumentPrev() ) )
+		&& (0 === CurPage && (null != this.GetPrevDocumentElement() || !(owner instanceof CDocument))) )
 	{
 		// Вызываем данную функцию для удаления картинок с предыдущей страницы
 		this.Recalculate_Drawing_AddPageBreak(0, 0, true);
 
 		// TODO: Здесь перенос нужно делать сразу же, если в строке не было объектов с обтеканием
-		this.Parent.RecalcInfo.Set_WidowControl(this, CurLine - 1);
+		if (owner instanceof CDocument)
+			owner.RecalcInfo.Set_WidowControl(this, CurLine - 1);
+		else
+			AscWord.CellWidowReplay.request(owner, this, CurLine - 1, CurPage, "current");
 		PRS.RecalcResult = recalcresult_CurPage | recalcresultflags_Column;
 		return false;
 	}

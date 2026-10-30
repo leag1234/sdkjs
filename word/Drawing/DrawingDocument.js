@@ -3911,6 +3911,9 @@ function CDrawingDocument()
 
 	this.OnEndRecalculate = function (isFull, isBreak)
 	{
+		if (isFull)
+			AscWord.CellWidowReplay.completeLayout(this.m_oLogicDocument);
+
 		if (this.m_oWordControl)
 			this.m_oWordControl.m_oApi.checkLastWork();
 
@@ -6396,6 +6399,7 @@ function CDrawingDocument()
 	// metafile
 	this.RenderDocument = function (Renderer)
 	{
+		AscWord.CellWidowReplay.assertLayoutReady(this.m_oLogicDocument);
 		var _this = this.printedDocument ? this.printedDocument.DrawingDocument : this;
 		for (var i = 0; i < _this.m_lPagesCount; i++)
 		{
@@ -6408,6 +6412,7 @@ function CDrawingDocument()
 
 	this.ToRenderer = function (isPrint)
 	{
+		AscWord.CellWidowReplay.assertLayoutReady(this.m_oLogicDocument);
 		var Renderer = new AscCommon.CDocumentRenderer();
 		Renderer.isPrintMode = isPrint ? true : false;
 		Renderer.InitPicker(AscCommon.g_oTextMeasurer.m_oManager);
@@ -6457,6 +6462,7 @@ function CDrawingDocument()
 
 	this.ToRenderer2 = function (document)
 	{
+		AscWord.CellWidowReplay.assertLayoutReady(this.m_oLogicDocument);
 		var _this = this.printedDocument ? this.printedDocument.DrawingDocument : this;
 		var Renderer = new AscCommon.CDocumentRenderer();
 		Renderer.InitPicker(AscCommon.g_oTextMeasurer.m_oManager);
@@ -6483,6 +6489,7 @@ function CDrawingDocument()
 	};
 	this.ToRendererPart = function (noBase64, isPrint)
 	{
+		AscWord.CellWidowReplay.assertLayoutReady(this.m_oLogicDocument);
 		var _this = this.printedDocument ? this.printedDocument.DrawingDocument : this;
 
 		var watermark = this.m_oWordControl.m_oApi.watermarkDraw;
@@ -7325,6 +7332,7 @@ function CDrawingDocument()
 
     this.GenerateSelectionPrint = function ()
     {
+		AscWord.CellWidowReplay.assertLayoutReady(this.m_oLogicDocument);
         History.TurnOff();
         g_oTableId.m_bTurnOff = true;
 

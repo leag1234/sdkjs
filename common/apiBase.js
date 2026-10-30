@@ -377,6 +377,13 @@
 		}
 		var oldOnunhandledrejection = window.onunhandledrejection;
 		window.onunhandledrejection = function(errorEvent) {
+			const replay = window.AscWord && window.AscWord.CellWidowReplay;
+			const logicDocument = t.WordControl && t.WordControl.m_oLogicDocument;
+			if (replay && replay.reportLayoutFailure(logicDocument, errorEvent.reason)) {
+				if (errorEvent.preventDefault) errorEvent.preventDefault();
+				return true;
+			}
+
 			//send only first error to reduce number of requests. also following error may be consequences of first
 			window.onunhandledrejection = oldOnunhandledrejection;
 			const errorMsg = errorEvent.reason.message || errorEvent.reason;
@@ -395,6 +402,12 @@
 		}
 		var oldOnError = window.onerror;
 		window.onerror = function(errorMsg, url, lineNumber, column, errorObj) {
+			const replay = window.AscWord && window.AscWord.CellWidowReplay;
+			const logicDocument = t.WordControl && t.WordControl.m_oLogicDocument;
+			if (replay && replay.reportLayoutFailure(logicDocument, errorObj)) {
+				return true;
+			}
+
 			//send only first error to reduce number of requests. also following error may be consequences of first
 			window.onerror = oldOnError;
 			const stack = errorObj ? errorObj.stack : "";

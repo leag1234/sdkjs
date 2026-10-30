@@ -11887,6 +11887,7 @@ function CTableCellPr()
     this.VMerge           = undefined;
     this.TextDirection    = undefined;
     this.NoWrap           = undefined;
+	this.HideMark         = undefined;
     this.HMerge           = undefined;
     this.PrChange         = undefined;
     this.ReviewInfo       = undefined;
@@ -11933,6 +11934,7 @@ CTableCellPr.prototype.Copy = function(bCopyPrChange)
 	CellPr.VMerge        = this.VMerge;
 	CellPr.TextDirection = this.TextDirection;
 	CellPr.NoWrap        = this.NoWrap;
+	CellPr.HideMark      = this.HideMark;
 	CellPr.HMerge        = this.HMerge;
 
 	if (true === bCopyPrChange && undefined !== this.PrChange)
@@ -11992,6 +11994,9 @@ CTableCellPr.prototype.Merge = function(CellPr)
 	if (undefined !== CellPr.NoWrap)
 		this.NoWrap = CellPr.NoWrap;
 
+	if (undefined !== CellPr.HideMark)
+		this.HideMark = CellPr.HideMark;
+
 	if (undefined != CellPr.HMerge)
 		this.HMerge = CellPr.HMerge;
 };
@@ -12022,6 +12027,7 @@ CTableCellPr.prototype.Is_Equal = function(CellPr)
 		|| this.VMerge !== CellPr.VMerge
 		|| this.TextDirection !== CellPr.TextDirection
 		|| this.NoWrap !== CellPr.NoWrap
+		|| this.HideMark !== CellPr.HideMark
 		|| this.HMerge !== CellPr.HMerge)
 		return false;
 
@@ -12041,6 +12047,7 @@ CTableCellPr.prototype.InitDefault = function(nCompatibilityMode)
 	this.VMerge                  = vmerge_Restart;
 	this.TextDirection           = textdirection_LRTB;
 	this.NoWrap                  = false;
+	this.HideMark                = false;
 	this.HMerge                  = vmerge_Restart;
 	this.PrChange                = undefined;
 	this.ReviewInfo              = undefined;
@@ -12138,6 +12145,7 @@ CTableCellPr.prototype.Set_FromObject = function(CellPr)
 	this.VMerge        = CellPr.VMerge;
 	this.TextDirection = CellPr.TextDirection;
 	this.NoWrap        = CellPr.NoWrap;
+	this.HideMark      = CellPr.HideMark;
 	this.HMerge        = CellPr.HMerge;
 
 };
@@ -12285,6 +12293,12 @@ CTableCellPr.prototype.Write_ToBinary = function(Writer)
 		Flags |= 262144;
 	}
 
+	if (undefined !== this.HideMark)
+	{
+		Writer.WriteBool(this.HideMark);
+		Flags |= 524288;
+	}
+
 	var EndPos = Writer.GetCurPosition();
 	Writer.Seek(StartPos);
 	Writer.WriteLong(Flags);
@@ -12386,6 +12400,8 @@ CTableCellPr.prototype.Read_FromBinary = function(Reader)
 		this.PrChange.ReadFromBinary(Reader);
 		this.ReviewInfo.ReadFromBinary(Reader);
 	}
+	if (524288 & Flags)
+		this.HideMark = Reader.GetBool();
 };
 CTableCellPr.prototype.WriteToBinary = function(oWriter)
 {
@@ -12409,6 +12425,7 @@ CTableCellPr.prototype.Is_Empty = function()
 		|| undefined !== this.VMerge
 		|| undefined !== this.TextDirection
 		|| undefined !== this.NoWrap
+		|| undefined !== this.HideMark
 		|| undefined !== this.HMerge)
 		return false;
 
