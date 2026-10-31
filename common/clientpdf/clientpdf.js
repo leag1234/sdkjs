@@ -154,6 +154,8 @@
 				var manifest = await response.json();
 				if (manifest.artifact_version !== version || !manifest.build_flags || manifest.build_flags.module_kind !== 'pdf') return false;
 				runtimeUrl = new URL(url, window.location.href).href;
+				// Capability flags come from the verified manifest only (never inferred from version or file presence).
+				var cjkGidRemap = !!(manifest.capabilities && manifest.capabilities.cjk_gid_remap_bmp === 1);
 				registerBackend({
 					id: 'wasm',
 					load: function () {
@@ -165,7 +167,7 @@
 						}
 						return wasmLib;
 					},
-					create: function (env) { env['wasmRuntime'] = runtimeUrl; return new window.EOWasmPdf.Writer(env); }
+					create: function (env) { env['wasmRuntime'] = runtimeUrl; env['wasmCjkGidRemap'] = cjkGidRemap; return new window.EOWasmPdf.Writer(env); }
 				});
 				return true;
 			} catch (e) { return false; }
@@ -253,6 +255,24 @@
 
 	function checkCancelled(signal){if(signal&&signal.aborted)throw Object.assign(new Error('PDF export cancelled'),{name:'AbortError',code:'aborted'});}
 	function reportProgress(options,value){try{if(options.onProgress){var result=options.onProgress(value);if(result&&result.catch)result.catch(function(){});}}catch(_error){}}
+	function copyCommands(memory){return memory.GetDataUint8(0,memory.GetCurPosition()).slice();}
+	function captureInFinalReview(logic, capture) {
+		var review = Asc.c_oAscDisplayModeInReview;
+		if (!review || !logic || !logic.GetDisplayModeInReview || !logic.SetDisplayModeInReview)
+			return capture();
+		var previous = logic.GetDisplayModeInReview();
+		if (undefined === previous || null === previous) previous = review.Edit;
+		if (review.Final === previous) return capture();
+		var syncRecalc = window['NATIVE_EDITOR_ENJINE_SYNC_RECALC'];
+		window['NATIVE_EDITOR_ENJINE_SYNC_RECALC'] = true;
+		try {
+			logic.SetDisplayModeInReview(review.Final, false);
+			return capture();
+		} finally {
+			try { logic.SetDisplayModeInReview(previous, false); }
+			finally { window['NATIVE_EDITOR_ENJINE_SYNC_RECALC'] = syncRecalc; }
+		}
+	}
 
 	// ---- capture + write -------------------------------------------------------------------------
 	async function buildOnce(api, options, onProgress, id) {
@@ -293,41 +313,53 @@
 		r.VectorMemoryForPrint = new AscCommon.CMemory();
 		r.isPrintMode = !!(options.isPdfPrint || (api.asc_isFinalizedVersion && api.asc_isFinalizedVersion()));
 		var oldMarks = api.ShowParaMarks;
-		var captureMs = 0, last = now();
+		var captureMs = 0, last = now(), pageStreams, headingsStream;
 		try {
 			if (watermark) watermark.StartRenderer();
 			r.Memory.Seek(0);
 			r.DocInfo(api.asc_getCoreProps());
 			await writer.feed(r.Memory.GetDataUint8(0, r.Memory.GetCurPosition()));
 			reportProgress(options,{stage:'converting',completed:0,total:list.length});
-			for (var k = 0; k < list.length; k++) {
-				checkCancelled(options.signal);
-				var i = list[k], page = src.m_arrPages[i], tc = now();
+			var captureLogic = src.m_oLogicDocument || logic;
+			var captured = captureInFinalReview(captureLogic, function () {
+				var streams = [];
+				for (var k = 0; k < list.length; k++) {
+					checkCancelled(options.signal);
+					var i = list[k], page = src.m_arrPages[i], tc = now();
+					r.Memory.Seek(0);
+					r.VectorMemoryForPrint.ClearNoAttack();
+					api.ShowParaMarks = false;   // only while drawing: the screen keeps its marks between pages
+					try {
+						r.BeginPage(page.width_mm, page.height_mm);
+						captureLogic.DrawPage(i, r);
+						if (watermark) watermark.DrawOnRenderer(r, page.width_mm, page.height_mm);
+						r.EndPage();
+					} finally { api.ShowParaMarks = oldMarks; }
+					captureMs += now() - tc;
+					streams.push(copyCommands(r.Memory));
+					checkCancelled(options.signal);
+				}
 				r.Memory.Seek(0);
-				r.VectorMemoryForPrint.ClearNoAttack();
-				api.ShowParaMarks = false;   // only while drawing: the screen keeps its marks between pages
-				try {
-					r.BeginPage(page.width_mm, page.height_mm);
-					src.m_oLogicDocument.DrawPage(i, r);
-					if (watermark) watermark.DrawOnRenderer(r, page.width_mm, page.height_mm);
-					r.EndPage();
-				} finally { api.ShowParaMarks = oldMarks; }
-				captureMs += now() - tc;
-				writer.nextPageIndex = i;
-				await writer.feed(r.Memory.GetDataUint8(0, r.Memory.GetCurPosition()));
-				checkCancelled(options.signal);
-				if (onProgress) onProgress(k + 1, list.length);
-				reportProgress(options,{stage:'converting',completed:k+1,total:list.length});
-				if (now() - last > YIELD_MS) { await nextFrame(); last = now(); }
-			}
-			r.Memory.Seek(0);
-			r.AddHeadings(src.m_oLogicDocument || logic, true);
-			if (r.Memory.GetCurPosition()) await writer.feed(r.Memory.GetDataUint8(0, r.Memory.GetCurPosition()));
+				r.AddHeadings(captureLogic, true);
+				return {pages:streams,headings:r.Memory.GetCurPosition()?copyCommands(r.Memory):null};
+			});
+			pageStreams = captured.pages;
+			headingsStream = captured.headings;
 		} finally {
 			if (watermark) watermark.EndRenderer();
 			api.ShowParaMarks = oldMarks;
 			dd.printedDocument = null;
 		}
+		for (var k = 0; k < list.length; k++) {
+			checkCancelled(options.signal);
+			writer.nextPageIndex = list[k];
+			await writer.feed(pageStreams[k]);
+			checkCancelled(options.signal);
+			if (onProgress) onProgress(k + 1, list.length);
+			reportProgress(options,{stage:'converting',completed:k+1,total:list.length});
+			if (now() - last > YIELD_MS) { await nextFrame(); last = now(); }
+		}
+		if (headingsStream) await writer.feed(headingsStream);
 		checkCancelled(options.signal);var bytes = await writer.finish();checkCancelled(options.signal);
 		var stats = writer.stats || {};
 		stats.backend = backend.id;

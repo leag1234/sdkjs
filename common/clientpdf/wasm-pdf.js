@@ -11,9 +11,10 @@
 		parts.forEach(function (p) { out.set(p, at); at += p.length; }); return out;
 	}
 	// Scan resource references without interpreting or rasterizing any drawing command.
-	function Scanner() {
+	function Scanner(options) {
 		this.fonts = new Map(); this.images = new Map(); this.font = 'Arial'; this.style = 0;
 		this.pages = 0; this.links = 0;
+		this.nativeCjkGlyphRemap = !!(options && options.nativeCjkGlyphRemap === true);
 	}
 	Scanner.prototype.feed = function (bytes) {
 		var u = bytes.slice(), dv = new DataView(u.buffer), p = 0, last = 0, parts = [], self = this;
@@ -31,20 +32,37 @@
 		function isCjk(codepoint) {
 			return !!(AscCommon.ClientPdf.isCjkCodePoint && AscCommon.ClientPdf.isCjkCodePoint(codepoint));
 		}
-		function text() {
-			var value = str(false); skip(8);
+		function isBmpCjkScalar(codepoint) {
+			return (codepoint >= 0x2E80 && codepoint <= 0xD7FF) || (codepoint >= 0xF900 && codepoint <= 0xFAFF);
+		}
+		function hasUnsafeTextCodepoint(value) {
+			var hasCjk = false, hasJoiner = false;
 			for (var i = 0; i < value.length; i++) {
 				var codepoint = value.charCodeAt(i);
 				if (codepoint >= 0xD800 && codepoint <= 0xDBFF && i + 1 < value.length)
 					codepoint = ((codepoint - 0xD800) << 10) + (value.charCodeAt(++i) - 0xDC00) + 0x10000;
-				if (isCjk(codepoint)) throw unsupported('cjk', 'use JS font fallback');
+				if (isCjk(codepoint)) {
+					if (!self.nativeCjkGlyphRemap || !isBmpCjkScalar(codepoint)) return true;
+					hasCjk = true;
+				}
+				if ((codepoint >= 0xFE00 && codepoint <= 0xFE0F) || codepoint === 0x200D
+					|| (codepoint >= 0xE0100 && codepoint <= 0xE01EF)) hasJoiner = true;
 			}
+			// Variation selectors and joiners change glyph choice: keep them on the JS path only next to CJK.
+			return hasCjk && hasJoiner;
+		}
+		function text() {
+			var value = str(false); skip(8);
+			if (hasUnsafeTextCodepoint(value)) throw unsupported('cjk', 'use JS font fallback');
 			font();
 		}
 		function glyphRun() {
 			skip(12); var count = int(), cjk = false;
 			if (count < 0 || count > Math.floor((u.length - p) / 4)) throw unsupported('command', 'invalid glyph count');
-			for (var i = 0; i < count; i++) if (isCjk(int())) cjk = true;
+			for (var i = 0; i < count; i++) {
+				var codepoint = int();
+				if (isCjk(codepoint) && (!self.nativeCjkGlyphRemap || !isBmpCjkScalar(codepoint) || count !== 1)) cjk = true;
+			}
 			if (cjk) throw unsupported('cjk', 'use JS font fallback');
 			font();
 		}
@@ -138,7 +156,7 @@
 			try{worker.postMessage(job,transfers);}catch(e){finish(unsupported('wasm-worker',e.message));}
 		});
 	}
-	function Writer(env) { this.env = env; this.scanner = new Scanner(); this.parts = []; this.stats = {}; }
+	function Writer(env) { this.env = env; this.scanner = new Scanner({ nativeCjkGlyphRemap: env['wasmCjkGidRemap'] === true }); this.parts = []; this.stats = {}; }
 	Writer.prototype.feed = async function (u) { check(this.env.signal);this.parts.push(this.scanner.feed(u)); };
 	var fontLibrary;
 	function loadFonts() {
