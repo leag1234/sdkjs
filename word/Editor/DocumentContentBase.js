@@ -3024,7 +3024,7 @@ CDocumentContentBase.prototype.IsEmptySectionFlowParagraph = function(index)
 		return false;
 	
 	let element = this.Content[index];
-	if (!element.IsParagraph() || !element.IsEmpty() || !element.Get_SectionPr())
+	if (!element.IsParagraph() || !element.IsEmpty({SkipComplexFields : true}) || !element.Get_SectionPr())
 		return false;
 	
 	let prevElement = this.Content[index - 1];

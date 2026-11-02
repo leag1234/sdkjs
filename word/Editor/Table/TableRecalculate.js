@@ -2782,6 +2782,10 @@ CTable.prototype.private_RecalculatePage = function(CurPage)
 						}
 					} else {
 						BottomMargin = this.MaxBotMargin[CurRow + VMergeCount - 1];
+						// Word keeps the border under the row (the next row's top border, or the table bottom border) inside the
+						// page, so text that only just fits above the page limit moves to the next page when the border would cross it
+						let lastRow = CurRow + VMergeCount - 1;
+						Y_content_end -= lastRow < this.Content.length - 1 ? this.MaxTopBorder[lastRow + 1] : this.MaxBotBorder[lastRow];
 					}
             Y_content_end -= BottomMargin;
 

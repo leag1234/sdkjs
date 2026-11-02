@@ -4635,6 +4635,14 @@ CDocument.prototype.private_RecalculateFlowParagraph         = function(RecalcIn
             FrameH = TempElement.Get_PageBounds(0).Bottom;
         }
 
+		// MS Word keeps the space after the last paragraph of a frame that does not allow text beside it
+		if (wrap_NotBeside === FramePr.Wrap && undefined === FramePr.H)
+		{
+			var oLastInFrame = this.Content[Index + FlowCount - 1];
+			if (oLastInFrame && oLastInFrame.IsParagraph())
+				FrameH += oLastInFrame.Get_CompiledPr2(false).ParaPr.Spacing.After;
+		}
+
 		var oTableInfo = Element.GetMaxTableGridWidth();
 
 		var nMaxGapLeft           = oTableInfo.GapLeft;
@@ -4843,6 +4851,24 @@ CDocument.prototype.private_RecalculateFlowParagraph         = function(RecalcIn
 						FrameY = FramePrY + Page_Field_T;
 
 					break;
+            }
+        }
+
+        // MS Word stacks frames of automatic height that do not allow text beside them: such a frame (wrapping "not beside") that would
+        // overlap a frame already placed on this page goes right below it, instead of being drawn over it.
+        if (wrap_NotBeside === FramePr.Wrap && undefined === FramePr.H)
+        {
+            var oPlacedFrames = this.Pages[PageIndex].Frames;
+            var nFrameGap     = 2 * (undefined === FramePr.VSpace ? 0 : FramePr.VSpace);
+            for (var nPlaced = 0; nPlaced < oPlacedFrames.length; ++nPlaced)
+            {
+                var oPlaced = oPlacedFrames[nPlaced];
+                if (!oPlaced.FramePr || wrap_NotBeside !== oPlaced.FramePr.Wrap)
+                    continue;
+
+                var nPlacedBottom = oPlaced.T2 + oPlaced.H2;
+                if (FrameY < nPlacedBottom - 0.001 && FrameY + FrameH > oPlaced.T2 + 0.001)
+                    FrameY = nPlacedBottom + nFrameGap;
             }
         }
 

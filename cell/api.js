@@ -7141,7 +7141,8 @@ var editor;
 			   _adjustPrint.asc_setEndPageIndex(_options["adjustOptions"]["endPageIndex"]);
 		   if (_options["adjustOptions"]["activeSheetsArray"])
 			   _adjustPrint.asc_setActiveSheetsArray(_options["adjustOptions"]["activeSheetsArray"]);
-		   if (_options["adjustOptions"]["printType"])
+		   // ActiveSheets is 0, so test for presence, not truthiness
+		   if (undefined !== _options["adjustOptions"]["printType"])
 			   _adjustPrint.asc_setPrintType(_options["adjustOptions"]["printType"]);
 	   }
 
