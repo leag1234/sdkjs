@@ -133,6 +133,11 @@
 			if ((_char >= 0xE000 && _char <= 0xF8FF) || _char >= 0xF0000)
 				return "";
 
+			// Control characters (tabs, line breaks, C1 controls) are never drawn: picking a font for them
+			// made every spreadsheet with a tab or line break download NanumGothic (2 x 4.6 MB) at open.
+			if (_char < 0x20 || (_char >= 0x7F && _char <= 0x9F))
+				return "";
+
 			if (this.LastRange)
 			{
 				if (this.LastRange.Start <= _char && _char <= this.LastRange.End)

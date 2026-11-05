@@ -106,7 +106,7 @@
 
 		// шрифты в массиве this.FD_Ascii_Font_Like_Names - в порядке важности.
 		this.FD_Ascii_Font_Like_Names = [
-			["Cambria Math", "Asana Math", "XITS Math", "Latin Modern"],
+			["Cambria Math", "STIX Two Math", "DejaVu Math TeX Gyre", "Asana Math", "XITS Math", "Latin Modern"],
 			["OpenSymbol"],
 			["Arial", "Liberation Sans", "Helvetica", "Nimbus Sans L"],
 			["Times New Roman", "Liberation Serif"],
@@ -116,6 +116,8 @@
 		];
 		this.FD_Ascii_Font_Like_Main = {
 			"Cambria Math"  : 0,
+			"STIX Two Math" : 0,
+			"DejaVu Math TeX Gyre" : 0,
 			"Asana Math"    : 0,
 			"XITS Math"     : 0,
 			"Latin Modern"  : 0,
@@ -192,6 +194,8 @@
 			"Calibri"           : ["Carlito"],
 			"Calibri Light"     : ["Carlito"],
 			"Cambria"           : ["Caladea"],
+			// Math text (equations): Caladea has no mathematical alphanumeric glyphs, so letters vanished.
+			"Cambria Math"      : ["STIX Two Math", "DejaVu Math TeX Gyre"],
 			"Arial"             : ["Liberation Sans", "Arimo"],
 			"Helvetica"         : ["Liberation Sans", "Arimo"],
 			"Arial Narrow"      : ["Liberation Sans Narrow"],

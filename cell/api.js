@@ -7185,7 +7185,7 @@ var editor;
 			   newPrintOptions = new Asc.asc_CPageOptions();
 			   newPrintOptions.setJson(spreadsheetLayout["sheetsProps"][index]);
 		   } else {
-			   newPrintOptions = ws.PagePrintOptions.clone();
+			   newPrintOptions = ws.PagePrintOptions.clone(ws);
 		   }
            //regionalSettings ?
 
