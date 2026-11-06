@@ -1425,6 +1425,9 @@
 	};
 	baseEditorsApi.prototype._openChartOrLocalDocument           = function()
 	{
+		if (this.isReporterMode)
+			return;
+
 		this._openEmptyDocument();
 	};
 	baseEditorsApi.prototype._openEmptyDocument           = function()
