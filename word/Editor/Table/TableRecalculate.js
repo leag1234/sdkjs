@@ -1927,7 +1927,6 @@ CTable.prototype.private_RecalculatePageXY = function(CurPage)
 	{
 		yLimit -= this.PositionV.Value;
 	}
-	
 	this.Pages[CurPage] = new CTablePage(contentFrame.X, contentFrame.Y, contentFrame.XLimit, yLimit, FirstRow, maxTopBorder);
 };
 CTable.prototype.private_RecalculatePositionX = function(CurPage)
@@ -3034,6 +3033,17 @@ CTable.prototype.private_RecalculatePage = function(CurPage)
             }
         }
 
+		// A floating table row marked cantSplit that does not fit moves to the next page as a whole (like Word does)
+		if (bNextPage && this.private_IsCantSplitRowToMove(CurRow, FirstRow, Row, CellsCount))
+		{
+			for (var CurCell = 0; CurCell < CellsCount; CurCell++)
+			{
+				var Cell = Row.Get_Cell(CurCell);
+				Cell.Content.StartFromNewPage();
+				Cell.PagesCount = 2;
+			}
+		}
+
         // Данная строка разбилась на несколько страниц. Нам нужно сделать несколько дополнительных действий:
         // 1. Проверяем есть ли хоть какой-либо контент данной строки на первой странице, т.е. реально данная
         //    строка начинается со 2-ой страницы.
@@ -3648,6 +3658,24 @@ CTable.prototype.private_RecalculatePage = function(CurPage)
         return recalcresult_NextPage;
     else
         return recalcresult_NextElement;
+};
+/**
+ * A cantSplit row of a floating table that began on the current page below its first row has to move to the next page.
+ * Inline tables keep the previous behavior.
+ */
+CTable.prototype.private_IsCantSplitRowToMove = function(curRow, firstRow, row, cellsCount)
+{
+	if (this.IsInline() || curRow === firstRow || !row.IsCantSplit())
+		return false;
+	
+	for (let curCell = 0; curCell < cellsCount; ++curCell)
+	{
+		let cell = row.Get_Cell(curCell);
+		if (vmerge_Continue === cell.GetVMerge() || this.Internal_GetVertMergeCount(curRow, cell.Metrics.StartGridCol, cell.Get_GridSpan()) > 1)
+			return false;
+	}
+	
+	return true;
 };
 CTable.prototype.private_RecalculatePrepareHeaderPageRows = function(headerPage)
 {

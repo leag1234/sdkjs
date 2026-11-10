@@ -990,6 +990,14 @@ CTableRow.prototype.IsHeader = function()
 	return this.Get_CompiledPr(false).TableHeader;
 };
 /**
+ * Is the row marked as not splittable across pages
+ * @returns {boolean}
+ */
+CTableRow.prototype.IsCantSplit = function()
+{
+	return true === this.Get_CompiledPr(false).CantSplit;
+};
+/**
  * Устанавливаем является ли данная строка строкой заголовка таблицы
  * @param isHeader {boolean}
  */

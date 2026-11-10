@@ -13059,6 +13059,7 @@ function CTextPr()
     this.FontRef    = undefined;
 
     this.Shd        = undefined;
+	this.Border     = undefined;
     this.Vanish     = undefined;
 	this.Ligatures  = undefined;
 
@@ -13101,6 +13102,7 @@ CTextPr.prototype.Clear = function()
 	this.Unifill        = undefined;
 	this.FontRef        = undefined;
 	this.Shd            = undefined;
+	this.Border         = undefined;
 	this.Vanish         = undefined;
 	this.Ligatures      = undefined;
 	this.TextOutline    = undefined;
@@ -13163,6 +13165,9 @@ CTextPr.prototype.Copy = function(bCopyPrChange, oPr)
 
 	if (undefined !== this.Shd)
 		TextPr.Shd = this.Shd.Copy();
+
+	if (undefined !== this.Border)
+		TextPr.Border = this.Border.Copy();
 	if (undefined !== this.FontScale)
 		TextPr.FontScale = this.FontScale;
 
@@ -13233,6 +13238,9 @@ CTextPr.prototype.createDuplicateForSmartArt = function(oPr)
 
 	if (undefined !== this.Shd)
 		TextPr.Shd = this.Shd.Copy();
+
+	if (undefined !== this.Border)
+		TextPr.Border = this.Border.Copy();
 
 	if (undefined !== this.FontScale)
 		TextPr.FontScale = this.FontScale;
@@ -13353,6 +13361,9 @@ CTextPr.prototype.Merge = function(TextPr)
 
 	if (TextPr.Shd)
 		this.Shd = TextPr.Shd.Copy();
+
+	if (TextPr.Border)
+		this.Border = TextPr.Border.Copy();
 
 	if (undefined !== TextPr.Vanish && null !== TextPr.Vanish)
 		this.Vanish = TextPr.Vanish;
@@ -13528,6 +13539,11 @@ CTextPr.prototype.Apply = function(textPr)
 		this.Shd = undefined;
 	else if (undefined !== textPr.Shd)
 		this.Shd = textPr.Shd.Copy();
+
+	if (null === textPr.Border)
+		this.Border = undefined;
+	else if (undefined !== textPr.Border)
+		this.Border = textPr.Border.Copy();
 	
 	if (null === textPr.Vanish)
 		this.Vanish = undefined;
@@ -13574,6 +13590,7 @@ CTextPr.prototype.InitDefault = function(nCompatibilityMode)
 	this.Unifill = undefined;
 	this.FontRef = undefined;
 	this.Shd     = undefined;
+	this.Border  = undefined;
 	this.Vanish  = false;
 	this.Ligatures  = Asc.LigaturesType.None;
 
@@ -13651,6 +13668,15 @@ CTextPr.prototype.Set_FromObject = function(TextPr, isUndefinedToNull)
 	else
 	{
 		this.Shd = isUndefinedToNull ? null : undefined;
+	}
+
+	if (undefined !== TextPr.Border)
+	{
+		this.Border = CDocumentBorder.FromObject(TextPr.Border);
+	}
+	else
+	{
+		this.Border = isUndefinedToNull ? null : undefined;
 	}
 
 	this.Vanish         = CheckUndefinedToNull(isUndefinedToNull, TextPr.Vanish);
@@ -14150,9 +14176,19 @@ CTextPr.prototype.Write_ToBinary = function(Writer)
 		Flags |= 1073741824;
 	}
 
-	if (undefined != this.Ligatures)
+	// All 32 flag bits are taken. Bit 31 keeps its old meaning (one byte follows) and without a border the byte is
+	// exactly the old Ligatures value (0..15). With a border the byte carries two extra markers old files never
+	// have (bit 6: Ligatures undefined, bit 7: the border follows), so old data reads identically.
+	if (undefined !== this.Ligatures || undefined !== this.Border)
 	{
-		Writer.WriteByte(this.Ligatures);
+		var nLigByte = undefined !== this.Ligatures ? this.Ligatures : 0x40;
+		if (undefined !== this.Border)
+			nLigByte |= 0x80;
+
+		Writer.WriteByte(nLigByte);
+		if (undefined !== this.Border)
+			this.Border.Write_ToBinary(Writer);
+
 		Flags |= (1 << 31);
 	}
 
@@ -14325,7 +14361,17 @@ CTextPr.prototype.Read_FromBinary = function(Reader)
 	}
 
 	if (Flags & (1 << 31))
-		this.Ligatures = Reader.GetByte();
+	{
+		var nLigByte = Reader.GetByte();
+		if (!(nLigByte & 0x40))
+			this.Ligatures = nLigByte & 0x3F;
+
+		if (nLigByte & 0x80)
+		{
+			this.Border = new CDocumentBorder();
+			this.Border.Read_FromBinary(Reader);
+		}
+	}
 };
 CTextPr.prototype.Check_NeedRecalc = function()
 {
@@ -14385,6 +14431,9 @@ CTextPr.prototype.Check_NeedRecalc = function()
 		return true;
 
 	if (undefined != this.Shd)
+		return true;
+
+	if (undefined !== this.Border)
 		return true;
 
 	return false;
@@ -14592,6 +14641,9 @@ CTextPr.prototype.Is_Equal = function(TextPr)
 
 	if (!IsEqualStyleObjects(this.Shd, TextPr.Shd))
 		return false;
+
+	if (!IsEqualStyleObjects(this.Border, TextPr.Border))
+		return false;
 	if (undefined != TextPr.AscLine)
 	{
 		return false;
@@ -14638,6 +14690,7 @@ CTextPr.prototype.Is_Empty = function()
 		|| undefined !== this.Unifill
 		|| undefined !== this.FontRef
 		|| undefined !== this.Shd
+		|| undefined !== this.Border
 		|| undefined !== this.Vanish
 		|| undefined !== this.Ligatures
 		|| undefined !== this.TextOutline
@@ -14755,6 +14808,9 @@ CTextPr.prototype.GetDiff = function(oTextPr)
 
 	if (this.Shd && !this.Shd.IsEqual(oTextPr.Shd))
 		oResultTextPr.Shd = this.Shd.Copy();
+
+	if (this.Border && !this.Border.IsEqual(oTextPr.Border))
+		oResultTextPr.Border = this.Border.Copy();
 
 	return oResultTextPr;
 };

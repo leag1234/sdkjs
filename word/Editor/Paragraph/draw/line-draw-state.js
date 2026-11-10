@@ -58,7 +58,12 @@
 		this.RunReview   = new CParaDrawingRangeLines();
 		this.CollChange  = new CParaDrawingRangeLines();
 		this.FormBorder  = new CParaDrawingRangeLines();
+		this.Border      = new CParaDrawingRangeLines(); // character borders (w:bdr), one element per run element, merged on draw
 		this.CustomLines = {};
+		
+		this.border        = null; // border of the current run
+		this.borderPrev    = null; // border of the last element drawn, as long as the stretch is not interrupted
+		this.borderLastEl  = null; // last element added to this.Border in the current range
 		
 		this.Page  = 0;
 		this.Line  = 0;
@@ -130,6 +135,9 @@
 	{
 		this.Page = page;
 		
+		this.borderPrev   = null;
+		this.borderLastEl = null;
+		
 		this.VisitedHyperlink = false;
 		this.Hyperlink        = false;
 		
@@ -155,6 +163,8 @@
 		this.CollChange.Clear();
 		this.DUnderline.Clear();
 		this.FormBorder.Clear();
+		this.Border.Clear();
+		this.borderLastEl = null;
 		
 		this.CustomLines = {};
 	};
@@ -173,6 +183,77 @@
 	ParagraphLineDrawState.prototype.endRange = function()
 	{
 		this.bidiFlow.end();
+		
+		// The stretch of equal borders goes on only if this is the last range of the line
+		// and the next line starts with a run having the same border
+		if (this.borderLastEl)
+		{
+			let isLastRange = this.Range === this.Paragraph.Lines[this.Line].Ranges.length - 1;
+			let continued   = isLastRange && this.isBorderContinuedOnNextLine(this.borderLastEl.Additional.Border);
+			this.borderLastEl.Additional.Right = !continued;
+			if (!continued)
+				this.borderPrev = null;
+			this.borderLastEl = null;
+		}
+	};
+	ParagraphLineDrawState.prototype.isBorderContinuedOnNextLine = function(border)
+	{
+		let nextLine = this.Paragraph.Lines[this.Line + 1];
+		if (!nextLine || !nextLine.Ranges.length)
+			return false;
+		
+		let item = this.Paragraph.Content[nextLine.Ranges[0].StartPos];
+		while (item && para_Run !== item.Type && item.Content && item.Content.length)
+			item = item.Content[0];
+		
+		if (!item || para_Run !== item.Type)
+			return false;
+		
+		let nextBorder = item.getCompiledPr().Border;
+		return !!(nextBorder && !nextBorder.IsNone() && nextBorder.IsEqual(border));
+	};
+	/**
+	 * Collects the horizontal extent of a run element having a character border. Elements of one stretch of equal
+	 * borders are merged later (CParaDrawingRangeLines.Get_NextForward) into one box.
+	 */
+	ParagraphLineDrawState.prototype.handleCharBorder = function(element, startX, endX)
+	{
+		if (endX - startX < 0.001)
+			return;
+		
+		let border = para_End === element.Type ? null : this.border;
+		if (!border)
+		{
+			// A visible element without border finishes the current stretch
+			if (this.borderLastEl)
+			{
+				this.borderLastEl.Additional.Right = true;
+				this.borderLastEl = null;
+			}
+			this.borderPrev = null;
+			return;
+		}
+		
+		let isContinued = this.borderPrev && this.borderPrev.IsEqual(border);
+		if (this.borderLastEl && !isContinued)
+		{
+			// Another border starts right after: the previous stretch ends here
+			this.borderLastEl.Additional.Right = true;
+		}
+		
+		let color = (border.Color && border.Color.Auto && !border.Unifill) ? this.color : border.Get_Color(this.Paragraph);
+		
+		let additional = {
+			Border : border,
+			Left   : !isContinued,
+			Right  : false,
+			Y0     : this.LineY0,
+			Y1     : this.LineY1
+		};
+		
+		this.Border.Add(this.LineY0, this.LineY1, startX, endX, Math.max(border.Size, 0.1), color.r, color.g, color.b, additional);
+		this.borderLastEl = this.Border.Elements[this.Border.Elements.length - 1];
+		this.borderPrev   = border;
 	};
 	/**
 	 * @param element {AscWord.CRunElementBase}
@@ -270,6 +351,8 @@
 					this.addLines(startX, endX, undefined, oTextDrawerInfo);
 				break;
 		}
+		
+		this.handleCharBorder(element, startX, endX);
 		
 		if (misspell)
 			this.Spelling.Add(startX, endX, AscWord.BLACK_COLOR);
@@ -479,6 +562,9 @@
 		this.collPrChangeColor = run.getCollPrChangeColor();
 		
 		this.textPr = textPr;
+		
+		let charBorder = textPr.Border;
+		this.border = (charBorder && !charBorder.IsNone()) ? charBorder : null;
 	};
 	ParagraphLineDrawState.prototype.handleFormBorder = function(item, run, inRunPos)
 	{
@@ -560,10 +646,23 @@
 		let strikeoutY = this.Baseline - this.yOffset - fontSizeMM * strikeoutShift;
 		let underlineY = this.Baseline - this.yOffset + this.UnderlineOffset;
 		
+		// Word keeps the underline attached to the shifted text: lowered for a
+		// subscript, raised for a superscript (the previous code left the
+		// superscript underline on the baseline), with the thickness of the
+		// reduced font size.
+		let lineFontSize = fontSize;
 		if (AscCommon.vertalign_SubScript === vertAlign)
+		{
 			underlineY -= AscCommon.vaKSub * fontSizeMM;
+			lineFontSize *= AscCommon.vaKSize;
+		}
+		else if (AscCommon.vertalign_SuperScript === vertAlign)
+		{
+			underlineY -= AscCommon.vaKSuper * fontSizeMM;
+			lineFontSize *= AscCommon.vaKSize;
+		}
 		
-		let lineW = (fontSize / 18) * g_dKoef_pt_to_mm;
+		let lineW = (lineFontSize / 18) * g_dKoef_pt_to_mm;
 		
 		this.Strikeout.set(strikeoutY, lineW);
 		this.DStrikeout.set(strikeoutY, lineW);

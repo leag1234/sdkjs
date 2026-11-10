@@ -136,4 +136,39 @@ $(function ()
 		assert.strictEqual(table.GetPage(2).GetLastRow(), 1, "Check last row for page 2");
 	});
 	
+	QUnit.test("A cantSplit row of a page-anchored float table that does not fit moves to the next page", function (assert)
+	{
+		// Page 400x820 with 10 margins: the table is anchored to the page at Y=50, the rows are shifted by 40 after the layout
+		let table = AscTest.CreateTable(5, 1, [300]);
+		logicDocument.AddToContent(0, table);
+		AscTest.RemoveTableBorders(table);
+		AscTest.RemoveTableMargins(table);
+		
+		table.SetInline(false);
+		table.SetPositionH(Asc.c_oAscHAnchor.Page, false, 20);
+		table.SetPositionV(Asc.c_oAscVAnchor.Page, false, 50);
+		table.GetRow(0).SetHeader(true);
+		
+		for (let iRow = 0; iRow < 5; ++iRow)
+		{
+			let row = table.GetRow(iRow);
+			row.Pr.CantSplit = true;
+			row.Recalc_CompiledPr();
+			
+			let content = row.GetCell(0).GetContent();
+			let paragraph = content.GetElement(0);
+			// The first paragraph is high enough to push the second one to the next page for the last row only
+			paragraph.SetParagraphSpacing({Before : 0, After : iRow === 4 ? 400 : 100, LineRule : linerule_Auto, Line : 1});
+			content.AddToContent(1, AscTest.CreateParagraph());
+		}
+		
+		AscTest.Recalculate();
+		
+		const pageBottom = 820 - 10;
+		assert.strictEqual(table.GetPagesCount(), 2, "Check page count");
+		assert.strictEqual(table.GetPage(0).GetLastRow(), 3, "The last row stays off the first page");
+		assert.strictEqual(table.GetPage(1).GetFirstRow(), 4, "The last row starts on the second page");
+		assert.ok(table.getRowBounds(3, 0).Bottom <= pageBottom + 0.01, "Nothing is laid out below the bottom margin of the first page");
+	});
+	
 });

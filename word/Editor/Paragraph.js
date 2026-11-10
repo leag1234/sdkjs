@@ -2169,6 +2169,20 @@ Paragraph.prototype.GetCalculatedCurPosXY = function()
 {
 	return this.Internal_Recalculate_CurPos(false, false, true);
 };
+/**
+ * The paragraph lies in a cell of a table whose layout is autofit (also for the topmost table of a nested one)
+ * @returns {boolean}
+ */
+Paragraph.prototype.isInAutofitTableCell = function()
+{
+	let cell = this.IsTableCellContent(true);
+	let table = cell ? cell.GetTable() : null;
+	if (!table || tbllayout_AutoFit !== table.Get_CompiledPr(false).TablePr.TableLayout)
+		return false;
+
+	let topTable = table.Parent ? table.Parent.IsInTable(true) : null;
+	return !topTable || tbllayout_AutoFit === topTable.Get_CompiledPr(false).TablePr.TableLayout;
+};
 Paragraph.prototype.RecalculateMinMaxContentWidth = function(isRotated)
 {
 	var MinMax = new CParagraphMinMaxContentWidth();
@@ -2187,6 +2201,8 @@ Paragraph.prototype.RecalculateMinMaxContentWidth = function(isRotated)
 
 	if (this.bFromDocument && this.LogicDocument && this.LogicDocument.GetCompatibilityMode() >= AscCommon.document_compatibility_mode_Word15)
 		MinInd += ParaPr.Ind.FirstLine;
+	else if (ParaPr.Ind.FirstLine > 0 && this.bFromDocument && this.isInAutofitTableCell())
+		MinInd += ParaPr.Ind.FirstLine; // Word sizes autofit columns so that a word fits next to the first line indent
 
 	if (MinMax.nMinWidth > 0.001 || MinMax.nMaxWidth > 0.001)
 	{
@@ -3209,6 +3225,32 @@ Paragraph.prototype.drawRunContentLines = function(CurPage, pGraphics, drawState
 		var aCollChange = PDSL.CollChange;
 		var aDUnderline = PDSL.DUnderline;
 		var aFormBorder = PDSL.FormBorder;
+
+		// Draw character borders (w:bdr): one box around a stretch of elements with equal borders,
+		// the left edge only where the stretch starts and the right one only where it ends
+		var oBorderEl = PDSL.Border.Get_Next();
+		while (null != oBorderEl)
+		{
+			var oCharBorder = oBorderEl.Additional.Border;
+			var nBorderW    = oBorderEl.w;
+			var nBorderGap  = oCharBorder.Space;
+			var nBX0        = oBorderEl.x0 - (oBorderEl.Additional.Left ? nBorderGap : 0);
+			var nBX1        = oBorderEl.x1 + (oBorderEl.Additional.Right ? nBorderGap : 0);
+			var nBY0        = oBorderEl.y0 - nBorderGap;
+			var nBY1        = oBorderEl.y1 + nBorderGap;
+
+			pGraphics.Start_Command(AscFormat.DRAW_COMMAND_LINE, Line, CurLine, AscFormat.CLineStructure_DrawType_Underlines);
+			pGraphics.p_color(oBorderEl.r, oBorderEl.g, oBorderEl.b, 255);
+			pGraphics.drawHorLine(c_oAscLineDrawingRule.Bottom, nBY0, nBX0, nBX1, nBorderW);
+			pGraphics.drawHorLine(c_oAscLineDrawingRule.Top, nBY1, nBX0, nBX1, nBorderW);
+			if (oBorderEl.Additional.Left)
+				pGraphics.drawVerLine(c_oAscLineDrawingRule.Right, nBX0, nBY0, nBY1, nBorderW);
+			if (oBorderEl.Additional.Right)
+				pGraphics.drawVerLine(c_oAscLineDrawingRule.Left, nBX1, nBY0, nBY1, nBorderW);
+			pGraphics.End_Command();
+
+			oBorderEl = PDSL.Border.Get_Next();
+		}
 
 		// Рисуем зачеркивание
 		pGraphics.Start_Command(AscFormat.DRAW_COMMAND_LINE, Line, CurLine, AscFormat.CLineStructure_DrawType_Strikeouts);
@@ -19794,6 +19836,8 @@ CParaDrawingRangeLines.prototype =
 					Element.Intermediate.push(Element.x0);
 
                 Element.x0 = PrevEl.x0;
+				if (Element.Additional && Element.Additional.Border && PrevEl.Additional)
+					Element.Additional.Left = PrevEl.Additional.Left;
                 Count--;
             }
             else
@@ -19854,6 +19898,16 @@ CParaDrawingRangeLines.prototype =
 
 			if (undefined === PrevEl.Additional || undefined === Element.Additional)
 				return false;
+
+			if (PrevEl.Additional.Border || Element.Additional.Border)
+			{
+				// Character borders: adjacent elements with equal borders form one box
+				return !!(PrevEl.Additional.Border
+					&& Element.Additional.Border
+					&& !PrevEl.Additional.Right
+					&& !Element.Additional.Left
+					&& PrevEl.Additional.Border.IsEqual(Element.Additional.Border));
+			}
 
 			if (undefined !== PrevEl.Additional.Active && PrevEl.Additional.Active === Element.Additional.Active)
 			{

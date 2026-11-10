@@ -7109,6 +7109,141 @@ var editor;
 		return res;
 	};
 
+	/**
+	 * Scale below which a stored print scale is almost certainly a mistake (text printed at a fraction of its size).
+	 * @type {number}
+	 */
+	spreadsheet_api.prototype.printScaleWarningThreshold = 25;
+
+	/**
+	 * Reports the sheets that are about to be printed with a tiny fixed scale, so that the UI can warn the user.
+	 * A sheet is reported when its stored scale is below 25% and neither "fit to width" nor "fit to height" is set
+	 * (with fit-to-page the scale is recalculated when printing). Hidden sheets and sheets with nothing to print
+	 * are never reported.
+	 * @memberof spreadsheet_api
+	 * @param {Asc.asc_CAdjustPrint} [adjustPrint] the same object that is passed to the print/export; the active sheet
+	 * is checked when it is omitted
+	 * @returns {{sheetIndex: number, name: string, scale: number}[]}
+	 */
+	spreadsheet_api.prototype.asc_GetPrintScaleWarnings = function (adjustPrint) {
+		var res = [];
+		if (!this.wb || !this.wbModel) {
+			return res;
+		}
+		var optionsMap = adjustPrint ? adjustPrint.asc_getPageOptionsMap() : null;
+		var ignorePrintArea = adjustPrint ? adjustPrint.asc_getIgnorePrintArea() : null;
+		var indexes = this.wb.getPrintSheetIndexes(adjustPrint);
+		for (var i = 0; i < indexes.length; ++i) {
+			var index = indexes[i];
+			var ws = this.wbModel.getWorksheet(index);
+			if (!ws || ws.getHidden()) {
+				continue;
+			}
+			var pageOptions = optionsMap && optionsMap[index] ? optionsMap[index] : ws.PagePrintOptions;
+			var pageSetup = pageOptions && pageOptions.asc_getPageSetup();
+			if (!pageSetup || pageSetup.asc_getFitToWidth() || pageSetup.asc_getFitToHeight()) {
+				continue;
+			}
+			var scale = pageSetup.asc_getScale();
+			if ("number" !== typeof scale || !(scale < this.printScaleWarningThreshold)) {
+				continue;
+			}
+			var hasPrintArea = !ignorePrintArea && this.wbModel.getDefinesNames("Print_Area", ws.getId());
+			if (!hasPrintArea) {
+				var info = this.wb.getWorksheet(index).getPrintRangeInfo(true);
+				if (0 > info.col || 0 > info.row) {
+					continue;
+				}
+			}
+			res.push({sheetIndex: index, name: ws.getName(), scale: scale});
+		}
+		return res;
+	};
+
+	/**
+	 * Everything the UI should warn about before printing/exporting: for every visible sheet that is about to be
+	 * printed, a "scale" entry (see asc_GetPrintScaleWarnings) and/or a "margins" entry when the stored page margins
+	 * leave no usable printable area and the default margins are used instead.
+	 * @memberof spreadsheet_api
+	 * @param {Asc.asc_CAdjustPrint} [adjustPrint]
+	 * @returns {({kind: "scale", sheetIndex: number, name: string, scale: number} |
+	 * {kind: "margins", sheetIndex: number, name: string, margins: {left: number, right: number, top: number, bottom: number}, usedMargins: {left: number, right: number, top: number, bottom: number}})[]}
+	 * margins are in mm
+	 */
+	spreadsheet_api.prototype.asc_GetPrintSetupWarnings = function (adjustPrint) {
+		var res = [];
+		if (!this.wb || !this.wbModel) {
+			return res;
+		}
+		var scaleWarnings = this.asc_GetPrintScaleWarnings(adjustPrint);
+		var optionsMap = adjustPrint ? adjustPrint.asc_getPageOptionsMap() : null;
+		var indexes = this.wb.getPrintSheetIndexes(adjustPrint);
+		for (var i = 0; i < indexes.length; ++i) {
+			var index = indexes[i];
+			var ws = this.wbModel.getWorksheet(index);
+			if (!ws || ws.getHidden()) {
+				continue;
+			}
+			for (var j = 0; j < scaleWarnings.length; ++j) {
+				if (scaleWarnings[j].sheetIndex === index) {
+					res.push({kind: "scale", sheetIndex: index, name: scaleWarnings[j].name, scale: scaleWarnings[j].scale});
+				}
+			}
+			var wsView = this.wb.getWorksheet(index);
+			var info = wsView.getPrintMarginsInfo(optionsMap && optionsMap[index] ? optionsMap[index] : null);
+			if (info.fallback && 0 <= wsView.getPrintRangeInfo(true).col) {
+				res.push({kind: "margins", sheetIndex: index, name: ws.getName(), margins: info.stored, usedMargins: info.used});
+			}
+		}
+		return res;
+	};
+
+	/**
+	 * Diagnostic: the used print range of every visible sheet that is about to be printed, and which kind of object
+	 * (cells, sparklines, autoFilters, drawings) defines its last column/row. lastCol/lastRow are -1 for an empty sheet.
+	 * @memberof spreadsheet_api
+	 * @param {Asc.asc_CAdjustPrint} [adjustPrint]
+	 * marginsFallback is true when the stored page margins (mm, in `margins`) leave no usable printable area and the
+	 * default ones (`usedMargins`) are used for printing.
+	 * @returns {{sheetIndex: number, name: string, colsCount: number, rowsCount: number, lastCol: number, lastRow: number, sources: Object, marginsFallback: boolean, margins: Object, usedMargins: Object, widthMm: number, heightMm: number, hasPrintArea: boolean, pageWidthMm: number, pageHeightMm: number, printableWidthMm: number, printableHeightMm: number, orientation: string, scale: number, fitToWidth: number, fitToHeight: number, horizontalCentered: boolean}[]}
+	 * widthMm/heightMm: size of the printed range at 100% scale (print area if it applies and is not ignored, else the
+	 * used range); the page values are after the margins fallback with the orientation applied
+	 */
+	spreadsheet_api.prototype.asc_GetPrintRangeInfo = function (adjustPrint) {
+		var res = [];
+		if (!this.wb || !this.wbModel) {
+			return res;
+		}
+		var optionsMap = adjustPrint ? adjustPrint.asc_getPageOptionsMap() : null;
+		var ignorePrintArea = adjustPrint ? adjustPrint.asc_getIgnorePrintArea() : null;
+		var indexes = this.wb.getPrintSheetIndexes(adjustPrint);
+		for (var i = 0; i < indexes.length; ++i) {
+			var ws = this.wbModel.getWorksheet(indexes[i]);
+			if (!ws || ws.getHidden()) {
+				continue;
+			}
+			var info = this.wb.getWorksheet(indexes[i]).getPrintRangeInfo(true);
+			var wsView = this.wb.getWorksheet(indexes[i]);
+			var pageOptions = optionsMap && optionsMap[indexes[i]] ? optionsMap[indexes[i]] : ws.PagePrintOptions;
+			var pageSetup = pageOptions && pageOptions.asc_getPageSetup();
+			var marginsInfo = wsView.getPrintMarginsInfo(pageOptions);
+			var sizeInfo = wsView.getPrintSizeMm(ignorePrintArea);
+			res.push({sheetIndex: indexes[i], name: ws.getName(), colsCount: ws.getColsCount(), rowsCount: ws.getRowsCount(),
+				lastCol: info.col, lastRow: info.row, sources: info.sources,
+				marginsFallback: marginsInfo.fallback, margins: marginsInfo.stored, usedMargins: marginsInfo.used,
+				widthMm: sizeInfo.widthMm, heightMm: sizeInfo.heightMm, hasPrintArea: sizeInfo.hasPrintArea,
+				pageWidthMm: marginsInfo.pageWidth, pageHeightMm: marginsInfo.pageHeight,
+				printableWidthMm: marginsInfo.pageWidth - marginsInfo.used.left - marginsInfo.used.right,
+				printableHeightMm: marginsInfo.pageHeight - marginsInfo.used.top - marginsInfo.used.bottom,
+				orientation: marginsInfo.pageWidth > marginsInfo.pageHeight ? "landscape" : "portrait",
+				scale: pageSetup ? pageSetup.asc_getScale() : null,
+				fitToWidth: pageSetup ? pageSetup.asc_getFitToWidth() : 0,
+				fitToHeight: pageSetup ? pageSetup.asc_getFitToHeight() : 0,
+				horizontalCentered: !!(pageOptions && pageOptions.asc_getHorizontalCentered())});
+		}
+		return res;
+	};
+
   spreadsheet_api.prototype.asc_nativePrint = function (_printer, _page, _options) {
     //calc to fix case where file has formulas with no cache values and no changes
     var _adjustPrint = (window.AscDesktopEditor_PrintOptions && window.AscDesktopEditor_PrintOptions.advancedOptions) || new Asc.asc_CAdjustPrint();
@@ -10487,6 +10622,9 @@ var editor;
   prot["asc_nativeGetFileData"] = prot.asc_nativeGetFileData;
   prot["asc_nativeCalculate"] = prot.asc_nativeCalculate;
   prot["asc_nativePrint"] = prot.asc_nativePrint;
+  prot["asc_GetPrintScaleWarnings"] = prot.asc_GetPrintScaleWarnings;
+  prot["asc_GetPrintRangeInfo"] = prot.asc_GetPrintRangeInfo;
+  prot["asc_GetPrintSetupWarnings"] = prot.asc_GetPrintSetupWarnings;
   prot["asc_nativePrintPagesCount"] = prot.asc_nativePrintPagesCount;
   prot["asc_nativeGetPDF"] = prot.asc_nativeGetPDF;
 

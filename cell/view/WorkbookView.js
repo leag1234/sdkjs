@@ -4149,6 +4149,40 @@
   		wsView.calcPagesPrint(pagePrintOptions, onlySelection, index, printPagesData.arrPages, null, adjustPrint);
   	}
   };
+  /**
+   * Indexes of the sheets that calcPagesPrint walks through for the given print settings (hidden sheets included,
+   * they are skipped later).
+   * @param {Asc.asc_CAdjustPrint} [adjustPrint]
+   * @returns {number[]}
+   */
+  WorkbookView.prototype.getPrintSheetIndexes = function (adjustPrint) {
+  	var res = [];
+  	if (!adjustPrint) {
+  		adjustPrint = new Asc.asc_CAdjustPrint();
+  	}
+  	var isPrintPreview = this.printPreviewState.isStart();
+  	var nActive = isPrintPreview && null !== this.printPreviewState.realActiveSheet ? this.printPreviewState.realActiveSheet : this.model.getActive();
+  	var printType = adjustPrint.asc_getPrintType();
+  	var activeSheetsArray = adjustPrint.asc_getActiveSheetsArray();
+  	var i;
+  	if (printType === Asc.c_oAscPrintType.Selection) {
+  		res.push(activeSheetsArray && activeSheetsArray[0] != null ? activeSheetsArray[0] : nActive);
+  	} else if (printType === Asc.c_oAscPrintType.ActiveSheets || activeSheetsArray) {
+  		if (activeSheetsArray) {
+  			for (i = 0; i < activeSheetsArray.length; ++i) {
+  				res.push(activeSheetsArray[i]);
+  			}
+  		} else {
+  			res.push(nActive);
+  		}
+  	} else if (printType === Asc.c_oAscPrintType.EntireWorkbook) {
+  		for (i = 0; i < this.model.getWorksheetCount(); ++i) {
+  			res.push(i);
+  		}
+  	}
+  	return res;
+  };
+
   WorkbookView.prototype.calcPagesPrint = function (adjustPrint) {
   	if (!adjustPrint) {
   		adjustPrint = new Asc.asc_CAdjustPrint();

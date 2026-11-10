@@ -3327,8 +3327,11 @@ CTable.prototype.RecalculateMinMaxContentWidth = function(isRotated)
 				if (nMax < nValue)
 					nMax = nValue;
 			}
-			else if (oTableW.IsPercent())
+			else if (oTableW.IsPercent() && !(this.Parent && this.Parent.IsTableCellContent()))
 			{
+				// For a table nested in a cell the percent base is the width of that very cell, which is being
+				// computed from this min/max. Using the previously laid out width feeds the result back into
+				// the next relayout and makes the grid drift, so such a table contributes only its content.
 				var nPercentWidth = this.private_RecalculatePercentWidth();
 				var mmValue       = nValue / 100 * nPercentWidth;
 

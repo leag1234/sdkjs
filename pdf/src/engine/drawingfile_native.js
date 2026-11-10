@@ -1,3 +1,149 @@
+
+(function(){
+
+	if (undefined !== String.prototype.fromUtf8 &&
+		undefined !== String.prototype.toUtf8)
+		return;
+
+	var STRING_UTF8_BUFFER_LENGTH = 1024;
+	var STRING_UTF8_BUFFER = new ArrayBuffer(STRING_UTF8_BUFFER_LENGTH);
+
+	/**
+	 * Read string from utf8
+	 * @param {Uint8Array} buffer
+	 * @param {number} [start=0]
+	 * @param {number} [len]
+	 * @returns {string}
+	 */
+	String.prototype.fromUtf8 = function(buffer, start, len) {
+		if (undefined === start)
+			start = 0;
+		if (undefined === len)
+			len = buffer.length - start;
+
+		var result = "";
+		var index  = start;
+		var end = start + len;
+		while (index < end)
+		{
+			var u0 = buffer[index++];
+			if (!(u0 & 128))
+			{
+				result += String.fromCharCode(u0);
+				continue;
+			}
+			var u1 = buffer[index++] & 63;
+			if ((u0 & 224) == 192)
+			{
+				result += String.fromCharCode((u0 & 31) << 6 | u1);
+				continue;
+			}
+			var u2 = buffer[index++] & 63;
+			if ((u0 & 240) == 224)
+				u0 = (u0 & 15) << 12 | u1 << 6 | u2;
+			else
+				u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | buffer[index++] & 63;
+			if (u0 < 65536)
+				result += String.fromCharCode(u0);
+			else
+			{
+				var ch = u0 - 65536;
+				result += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
+			}
+		}
+		return result;
+	};
+
+	/**
+	 * Convert string to utf8 array
+	 * @returns {Uint8Array}
+	 */
+	String.prototype.toUtf8 = function(isNoEndNull, isUseBuffer) {
+		var inputLen = this.length;
+		var testLen  = 6 * inputLen + 1;
+		var tmpStrings = (isUseBuffer && testLen < STRING_UTF8_BUFFER_LENGTH) ? STRING_UTF8_BUFFER : new ArrayBuffer(testLen);
+
+		var code  = 0;
+		var index = 0;
+
+		var outputIndex = 0;
+		var outputDataTmp = new Uint8Array(tmpStrings);
+		var outputData = outputDataTmp;
+
+		while (index < inputLen)
+		{
+			code = this.charCodeAt(index++);
+			if (code >= 0xD800 && code <= 0xDFFF && index < inputLen)
+				code = 0x10000 + (((code & 0x3FF) << 10) | (0x03FF & this.charCodeAt(index++)));
+
+			if (code < 0x80)
+				outputData[outputIndex++] = code;
+			else if (code < 0x0800)
+			{
+				outputData[outputIndex++] = 0xC0 | (code >> 6);
+				outputData[outputIndex++] = 0x80 | (code & 0x3F);
+			}
+			else if (code < 0x10000)
+			{
+				outputData[outputIndex++] = 0xE0 | (code >> 12);
+				outputData[outputIndex++] = 0x80 | ((code >> 6) & 0x3F);
+				outputData[outputIndex++] = 0x80 | (code & 0x3F);
+			}
+			else if (code < 0x1FFFFF)
+			{
+				outputData[outputIndex++] = 0xF0 | (code >> 18);
+				outputData[outputIndex++] = 0x80 | ((code >> 12) & 0x3F);
+				outputData[outputIndex++] = 0x80 | ((code >> 6) & 0x3F);
+				outputData[outputIndex++] = 0x80 | (code & 0x3F);
+			}
+			else if (code < 0x3FFFFFF)
+			{
+				outputData[outputIndex++] = 0xF8 | (code >> 24);
+				outputData[outputIndex++] = 0x80 | ((code >> 18) & 0x3F);
+				outputData[outputIndex++] = 0x80 | ((code >> 12) & 0x3F);
+				outputData[outputIndex++] = 0x80 | ((code >> 6) & 0x3F);
+				outputData[outputIndex++] = 0x80 | (code & 0x3F);
+			}
+			else if (code < 0x7FFFFFFF)
+			{
+				outputData[outputIndex++] = 0xFC | (code >> 30);
+				outputData[outputIndex++] = 0x80 | ((code >> 24) & 0x3F);
+				outputData[outputIndex++] = 0x80 | ((code >> 18) & 0x3F);
+				outputData[outputIndex++] = 0x80 | ((code >> 12) & 0x3F);
+				outputData[outputIndex++] = 0x80 | ((code >> 6) & 0x3F);
+				outputData[outputIndex++] = 0x80 | (code & 0x3F);
+			}
+		}
+
+		if (isNoEndNull !== true)
+			outputData[outputIndex++] = 0;
+
+		return new Uint8Array(tmpStrings, 0, outputIndex);
+	};
+
+	function StringPointer(pointer, len)
+	{
+		this.ptr = pointer;
+		this.length = len;
+	}
+	StringPointer.prototype.free = function()
+	{
+		if (0 !== this.ptr)
+			Module["_free"](this.ptr);
+	};
+
+	String.prototype.toUtf8Pointer = function(isNoEndNull) {
+		var tmp = this.toUtf8(isNoEndNull, true);
+		var pointer = Module["_malloc"](tmp.length);
+		if (0 == pointer)
+			return null;
+
+		Module["HEAP8"].set(tmp, pointer);
+		return new StringPointer(pointer, tmp.length);		
+	};
+
+})();
+
 /*
  * (c) Copyright Ascensio System SIA 2010-2023
  *
@@ -22,87 +168,2302 @@
  * terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
  *
  */
- (function(window,undefined){function CBinaryReader(data,start,size){this.data=data;this.pos=start;this.limit=start+size}function CBinaryWriter(){this.size=1E5;this.dataSize=0;this.buffer=new Uint8Array(this.size)}function CFile(){this.nativeFile=0;this.stream=-1;this.stream_size=0;this.type=-1;this.pages=[];this.info=null;this._isNeedPassword=false;this.fontPageIndex=-1;this.fontPageUpdateType=UpdateFontsSource.Undefined;this.fontStreams={};this.scannedImages={}}function CNativePointer(){this.ptr=
-null}function readAction(reader,rec,readDoubleFunc,readStringFunc){var SType=reader.readByte();rec["S"]=SType;if(SType==14)rec["JS"]=readStringFunc.call(reader);else if(SType==1){rec["page"]=reader.readInt();rec["kind"]=reader.readByte();switch(rec["kind"]){case 0:case 2:case 3:case 6:case 7:{var nFlag=reader.readInt();if(nFlag&1<<0)rec["left"]=readDoubleFunc.call(reader);if(nFlag&1<<1)rec["top"]=readDoubleFunc.call(reader);if(nFlag&1<<2)rec["zoom"]=readDoubleFunc.call(reader);break}case 4:{rec["left"]=
-readDoubleFunc.call(reader);rec["top"]=readDoubleFunc.call(reader);rec["right"]=readDoubleFunc.call(reader);rec["bottom"]=readDoubleFunc.call(reader);break}case 1:case 5:default:break}}else if(SType==10)rec["N"]=readStringFunc.call(reader);else if(SType==6)rec["URI"]=readStringFunc.call(reader);else if(SType==9){rec["H"]=reader.readByte();var m=reader.readInt();rec["T"]=[];var j=0;for(;j<m;++j)rec["T"].push(readStringFunc.call(reader))}else if(SType==12){rec["Flags"]=reader.readInt();var m$jscomp$0=
-reader.readInt();rec["Fields"]=[];var j$jscomp$0=0;for(;j$jscomp$0<m$jscomp$0;++j$jscomp$0)rec["Fields"].push(readStringFunc.call(reader))}var NextAction=reader.readByte();if(NextAction){rec["Next"]={};readAction(reader,rec["Next"],readDoubleFunc,readStringFunc)}}function readAnnot(reader,rec,readDoubleFunc,readDouble2Func,readStringFunc,isRead){isRead=isRead===void 0?false:isRead;rec["AP"]={};rec["AP"]["i"]=reader.readInt();rec["annotflag"]=reader.readInt();var bHidden=rec["annotflag"]>>1&1;var bPrint=
-rec["annotflag"]>>2&1;rec["noZoom"]=rec["annotflag"]>>3&1;rec["noRotate"]=rec["annotflag"]>>4&1;var bNoView=rec["annotflag"]>>5&1;rec["locked"]=rec["annotflag"]>>7&1;rec["ToggleNoView"]=rec["annotflag"]>>8&1;rec["lockedC"]=rec["annotflag"]>>9&1;rec["display"]=0;if(bHidden)rec["display"]=1;else if(bPrint)if(bNoView)rec["display"]=3;else rec["display"]=0;else if(bNoView)rec["display"]=0;else rec["display"]=2;rec["page"]=reader.readInt();rec["rect"]={};rec["rect"]["x1"]=readDouble2Func.call(reader);
-rec["rect"]["y1"]=readDouble2Func.call(reader);rec["rect"]["x2"]=readDouble2Func.call(reader);rec["rect"]["y2"]=readDouble2Func.call(reader);var flags=reader.readInt();if(flags&1<<0)rec["UniqueName"]=readStringFunc.call(reader);if(flags&1<<1)rec["Contents"]=readStringFunc.call(reader);if(flags&1<<2){rec["BE"]={};rec["BE"]["S"]=reader.readByte();rec["BE"]["I"]=readDoubleFunc.call(reader)}if(flags&1<<3){var n=reader.readInt();rec["C"]=[];var i=0;for(;i<n;++i)rec["C"].push(readDouble2Func.call(reader))}if(flags&
-1<<4){rec["border"]=reader.readByte();rec["borderWidth"]=readDoubleFunc.call(reader);if(rec["border"]==2){var n$jscomp$0=reader.readInt();rec["dashed"]=[];var i$jscomp$0=0;for(;i$jscomp$0<n$jscomp$0;++i$jscomp$0)rec["dashed"].push(readDoubleFunc.call(reader))}}if(flags&1<<5)rec["LastModified"]=readStringFunc.call(reader);if(flags&1<<6)if(isRead)rec["AP"]["render"]=reader.readData();else rec["AP"]["have"]=flags>>6&1;if(flags&1<<7)rec["OUserID"]=readStringFunc.call(reader);if(flags&1<<9)rec["meta"]=
-readStringFunc.call(reader)}function readAnnotAP(reader,AP){AP["i"]=reader.readInt();AP["x"]=reader.readDouble();AP["y"]=reader.readDouble();AP["w"]=reader.readInt();AP["h"]=reader.readInt();var n=reader.readInt();var i=0;for(;i<n;++i){var APType=reader.readString();if(!AP[APType])AP[APType]={};var APi=AP[APType];var ASType=reader.readString();if(ASType){AP[APType][ASType]={};APi=AP[APType][ASType]}var np1=reader.readInt();var np2=reader.readInt();APi["retValue"]=np2<<32|np1;APi["BlendMode"]=reader.readByte()}}
-function readAnnotType(reader,rec,readDoubleFunc,readDouble2Func,readStringFunc,isRead){isRead=isRead===void 0?false:isRead;var flags=0;if(rec["type"]<18&&rec["type"]!=1&&rec["type"]!=15||rec["type"]==25){flags=reader.readInt();if(flags&1<<0)rec["Popup"]=reader.readInt();if(flags&1<<1)rec["User"]=readStringFunc.call(reader);if(flags&1<<2)rec["CA"]=readDoubleFunc.call(reader);if(flags&1<<3){var n=reader.readInt();rec["RC"]=[];var i=0;for(;i<n;++i){var oFont={};oFont["alignment"]=reader.readByte();
-var nFontFlag=reader.readInt();oFont["bold"]=nFontFlag>>0&1;oFont["italic"]=nFontFlag>>1&1;oFont["strikethrough"]=nFontFlag>>3&1;oFont["underlined"]=nFontFlag>>4&1;if(nFontFlag&1<<5)oFont["vertical"]=readDoubleFunc.call(reader);if(nFontFlag&1<<6)oFont["actual"]=readStringFunc.call(reader);oFont["rtl"]=nFontFlag>>7&1;oFont["size"]=readDoubleFunc.call(reader);oFont["color"]=[];oFont["color"].push(readDouble2Func.call(reader));oFont["color"].push(readDouble2Func.call(reader));oFont["color"].push(readDouble2Func.call(reader));
-oFont["name"]=readStringFunc.call(reader);oFont["text"]=readStringFunc.call(reader);rec["RC"].push(oFont)}}if(flags&1<<4)rec["CreationDate"]=readStringFunc.call(reader);if(flags&1<<5)rec["RefTo"]=reader.readInt();if(flags&1<<6)rec["RefToReason"]=reader.readByte();if(flags&1<<7)rec["Subj"]=readStringFunc.call(reader)}if(rec["type"]==0){if(rec["C"]){rec["IC"]=rec["C"];delete rec["C"]}rec["Open"]=flags>>15&1;if(flags&1<<16)rec["Icon"]=reader.readByte();if(flags&1<<17)rec["StateModel"]=reader.readByte();
-if(flags&1<<18)rec["State"]=reader.readByte()}else if(rec["type"]==3){rec["L"]=[];var i$jscomp$0=0;for(;i$jscomp$0<4;++i$jscomp$0)rec["L"].push(readDoubleFunc.call(reader));if(flags&1<<15){rec["LE"]=[];rec["LE"].push(reader.readByte());rec["LE"].push(reader.readByte())}if(flags&1<<16){var n$jscomp$0=reader.readInt();rec["IC"]=[];var i$jscomp$1=0;for(;i$jscomp$1<n$jscomp$0;++i$jscomp$1)rec["IC"].push(readDouble2Func.call(reader))}if(flags&1<<17)rec["LL"]=readDoubleFunc.call(reader);if(flags&1<<18)rec["LLE"]=
-readDoubleFunc.call(reader);rec["Cap"]=flags>>19&1;if(flags&1<<20)rec["IT"]=reader.readByte();if(flags&1<<21)rec["LLO"]=readDoubleFunc.call(reader);if(flags&1<<22)rec["CP"]=reader.readByte();if(flags&1<<23){rec["CO"]=[];rec["CO"].push(readDoubleFunc.call(reader));rec["CO"].push(readDoubleFunc.call(reader))}}else if(rec["type"]==14){var n$jscomp$1=reader.readInt();rec["InkList"]=[];var i$jscomp$2=0;for(;i$jscomp$2<n$jscomp$1;++i$jscomp$2){rec["InkList"][i$jscomp$2]=[];var m=reader.readInt();var j=
-0;for(;j<m;++j)rec["InkList"][i$jscomp$2].push(readDoubleFunc.call(reader))}}else if(rec["type"]>7&&rec["type"]<12){var n$jscomp$2=reader.readInt();rec["QuadPoints"]=[];var i$jscomp$3=0;for(;i$jscomp$3<n$jscomp$2;++i$jscomp$3)rec["QuadPoints"].push(readDoubleFunc.call(reader))}else if(rec["type"]==4||rec["type"]==5){if(flags&1<<15){rec["RD"]=[];var i$jscomp$4=0;for(;i$jscomp$4<4;++i$jscomp$4)rec["RD"].push(readDoubleFunc.call(reader))}if(flags&1<<16){var n$jscomp$3=reader.readInt();rec["IC"]=[];var i$jscomp$5=
-0;for(;i$jscomp$5<n$jscomp$3;++i$jscomp$5)rec["IC"].push(readDouble2Func.call(reader))}}else if(rec["type"]==6||rec["type"]==7){var nVertices=reader.readInt();rec["Vertices"]=[];var i$jscomp$6=0;for(;i$jscomp$6<nVertices;++i$jscomp$6)rec["Vertices"].push(readDoubleFunc.call(reader));if(flags&1<<15){rec["LE"]=[];rec["LE"].push(reader.readByte());rec["LE"].push(reader.readByte())}if(flags&1<<16){var n$jscomp$4=reader.readInt();rec["IC"]=[];var i$jscomp$7=0;for(;i$jscomp$7<n$jscomp$4;++i$jscomp$7)rec["IC"].push(readDouble2Func.call(reader))}if(flags&
-1<<20)rec["IT"]=reader.readByte()}else if(rec["type"]==15){flags=reader.readInt();rec["Open"]=flags>>0&1;if(flags&1<<1)rec["PopupParent"]=reader.readInt()}else if(rec["type"]==2){if(!isRead&&rec["C"]){rec["IC"]=rec["C"];delete rec["C"]}rec["alignment"]=reader.readByte();rec["Rotate"]=reader.readInt();if(flags&1<<15){rec["RD"]=[];var i$jscomp$8=0;for(;i$jscomp$8<4;++i$jscomp$8)rec["RD"].push(readDoubleFunc.call(reader))}if(flags&1<<16){var n$jscomp$5=reader.readInt();rec["CL"]=[];var i$jscomp$9=0;
-for(;i$jscomp$9<n$jscomp$5;++i$jscomp$9)rec["CL"].push(readDoubleFunc.call(reader))}if(flags&1<<17)rec["defaultStyle"]=readStringFunc.call(reader);if(flags&1<<18)rec["LE"]=reader.readByte();if(flags&1<<20)rec["IT"]=reader.readByte();if(flags&1<<21){var n$jscomp$6=reader.readInt();if(isRead){rec["IC"]=[];var i$jscomp$10=0;for(;i$jscomp$10<n$jscomp$6;++i$jscomp$10)rec["IC"].push(readDouble2Func.call(reader))}else{rec["C"]=[];var i$jscomp$11=0;for(;i$jscomp$11<n$jscomp$6;++i$jscomp$11)rec["C"].push(readDouble2Func.call(reader))}}}else if(rec["type"]==
-13){if(flags&1<<15){rec["RD"]=[];var i$jscomp$12=0;for(;i$jscomp$12<4;++i$jscomp$12)rec["RD"].push(readDoubleFunc.call(reader))}if(flags&1<<16)rec["Sy"]=reader.readByte()}else if(rec["type"]==16){if(flags&1<<15)rec["Icon"]=readStringFunc.call(reader);if(flags&1<<16)rec["FS"]=readStringFunc.call(reader);if(flags&1<<17){rec["F"]={};rec["F"]["FileName"]=readStringFunc.call(reader)}if(flags&1<<18){rec["UF"]={};rec["UF"]["FileName"]=readStringFunc.call(reader)}if(flags&1<<19){rec["DOS"]={};rec["DOS"]["FileName"]=
-readStringFunc.call(reader)}if(flags&1<<20){rec["Mac"]={};rec["Mac"]["FileName"]=readStringFunc.call(reader)}if(flags&1<<21){rec["Unix"]={};rec["Unix"]["FileName"]=readStringFunc.call(reader)}if(flags&1<<22){rec["ID"]=[];rec["ID"].push(readStringFunc.call(reader));rec["ID"].push(readStringFunc.call(reader))}rec["V"]=flags&1<<23;if(flags&1<<24)if(isRead);else{var flag=reader.readInt();if(flag&1<<0){var n$jscomp$7=reader.readInt();var np1=reader.readInt();var np2=reader.readInt();var pPoint=np2<<32|
-np1;rec["F"]["File"]=new Uint8Array(Module["HEAP8"].buffer,pPoint,n$jscomp$7);Module["_free"](pPoint)}if(flag&1<<1){var n$jscomp$8=reader.readInt();var np1$jscomp$0=reader.readInt();var np2$jscomp$0=reader.readInt();var pPoint$jscomp$0=np2$jscomp$0<<32|np1$jscomp$0;rec["UF"]["File"]=new Uint8Array(Module["HEAP8"].buffer,pPoint$jscomp$0,n$jscomp$8);Module["_free"](pPoint$jscomp$0)}if(flag&1<<2){var n$jscomp$9=reader.readInt();var np1$jscomp$1=reader.readInt();var np2$jscomp$1=reader.readInt();var pPoint$jscomp$1=
-np2$jscomp$1<<32|np1$jscomp$1;rec["DOS"]["File"]=new Uint8Array(Module["HEAP8"].buffer,pPoint$jscomp$1,n$jscomp$9);Module["_free"](pPoint$jscomp$1)}if(flag&1<<3){var n$jscomp$10=reader.readInt();var np1$jscomp$2=reader.readInt();var np2$jscomp$2=reader.readInt();var pPoint$jscomp$2=np2$jscomp$2<<32|np1$jscomp$2;rec["Mac"]["File"]=new Uint8Array(Module["HEAP8"].buffer,pPoint$jscomp$2,n$jscomp$10);Module["_free"](pPoint$jscomp$2)}if(flag&1<<4){var n$jscomp$11=reader.readInt();var np1$jscomp$3=reader.readInt();
-var np2$jscomp$3=reader.readInt();var pPoint$jscomp$3=np2$jscomp$3<<32|np1$jscomp$3;rec["Unix"]["File"]=new Uint8Array(Module["HEAP8"].buffer,pPoint$jscomp$3,n$jscomp$11);Module["_free"](pPoint$jscomp$3)}}if(flags&1<<26)rec["Desc"]=readStringFunc.call(reader)}else if(rec["type"]==12){rec["Icon"]=readStringFunc.call(reader);rec["Rotate"]=readDouble2Func.call(reader);rec["InRect"]=[];var i$jscomp$13=0;for(;i$jscomp$13<8;++i$jscomp$13)rec["InRect"].push(readDouble2Func.call(reader))}else if(rec["type"]==
-25){if(flags&1<<15){var n$jscomp$12=reader.readInt();rec["QuadPoints"]=[];var i$jscomp$14=0;for(;i$jscomp$14<n$jscomp$12;++i$jscomp$14)rec["QuadPoints"].push(readDoubleFunc.call(reader))}if(flags&1<<16){var n$jscomp$13=reader.readInt();rec["IC"]=[];var i$jscomp$15=0;for(;i$jscomp$15<n$jscomp$13;++i$jscomp$15)rec["IC"].push(readDouble2Func.call(reader))}if(flags&1<<17)rec["OverlayText"]=readStringFunc.call(reader);rec["Repeat"]=flags>>18&1;if(flags&1<<19)rec["alignment"]=reader.readByte();if(flags&
-1<<20){rec["font"]={};var n$jscomp$14=reader.readInt();rec["font"]["color"]=[];var i$jscomp$16=0;for(;i$jscomp$16<n$jscomp$14;++i$jscomp$16)rec["font"]["color"].push(readDouble2Func.call(reader));rec["font"]["size"]=readDoubleFunc.call(reader);rec["font"]["name"]=readStringFunc.call(reader);if(!isRead){var fontActual=readStringFunc.call(reader);if(fontActual!="")rec["font"]["actual"]=fontActual}rec["font"]["style"]=reader.readInt()}}else if(rec["type"]==1){flags=reader.readInt();if(flags&1<<0){rec["A"]=
-{};if(isRead)readStringFunc.call(reader);readAction(reader,rec["A"],readDoubleFunc,readStringFunc)}if(flags&1<<1){rec["PA"]={};if(isRead)readStringFunc.call(reader);readAction(reader,rec["PA"],readDoubleFunc,readStringFunc)}if(flags&1<<2)rec["highlight"]=reader.readByte();if(flags&1<<3){var n$jscomp$15=reader.readInt();rec["QuadPoints"]=[];var i$jscomp$17=0;for(;i$jscomp$17<n$jscomp$15;++i$jscomp$17)rec["QuadPoints"].push(readDoubleFunc.call(reader))}}}function readWidgetType(reader,rec,readDoubleFunc,
-readDouble2Func,readStringFunc,isRead){isRead=isRead===void 0?false:isRead;rec["font"]={};rec["font"]["name"]=readStringFunc.call(reader);rec["font"]["size"]=readDoubleFunc.call(reader);if(isRead)rec["font"]["sizeAP"]=readDoubleFunc.call(reader);rec["font"]["style"]=reader.readInt();var tc=reader.readInt();if(tc){rec["font"]["color"]=[];var i=0;for(;i<tc;++i)rec["font"]["color"].push(readDouble2Func.call(reader))}if(!isRead||rec["type"]!=29&&rec["type"]!=28&&rec["type"]!=27)rec["alignment"]=reader.readByte();
-rec["flag"]=reader.readInt();if(rec["flag"]>=0){rec["readOnly"]=rec["flag"]>>0&1;rec["required"]=rec["flag"]>>1&1;rec["noexport"]=rec["flag"]>>2&1}var flags=reader.readInt();if(flags&1<<0)rec["tooltip"]=readStringFunc.call(reader);if(flags&1<<1)rec["defaultStyle"]=readStringFunc.call(reader);if(flags&1<<2)rec["font"]["actual"]=readStringFunc.call(reader);if(flags&1<<3)rec["highlight"]=reader.readByte();if(flags&1<<4)rec["font"]["key"]=readStringFunc.call(reader);if(flags&1<<5){var n=reader.readInt();
-rec["BC"]=[];var i$jscomp$0=0;for(;i$jscomp$0<n;++i$jscomp$0)rec["BC"].push(readDouble2Func.call(reader))}if(flags&1<<6)rec["rotate"]=reader.readInt();if(flags&1<<7){var n$jscomp$0=reader.readInt();rec["BG"]=[];var i$jscomp$1=0;for(;i$jscomp$1<n$jscomp$0;++i$jscomp$1)rec["BG"].push(readDouble2Func.call(reader))}if(flags&1<<8)rec["defaultValue"]=readStringFunc.call(reader);if(flags&1<<17)rec["Parent"]=reader.readInt();if(flags&1<<18)rec["name"]=readStringFunc.call(reader);if(flags&1<<19)rec["font"]["AP"]=
-readStringFunc.call(reader);if(flags&1<<21)rec["MEOptions"]=reader.readInt();var nAction=reader.readInt();if(nAction>0)rec["AA"]={};var i$jscomp$2=0;for(;i$jscomp$2<nAction;++i$jscomp$2){var AAType=readStringFunc.call(reader);rec["AA"][AAType]={};readAction(reader,rec["AA"][AAType],readDoubleFunc,readStringFunc)}if(rec["type"]==27){if(flags&1<<9)rec["value"]=readStringFunc.call(reader);var IFflags=reader.readInt();if(flags&1<<10)rec["caption"]=readStringFunc.call(reader);if(flags&1<<11)rec["rolloverCaption"]=
-readStringFunc.call(reader);if(flags&1<<12)rec["alternateCaption"]=readStringFunc.call(reader);if(flags&1<<13)rec["position"]=reader.readByte();if(IFflags&1<<0){rec["IF"]={};if(IFflags&1<<1)rec["IF"]["SW"]=reader.readByte();if(IFflags&1<<2)rec["IF"]["S"]=reader.readByte();if(IFflags&1<<3){rec["IF"]["A"]=[];rec["IF"]["A"].push(readDoubleFunc.call(reader));rec["IF"]["A"].push(readDoubleFunc.call(reader))}rec["IF"]["FB"]=IFflags>>4&1}if(isRead){if(IFflags&1<<5)rec["I"]=reader.readInt();if(IFflags&1<<
-6)rec["RI"]=reader.readInt();if(IFflags&1<<7)rec["IX"]=reader.readInt()}}else if(rec["type"]==29||rec["type"]==28){if(flags&1<<9)rec["value"]=readStringFunc.call(reader);rec["style"]=reader.readByte();if(flags&1<<10){var n$jscomp$1=reader.readInt();rec["opt"]=[];var i$jscomp$3=0;for(;i$jscomp$3<n$jscomp$1;++i$jscomp$3){var opt1=readStringFunc.call(reader);var opt2=readStringFunc.call(reader);if(opt1=="")rec["opt"].push(opt2);else rec["opt"].push([opt2,opt1])}}if(flags&1<<14)rec["ExportValue"]=readStringFunc.call(reader);
-if(rec["flag"]>=0){rec["NoToggleToOff"]=rec["flag"]>>14&1;rec["radiosInUnison"]=rec["flag"]>>25&1}}else if(rec["type"]==30){if(flags&1<<9)rec["value"]=readStringFunc.call(reader);if(flags&1<<10)rec["maxLen"]=reader.readInt();if(flags&1<<11)rec["richValue"]=readStringFunc.call(reader);if(isRead){if(flags&1<<12)rec["AP"]["V"]=readStringFunc.call(reader);if(flags&1<<13)rec["AP"]["render"]=reader.readData()}if(rec["flag"]>=0){rec["multiline"]=rec["flag"]>>12&1;rec["password"]=rec["flag"]>>13&1;rec["fileSelect"]=
-rec["flag"]>>20&1;rec["doNotSpellCheck"]=rec["flag"]>>22&1;rec["doNotScroll"]=rec["flag"]>>23&1;rec["comb"]=rec["flag"]>>24&1;rec["richText"]=rec["flag"]>>25&1}}else if(rec["type"]==31||rec["type"]==32){if(flags&1<<9)rec["value"]=readStringFunc.call(reader);if(flags&1<<10){var n$jscomp$2=reader.readInt();rec["opt"]=[];var i$jscomp$4=0;for(;i$jscomp$4<n$jscomp$2;++i$jscomp$4){var opt1$jscomp$0=readStringFunc.call(reader);var opt2$jscomp$0=readStringFunc.call(reader);if(opt1$jscomp$0=="")rec["opt"].push(opt2$jscomp$0);
-else rec["opt"].push([opt2$jscomp$0,opt1$jscomp$0])}}if(flags&1<<11)rec["TI"]=reader.readInt();if(isRead){if(flags&1<<12)rec["AP"]["V"]=readStringFunc.call(reader)}else if(flags&1<<12){var n$jscomp$3=reader.readInt();rec["curIdxs"]=[];var i$jscomp$5=0;for(;i$jscomp$5<n$jscomp$3;++i$jscomp$5)rec["curIdxs"].push(reader.readInt())}if(flags&1<<13){var n$jscomp$4=reader.readInt();rec["value"]=[];var i$jscomp$6=0;for(;i$jscomp$6<n$jscomp$4;++i$jscomp$6)rec["value"].push(readStringFunc.call(reader))}if(isRead){if(flags&
-1<<14){var n$jscomp$5=reader.readInt();rec["I"]=[];var i$jscomp$7=0;for(;i$jscomp$7<n$jscomp$5;++i$jscomp$7)rec["I"].push(reader.readInt())}if(flags&1<<15)rec["AP"]["render"]=reader.readData()}if(rec["flag"]>=0){rec["editable"]=rec["flag"]>>18&1;rec["multipleSelection"]=rec["flag"]>>21&1;rec["doNotSpellCheck"]=rec["flag"]>>22&1;rec["commitOnSelChange"]=rec["flag"]>>26&1}}else if(rec["type"]==33)rec["Sig"]=flags>>9&1;if(rec["flag"]<0)delete rec["flag"]}function addToArrayAsDictionary(arr,value){var isFound=
-false;var i=0;var len=arr.length;for(;i<len;i++)if(arr[i]==value){isFound=true;break}if(!isFound)arr.push(value);return isFound}function fontToMemory(file,isCheck){var idBuffer=file.GetID().toUtf8();var idPointer=Module["_malloc"](idBuffer.length);Module["HEAP8"].set(idBuffer,idPointer);if(isCheck){var nExist=Module["_IsFontBinaryExist"](idPointer);if(nExist!=0){Module["_free"](idPointer);return}}var stream_index=file.GetStreamIndex();var stream=AscFonts.getFontStream(stream_index);var streamPointer=
-Module["_malloc"](stream.size);Module["HEAP8"].set(stream.data,streamPointer);Module["_SetFontBinary"](idPointer,streamPointer,stream.size);Module["_free"](streamPointer);Module["_free"](idPointer)}CBinaryReader.prototype.readByte=function(){var val=this.data[this.pos];this.pos+=1;return val};CBinaryReader.prototype.readShort=function(){var val=this.data[this.pos]|this.data[this.pos+1]<<8;this.pos+=2;return val};CBinaryReader.prototype.readInt=function(){var val=this.data[this.pos]|this.data[this.pos+
-1]<<8|this.data[this.pos+2]<<16|this.data[this.pos+3]<<24;this.pos+=4;return val};CBinaryReader.prototype.readDouble=function(){return this.readInt()/100};CBinaryReader.prototype.readDouble2=function(){return this.readInt()/1E4};CBinaryReader.prototype.readDouble3=function(){return this.readInt()/1E5};CBinaryReader.prototype.readString=function(){var len=this.readInt();var val=String.prototype.fromUtf8(this.data,this.pos,len);this.pos+=len;return val};CBinaryReader.prototype.readString2=function(){var len=
-this.readShort();var val="";var i=0;for(;i<len;++i){var c=this.readShort();val=val+String.fromCharCode(c)}return val};CBinaryReader.prototype.readData=function(){var len=this.readInt()-4;var val=this.data.slice(this.pos,this.pos+len);this.pos+=len;return val};CBinaryReader.prototype.isValid=function(){return this.pos<this.limit?true:false};CBinaryReader.prototype.Skip=function(nPos){this.pos+=nPos};CBinaryWriter.prototype.checkAlloc=function(addition){if(this.dataSize+addition<=this.size)return;var newSize=
-Math.max(this.size*2,this.size+addition);var newBuffer=new Uint8Array(newSize);newBuffer.set(this.buffer,0);this.size=newSize;this.buffer=newBuffer};CBinaryWriter.prototype.writeUint=function(value){this.checkAlloc(4);var val=value>2147483647?value-4294967296:value;this.buffer[this.dataSize++]=val&255;this.buffer[this.dataSize++]=val>>>8&255;this.buffer[this.dataSize++]=val>>>16&255;this.buffer[this.dataSize++]=val>>>24&255};CBinaryWriter.prototype.writeString=function(value){var valueUtf8=value.toUtf8();
-this.checkAlloc(valueUtf8.length);this.buffer.set(valueUtf8,this.dataSize);this.dataSize+=valueUtf8.length};var UpdateFontsSource={Undefined:0,Page:1,Annotation:2,Forms:4};(function(){function StringPointer(pointer,len){this.ptr=pointer;this.length=len}if(undefined!==String.prototype.fromUtf8&&undefined!==String.prototype.toUtf8)return;var STRING_UTF8_BUFFER_LENGTH=1024;var STRING_UTF8_BUFFER=new ArrayBuffer(STRING_UTF8_BUFFER_LENGTH);String.prototype.fromUtf8=function(buffer,start,len){if(undefined===
-start)start=0;if(undefined===len)len=buffer.length-start;var result="";var index=start;var end=start+len;for(;index<end;){var u0=buffer[index++];if(!(u0&128)){result=result+String.fromCharCode(u0);continue}var u1=buffer[index++]&63;if((u0&224)==192){result=result+String.fromCharCode((u0&31)<<6|u1);continue}var u2=buffer[index++]&63;if((u0&240)==224)u0=(u0&15)<<12|u1<<6|u2;else u0=(u0&7)<<18|u1<<12|u2<<6|buffer[index++]&63;if(u0<65536)result=result+String.fromCharCode(u0);else{var ch=u0-65536;result=
-result+String.fromCharCode(55296|ch>>10,56320|ch&1023)}}return result};String.prototype.toUtf8=function(isNoEndNull,isUseBuffer){var inputLen=this.length;var testLen=6*inputLen+1;var tmpStrings=isUseBuffer&&testLen<STRING_UTF8_BUFFER_LENGTH?STRING_UTF8_BUFFER:new ArrayBuffer(testLen);var code=0;var index=0;var outputIndex=0;var outputDataTmp=new Uint8Array(tmpStrings);var outputData=outputDataTmp;for(;index<inputLen;){code=this.charCodeAt(index++);if(code>=55296&&code<=57343&&index<inputLen)code=
-65536+((code&1023)<<10|1023&this.charCodeAt(index++));if(code<128)outputData[outputIndex++]=code;else if(code<2048){outputData[outputIndex++]=192|code>>6;outputData[outputIndex++]=128|code&63}else if(code<65536){outputData[outputIndex++]=224|code>>12;outputData[outputIndex++]=128|code>>6&63;outputData[outputIndex++]=128|code&63}else if(code<2097151){outputData[outputIndex++]=240|code>>18;outputData[outputIndex++]=128|code>>12&63;outputData[outputIndex++]=128|code>>6&63;outputData[outputIndex++]=128|
-code&63}else if(code<67108863){outputData[outputIndex++]=248|code>>24;outputData[outputIndex++]=128|code>>18&63;outputData[outputIndex++]=128|code>>12&63;outputData[outputIndex++]=128|code>>6&63;outputData[outputIndex++]=128|code&63}else if(code<2147483647){outputData[outputIndex++]=252|code>>30;outputData[outputIndex++]=128|code>>24&63;outputData[outputIndex++]=128|code>>18&63;outputData[outputIndex++]=128|code>>12&63;outputData[outputIndex++]=128|code>>6&63;outputData[outputIndex++]=128|code&63}}if(isNoEndNull!==
-true)outputData[outputIndex++]=0;return new Uint8Array(tmpStrings,0,outputIndex)};StringPointer.prototype.free=function(){if(0!==this.ptr)Module["_free"](this.ptr)};String.prototype.toUtf8Pointer=function(isNoEndNull){var tmp=this.toUtf8(isNoEndNull,true);var pointer=Module["_malloc"](tmp.length);if(0==pointer)return null;Module["HEAP8"].set(tmp,pointer);return new StringPointer(pointer,tmp.length)}})();CNativePointer.prototype.free=function(){if(this.ptr)g_native_drawing_file["FreeWasmData"](this.ptr);
-this.ptr=null};CNativePointer.prototype.getMemory=function(isCopy){if(!this.ptr)return null;if(!isCopy)return this.ptr;var copyArray=new Uint8Array(this.ptr.length);copyArray.set(this.ptr);return copyArray};CNativePointer.prototype.getReader=function(){if(!this.ptr)return null;return new CBinaryReader(this.ptr,0,this.ptr.length)};var g_module_pointer=new CNativePointer;CFile.prototype._free=function(ptr){};CFile.prototype._getUint8Array=function(ptr,len){};CFile.prototype._getUint8ClampedArray=function(ptr,
-len){};CFile.prototype._openFile=function(buffer,password){var res=false;if(!buffer)res=-1!==g_native_drawing_file["GetType"]();if(res)this.nativeFile=1;return res};CFile.prototype._closeFile=function(){g_native_drawing_file["CloseFile"]();this.nativeFile=0};CFile.prototype._getType=function(){return g_native_drawing_file["GetType"]()};CFile.prototype._getError=function(){return g_native_drawing_file["GetErrorCode"]()};CFile.prototype._SplitPages=function(pages,changes){var dataChanges=null;if(changes)dataChanges=
-undefined!==changes.byteLength?new Uint8Array(changes):changes;g_module_pointer.ptr=g_native_drawing_file["SplitPages"](pages,dataChanges);return g_module_pointer};CFile.prototype._MergePages=function(buffer,maxID,prefixForm){if(!buffer)return false;if(!maxID)maxID=0;if(!prefixForm)prefixForm="";var data=undefined!==buffer.byteLength?new Uint8Array(buffer):buffer;return g_native_drawing_file["MergePages"](data,maxID,prefixForm)};CFile.prototype._UndoMergePages=function(){return g_native_drawing_file["UnmergePages"]()};
-CFile.prototype._RedactPage=function(pageIndex,box,filler){var dataFiller=undefined!==filler.byteLength?new Uint8Array(filler):filler;return g_native_drawing_file["RedactPage"](pageIndex,box,dataFiller)};CFile.prototype._UndoRedact=function(){return g_native_drawing_file["UndoRedact"]()};CFile.prototype._CheckOwnerPassword=function(password){return true};CFile.prototype._CheckPerm=function(perm){return true};CFile.prototype._isNeedCMap=function(){return g_native_drawing_file["IsNeedCMap"]()};CFile.prototype._setCMap=
-function(memoryBuffer){};CFile.prototype._getFontByID=function(ID){return g_native_drawing_file["GetFontBinary"](ID)};CFile.prototype._getGIDByUnicode=function(ID){g_module_pointer.ptr=g_native_drawing_file["GetGIDByUnicode"](ID);return g_module_pointer};CFile.prototype._getInteractiveFormsFonts=function(type){g_module_pointer.ptr=g_native_drawing_file["GetInteractiveFormsFonts"](type);return g_module_pointer};CFile.prototype._getInfo=function(){g_module_pointer.ptr=g_native_drawing_file["GetInfo"]();
-return g_module_pointer};CFile.prototype._getStructure=function(){g_module_pointer.ptr=g_native_drawing_file["GetStructure"]();return g_module_pointer};CFile.prototype._getLinks=function(pageIndex){g_module_pointer.ptr=g_native_drawing_file["GetLinks"](pageIndex);return g_module_pointer};CFile.prototype._getInteractiveFormsInfo=function(){g_module_pointer.ptr=g_native_drawing_file["GetInteractiveFormsInfo"]();return g_module_pointer};CFile.prototype._getAnnotationsInfo=function(pageIndex){g_module_pointer.ptr=
-g_native_drawing_file["GetAnnotationsInfo"](pageIndex===undefined?-1:pageIndex);return g_module_pointer};CFile.prototype._getButtonIcons=function(backgroundColor,pageIndex,isBase64,nWidget,nView){g_module_pointer.ptr=g_native_drawing_file["GetButtonIcons"](backgroundColor===undefined?16777215:backgroundColor,pageIndex,isBase64?1:0,nWidget===undefined?-1:nWidget,nView);return g_module_pointer};CFile.prototype._getAnnotationsAP=function(width,height,backgroundColor,pageIndex,nAnnot,nView){g_module_pointer.ptr=
-g_native_drawing_file["GetAnnotationsAP"](width,height,backgroundColor===undefined?16777215:backgroundColor,pageIndex,nAnnot===undefined?-1:nAnnot,nView);return g_module_pointer};CFile.prototype._getInteractiveFormsAP=function(width,height,backgroundColor,pageIndex,nWidget,nView,nButtonView){g_module_pointer.ptr=g_native_drawing_file["GetInteractiveFormsAP"](width,height,backgroundColor===undefined?16777215:backgroundColor,pageIndex,nWidget===undefined?-1:nWidget,nView,nButtonView);return g_module_pointer};
-CFile.prototype._setScanPageFonts=function(page){g_native_drawing_file["SetScanPageFonts"](page)};CFile.prototype._scanPage=function(page,mode){g_module_pointer.ptr=g_native_drawing_file["ScanPage"](page,mode===undefined?0:mode);return g_module_pointer};CFile.prototype._getImageBase64=function(rId){return g_native_drawing_file["GetImageBase64"](rId)};CFile.prototype._getGlyphs=function(pageIndex){var res={};res.info=[0,0,0,0];res.result=[];return res};CFile.prototype._destroyTextInfo=function(){g_native_drawing_file["DestroyTextInfo"](rId)};
-CFile.prototype._getPixmap=function(pageIndex,width,height,backgroundColor){return null};CFile.prototype._InitializeFonts=function(basePath){};CFile.prototype._CheckStreamId=function(data,status){};CFile.prototype.lockPageNumForFontsLoader=function(pageIndex,type){this.fontPageIndex=pageIndex;this.fontPageUpdateType=type};CFile.prototype.unlockPageNumForFontsLoader=function(){this.fontPageIndex=-1;drawingFile.fontPageUpdateType=UpdateFontsSource.Undefined};CFile.prototype["getPages"]=function(){return this.pages};
-CFile.prototype["openForms"]=function(){};CFile.prototype["getDocumentInfo"]=function(){return this.info};CFile.prototype["getStartID"]=function(){return this.StartID};CFile.prototype["loadFromData"]=function(arrayBuffer){var isSuccess=this._openFile(arrayBuffer);var error=this._getError();this.type=this._getType();self.drawingFile=this;if(!error)this.getInfo();this._isNeedPassword=4===error?true:false;return error};CFile.prototype["loadFromDataWithPassword"]=function(password){if(0!=this.nativeFile)this._closeFile();
-var isSuccess=this._openFile(undefined,password);var error=this._getError();this.type=this._getType();self.drawingFile=this;if(!error)this.getInfo();this._isNeedPassword=4===error?true:false;return error};CFile.prototype["getType"]=function(){return this.type};CFile.prototype["close"]=function(){this._closeFile();this.nativeFile=0;this.pages=[];this.info=null;this.StartID=null;if(this.stream>0)this._free(this.stream);this.stream=-1;self.drawingFile=null};CFile.prototype["getFileBinary"]=function(){if(0>=
-this.stream)return"";return new Uint8Array(Module["HEAP8"].buffer,this.stream,this.stream_size)};CFile.prototype["isNeedPassword"]=function(){return this._isNeedPassword};CFile.prototype["CheckOwnerPassword"]=function(password){return this._CheckOwnerPassword(password)};CFile.prototype["CheckPerm"]=function(perm){return this._CheckPerm(perm)};CFile.prototype["SplitPages"]=function(arrOriginIndex,arrayBufferChanges){var ptr=this._SplitPages(arrOriginIndex,arrayBufferChanges);var res=ptr.getMemory(true);
-ptr.free();return res};CFile.prototype["MergePages"]=function(arrayBuffer,maxID,prefixForm){return this._MergePages(arrayBuffer,maxID,prefixForm)};CFile.prototype["UndoMergePages"]=function(){return this._UndoMergePages()};CFile.prototype["RedactPage"]=function(originIndex,arrRedactBox,arrayBufferFiller){return this._RedactPage(originIndex,arrRedactBox,arrayBufferFiller)};CFile.prototype["UndoRedact"]=function(){return this._UndoRedact()};CFile.prototype.getInfo=function(){if(!this.nativeFile)return false;
-var ptr=this._getInfo();var reader=ptr.getReader();if(!reader)return false;this.StartID=reader.readInt();var _pages=reader.readInt();var i=0;for(;i<_pages;i++){var rec={};rec["W"]=reader.readInt();rec["H"]=reader.readInt();rec["Dpi"]=reader.readInt();rec["Rotate"]=reader.readInt();rec["originIndex"]=i;rec.fonts=[];rec.fontsUpdateType=UpdateFontsSource.Undefined;rec.text=null;this.pages.push(rec)}var json_info=reader.readString();try{this.info=JSON.parse(json_info)}catch(err){}ptr.free();return this.pages.length>
-0};CFile.prototype.getPagesInfo=function(){if(!this.nativeFile)return[];var ptr=this._getInfo();var reader=ptr.getReader();if(!reader)return[];this.StartID=reader.readInt();var _pages=[];var nPages=reader.readInt();var i=0;for(;i<nPages;i++){var rec={};rec["W"]=reader.readInt();rec["H"]=reader.readInt();rec["Dpi"]=reader.readInt();rec["Rotate"]=reader.readInt();rec["originIndex"]=i;rec.fonts=[];rec.fontsUpdateType=UpdateFontsSource.Undefined;rec.text=null;_pages.push(rec)}ptr.free();return _pages};
-CFile.prototype["getStructure"]=function(){var ptr=this._getStructure();var reader=ptr.getReader();if(!reader)return[];var res=[];for(;reader.isValid();){var rec={};rec["page"]=reader.readInt();rec["level"]=reader.readInt();rec["y"]=reader.readDouble();rec["description"]=reader.readString();res.push(rec)}ptr.free();return res};CFile.prototype["getLinks"]=function(originIndex){var ptr=this._getLinks(originIndex);var reader=ptr.getReader();if(!reader)return[];var res=[];for(;reader.isValid();){var rec=
-{};rec["link"]=reader.readString();rec["dest"]=reader.readDouble();rec["x"]=reader.readDouble();rec["y"]=reader.readDouble();rec["w"]=reader.readDouble();rec["h"]=reader.readDouble();res.push(rec)}ptr.free();return res};CFile.prototype["getGlyphs"]=function(originIndex){var pageIndex=this.pages.findIndex(function(page){return page.originIndex==originIndex});var page=this.pages[pageIndex];if(page.fonts.length>0)return null;this.lockPageNumForFontsLoader(pageIndex,UpdateFontsSource.Page);var res=this._getGlyphs(originIndex);
-this.unlockPageNumForFontsLoader();if(page.fonts.length>0){res=null;return null}if(res&&this.onUpdateStatistics)this.onUpdateStatistics(res.info[0],res.info[1],res.info[2],res.info[3]);return res.result||null};CFile.prototype["destroyTextInfo"]=function(){this._destroyTextInfo()};CFile.prototype.getWidgetFonts=function(type){var ptr=this._getInteractiveFormsFonts(type);var reader=ptr.getReader();if(!reader)return[];var res=[];for(;reader.isValid();){var n=reader.readInt();var i=0;for(;i<n;++i)res.push(reader.readString())}ptr.free();
-return res};CFile.prototype["getInteractiveFormsEmbeddedFonts"]=function(){return this.getWidgetFonts(1)};CFile.prototype["getInteractiveFormsStandardFonts"]=function(){return this.getWidgetFonts(2)};CFile.prototype["getFontByID"]=function(ID){return this._getFontByID(ID)};CFile.prototype["getGIDByUnicode"]=function(ID){var ptr=this._getGIDByUnicode(ID);var reader=ptr.getReader();if(!reader)return{};var res={};var nFontLength=reader.readInt();var i=0;for(;i<nFontLength;i++){var np1=reader.readInt();
-var np2=reader.readInt();res[np2]=np1}ptr.free();return res};CFile.prototype["setCMap"]=function(memoryBuffer){if(!this.nativeFile)return;this._setCMap(memoryBuffer)};CFile.prototype["isNeedCMap"]=function(){return this._isNeedCMap()};CFile.prototype["getInteractiveFormsInfo"]=function(){var ptr=this._getInteractiveFormsInfo();var reader=ptr.getReader();if(!reader)return{};var res={};for(;reader.isValid();){var k=reader.readInt();if(k>0&&res["CO"]==undefined)res["CO"]=[];var i=0;for(;i<k;++i)res["CO"].push(reader.readInt());
-k=reader.readInt();if(k>0&&res["Parents"]==undefined)res["Parents"]=[];var i$jscomp$0=0;for(;i$jscomp$0<k;++i$jscomp$0){var rec={};rec["i"]=reader.readInt();var flags=reader.readInt();if(flags&1<<0)rec["name"]=reader.readString();if(flags&1<<1)rec["value"]=reader.readString();if(flags&1<<2)rec["defaultValue"]=reader.readString();if(flags&1<<3){var n=reader.readInt();rec["curIdxs"]=[];var i$jscomp$1=0;for(;i$jscomp$1<n;++i$jscomp$1)rec["curIdxs"].push(reader.readInt())}if(flags&1<<4)rec["Parent"]=
-reader.readInt();if(flags&1<<5){var n$jscomp$0=reader.readInt();rec["value"]=[];var i$jscomp$2=0;for(;i$jscomp$2<n$jscomp$0;++i$jscomp$2)rec["value"].push(reader.readString())}if(flags&1<<6){var n$jscomp$1=reader.readInt();rec["opt"]=[];var i$jscomp$3=0;for(;i$jscomp$3<n$jscomp$1;++i$jscomp$3){var opt1=reader.readString();var opt2=reader.readString();if(opt1=="")rec["opt"].push(opt2);else rec["opt"].push([opt2,opt1])}}if(flags&1<<7){rec["flag"]=reader.readInt();rec["readOnly"]=rec["flag"]>>0&1;rec["required"]=
-rec["flag"]>>1&1;rec["noexport"]=rec["flag"]>>2&1;rec["NoToggleToOff"]=rec["flag"]>>14&1;if(rec["flag"]>>15&1)rec["radiosInUnison"]=rec["flag"]>>25&1;else rec["richText"]=rec["flag"]>>25&1;rec["multiline"]=rec["flag"]>>12&1;rec["password"]=rec["flag"]>>13&1;rec["fileSelect"]=rec["flag"]>>20&1;rec["doNotSpellCheck"]=rec["flag"]>>22&1;rec["doNotScroll"]=rec["flag"]>>23&1;rec["comb"]=rec["flag"]>>24&1;rec["editable"]=rec["flag"]>>18&1;rec["multipleSelection"]=rec["flag"]>>21&1;rec["commitOnSelChange"]=
-rec["flag"]>>26&1}if(flags&1<<8){var nAction=reader.readInt();if(nAction>0)rec["AA"]={};var i$jscomp$4=0;for(;i$jscomp$4<nAction;++i$jscomp$4){var AAType=reader.readString();rec["AA"][AAType]={};readAction(reader,rec["AA"][AAType],reader.readDouble,reader.readString)}}if(flags&1<<9)rec["maxLen"]=reader.readInt();if(flags&1<<10)rec["tooltip"]=reader.readString();if(flags&1<<11)rec["MEOptions"]=reader.readInt();res["Parents"].push(rec)}k=reader.readInt();if(k>0&&res["Fields"]==undefined)res["Fields"]=
-[];var q=0;for(;reader.isValid()&&q<k;++q){var rec$jscomp$0={};rec$jscomp$0["type"]=reader.readByte();readAnnot(reader,rec$jscomp$0,reader.readDouble,reader.readDouble2,reader.readString);readWidgetType(reader,rec$jscomp$0,reader.readDouble,reader.readDouble2,reader.readString);res["Fields"].push(rec$jscomp$0)}}ptr.free();return res};CFile.prototype["getInteractiveFormsAP"]=function(originIndex,width,height,backgroundColor,nWidget,sView,sButtonView){var nView=-1;if(sView)if(sView=="N")nView=0;else if(sView==
-"D")nView=1;else if(sView=="R")nView=2;var nButtonView=-1;if(sButtonView)nButtonView=sButtonView=="Off"?0:1;var pageIndex=this.pages.findIndex(function(page){return page.originIndex==originIndex});this.lockPageNumForFontsLoader(pageIndex,UpdateFontsSource.Forms);var ptr=this._getInteractiveFormsAP(width,height,backgroundColor,originIndex,nWidget,nView,nButtonView);var reader=ptr.getReader();this.unlockPageNumForFontsLoader();if(!reader)return[];var res=[];for(;reader.isValid();){var AP={};readAnnotAP(reader,
-AP);res.push(AP)}ptr.free();return res};CFile.prototype["getButtonIcons"]=function(pageIndex,width,height,backgroundColor,bBase64,nWidget,sIconView){var nView=-1;if(sIconView)if(sIconView=="I")nView=0;else if(sIconView=="RI")nView=1;else if(sIconView=="IX")nView=2;var ptr=this._getButtonIcons(backgroundColor,pageIndex,bBase64,nWidget,nView);var reader=ptr.getReader();if(!reader)return{};var res={};res["MK"]=[];res["View"]=[];for(;reader.isValid();){var MK={};MK["i"]=reader.readInt();var n=reader.readInt();
-var i=0;for(;i<n;++i){var MKType=reader.readString();MK[MKType]=reader.readInt();var unique=reader.readByte();if(unique){var ViewMK={};ViewMK["j"]=MK[MKType];ViewMK["w"]=reader.readInt();ViewMK["h"]=reader.readInt();if(bBase64)ViewMK["retValue"]=reader.readString();else{var np1=reader.readInt();var np2=reader.readInt();ViewMK["retValue"]=np2<<32|np1}res["View"].push(ViewMK)}}res["MK"].push(MK)}ptr.free();return res};CFile.prototype["getAnnotationsInfo"]=function(originIndex){if(!this.nativeFile)return[];
-var ptr=this._getAnnotationsInfo(originIndex);var reader=ptr.getReader();if(!reader)return[];var res=[];for(;reader.isValid();){var n=reader.readInt();var i=0;for(;i<n;++i){var rec={};rec["type"]=reader.readByte();readAnnot(reader,rec,reader.readDouble,reader.readDouble2,reader.readString);readAnnotType(reader,rec,reader.readDouble,reader.readDouble2,reader.readString);res.push(rec)}}ptr.free();return res};CFile.prototype["getAnnotationsAP"]=function(originIndex,width,height,backgroundColor,nAnnot,
-sView){var nView=-1;if(sView)if(sView=="N")nView=0;else if(sView=="D")nView=1;else if(sView=="R")nView=2;var pageIndex=this.pages.findIndex(function(page){return page.originIndex==originIndex});this.lockPageNumForFontsLoader(pageIndex,UpdateFontsSource.Annotation);var ptr=this._getAnnotationsAP(width,height,backgroundColor,originIndex,nAnnot,nView);var reader=ptr.getReader();this.unlockPageNumForFontsLoader();if(!reader)return[];var res=[];for(;reader.isValid();){var AP={};readAnnotAP(reader,AP);
-res.push(AP)}ptr.free();return res};CFile.prototype["readAnnotationsInfoFromBinary"]=function(AnnotInfo){if(!AnnotInfo)return[];var reader=new CBinaryReader(AnnotInfo,0,AnnotInfo.length);if(!reader)return[];var res={annots:[],imgs:[]};for(;reader.isValid();){var nCommand=reader.readByte();var nPos=reader.pos;var nSize=reader.readInt();if(nCommand==164){var rec={};rec["type"]=reader.readByte();readAnnot(reader,rec,reader.readDouble3,reader.readDouble3,reader.readString2,true);readAnnotType(reader,
-rec,reader.readDouble3,reader.readDouble3,reader.readString2,true);if(rec["type"]>=26&&rec["type"]<=33)readWidgetType(reader,rec,reader.readDouble3,reader.readDouble3,reader.readString2,true);res.annots.push(rec)}else if(nCommand==166){reader.readInt();reader.readInt();var n=reader.readInt();var i=0;for(;i<n;++i){var data=reader.readString();res.imgs.push(data)}}else{reader.pos=nPos+nSize;continue}}return res};CFile.prototype["scanPageFonts"]=function(page){this._setScanPageFonts(page)};CFile.prototype["scanPage"]=
-function(page,mode){var ptr=this._scanPage(page,mode);if(mode==2){data=ptr.getMemory(true);ptr.free();return data}var reader=ptr.getReader();if(!reader)return[];var shapesCount=reader.readInt();var shapes=new Array(shapesCount);var i=0;for(;i<shapesCount;i++)shapes[i]=reader.readString();ptr.free();return shapes};CFile.prototype["getImageBase64"]=function(rId){var strId=""+rId;if(this.scannedImages[strId])return this.scannedImages[strId];this.scannedImages[strId]=this._getImageBase64(rId);return this.scannedImages[strId]};
-CFile.prototype["changeImageUrl"]=function(baseUrl,resultUrl){var i;for(i in this.scannedImages)if(this.scannedImages[i]==baseUrl)this.scannedImages[i]=resultUrl};CFile.prototype["getUint8Array"]=function(ptr,len){return this._getUint8Array(ptr,len)};CFile.prototype["getUint8ClampedArray"]=function(ptr,len){return this._getUint8ClampedArray(ptr,len)};CFile.prototype["free"]=function(pointer){this._free(pointer)};CFile.prototype["getPagePixmap"]=function(pageIndex,width,height,backgroundColor){var page=
-this.pages[pageIndex];if(page.originIndex==undefined)return null;if(page.fonts.length>0)return null;this.lockPageNumForFontsLoader(pageIndex,UpdateFontsSource.Page);var ptr=this._getPixmap(page.originIndex,width,height,backgroundColor);this.unlockPageNumForFontsLoader();if(page.fonts.length>0){this._free(ptr);ptr=null}return ptr};CFile.prototype["addPage"]=function(pageIndex,pageObj){this.pages.splice(pageIndex,0,pageObj);if(this.fontStreams){var i;for(i in this.fontStreams){var pages=this.fontStreams[i].pages;
-var j=0;for(;j<pages.length;j++)if(pages[j]>=pageIndex)pages[j]+=1}}};CFile.prototype["removePage"]=function(pageIndex){var result=this.pages.splice(pageIndex,1);if(this.fontStreams){var i;for(i in this.fontStreams){var pages=this.fontStreams[i].pages;var j=0;for(;j<pages.length;j++)if(pages[j]>pageIndex)pages[j]-=1;else if(pages[j]==pageIndex)pages.splice(j,1)}}return result};self["AscViewer"]["Free"]=function(pointer){CFile.prototype._free(pointer)};self["AscViewer"]["InitializeFonts"]=function(basePath){return CFile.prototype._InitializeFonts(basePath)};
-self["AscViewer"]["CheckStreamId"]=function(data,status){return CFile.prototype._CheckStreamId(data,status)};self["AscViewer"]["CDrawingFile"]=CFile;self.drawingFile=null})(window,undefined);
+
+function CBinaryReader(data, start, size)
+{
+	this.data = data;
+	this.pos = start;
+	this.limit = start + size;
+}
+CBinaryReader.prototype.readByte = function()
+{
+	let val = this.data[this.pos];
+	this.pos += 1;
+	return val;
+};
+CBinaryReader.prototype.readShort = function()
+{
+	let val = this.data[this.pos] | this.data[this.pos + 1] << 8;
+	this.pos += 2;
+	return val;
+};
+CBinaryReader.prototype.readInt = function()
+{
+	let val = this.data[this.pos] | this.data[this.pos + 1] << 8 | this.data[this.pos + 2] << 16 | this.data[this.pos + 3] << 24;
+	this.pos += 4;
+	return val;
+};
+CBinaryReader.prototype.readDouble = function()
+{
+	return this.readInt() / 100;
+};
+CBinaryReader.prototype.readDouble2 = function()
+{
+	return this.readInt() / 10000;
+};
+CBinaryReader.prototype.readDouble3 = function()
+{
+	return this.readInt() / 100000;
+};
+CBinaryReader.prototype.readString = function()
+{
+	let len = this.readInt();
+	let val = String.prototype.fromUtf8(this.data, this.pos, len);
+	this.pos += len;
+	return val;
+};
+CBinaryReader.prototype.readString2 = function()
+{
+	let len = this.readShort();
+	let val = "";
+	for (let i = 0; i < len; ++i)
+	{
+		let c = this.readShort();
+		val += String.fromCharCode(c);
+	}
+	return val;
+};
+CBinaryReader.prototype.readData = function()
+{
+	let len = this.readInt() - 4;
+	let val = this.data.slice(this.pos, this.pos + len);
+	this.pos += len;
+	return val;
+};
+CBinaryReader.prototype.isValid = function()
+{
+	return (this.pos < this.limit) ? true : false;
+};
+CBinaryReader.prototype.Skip = function(nPos)
+{
+	this.pos += nPos;
+};
+
+function CBinaryWriter()
+{
+	this.size = 100000;
+	this.dataSize = 0;
+	this.buffer = new Uint8Array(this.size);
+}
+CBinaryWriter.prototype.checkAlloc = function(addition)
+{
+	if ((this.dataSize + addition) <= this.size)
+		return;
+
+	let newSize = Math.max(this.size * 2, this.size + addition);
+	let newBuffer = new Uint8Array(newSize);
+	newBuffer.set(this.buffer, 0);
+
+	this.size = newSize;
+	this.buffer = newBuffer;
+};
+CBinaryWriter.prototype.writeUint = function(value)
+{
+	this.checkAlloc(4);
+	let val = (value>2147483647)?value-4294967296:value;
+	this.buffer[this.dataSize++] = (val) & 0xFF;
+	this.buffer[this.dataSize++] = (val >>> 8) & 0xFF;
+	this.buffer[this.dataSize++] = (val >>> 16) & 0xFF;
+	this.buffer[this.dataSize++] = (val >>> 24) & 0xFF;
+};
+CBinaryWriter.prototype.writeString = function(value)
+{
+	let valueUtf8 = value.toUtf8();
+	this.checkAlloc(valueUtf8.length);
+	this.buffer.set(valueUtf8, this.dataSize);
+	this.dataSize += valueUtf8.length;
+};
+/*
+ * (c) Copyright Ascensio System SIA 2010-2023
+ *
+ * This program is a free software product. You can redistribute it and/or
+ * modify it under the terms of the GNU Affero General Public License (AGPL)
+ * version 3 as published by the Free Software Foundation. In accordance with
+ * Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+ * that Ascensio System SIA expressly excludes the warranty of non-infringement
+ * of any third-party rights.
+ *
+ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
+ * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
+ *
+ * The  interactive user interfaces in modified source and object code versions
+ * of the Program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU AGPL version 3.
+ *
+ * All the Product's GUI elements, including illustrations and icon sets, as
+ * well as technical writing content are licensed under the terms of the
+ * Creative Commons Attribution-ShareAlike 4.0 International. See the License
+ * terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
+ *
+ */
+
+var UpdateFontsSource = {
+	Undefined   : 0,
+	Page        : 1,
+	Annotation  : 2,
+	Forms       : 4
+};
+
+function CFile()
+{
+	this.nativeFile = 0;
+	this.stream = -1;
+	this.stream_size = 0;
+	this.type = -1;
+	this.pages = [];
+	this.info = null;
+	this._isNeedPassword = false;
+
+	// for async fonts loader
+	this.fontPageIndex = -1;
+	this.fontPageUpdateType = UpdateFontsSource.Undefined;
+	this.fontStreams = {};
+
+	this.scannedImages = {};
+}
+
+/*
+ * (c) Copyright Ascensio System SIA 2010-2023
+ *
+ * This program is a free software product. You can redistribute it and/or
+ * modify it under the terms of the GNU Affero General Public License (AGPL)
+ * version 3 as published by the Free Software Foundation. In accordance with
+ * Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+ * that Ascensio System SIA expressly excludes the warranty of non-infringement
+ * of any third-party rights.
+ *
+ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
+ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
+ * details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
+ *
+ * The  interactive user interfaces in modified source and object code versions
+ * of the Program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU AGPL version 3.
+ *
+ * All the Product's GUI elements, including illustrations and icon sets, as
+ * well as technical writing content are licensed under the terms of the
+ * Creative Commons Attribution-ShareAlike 4.0 International. See the License
+ * terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
+ *
+ */
+
+
+function CNativePointer()
+{
+	this.ptr = null;
+}
+CNativePointer.prototype.free = function()
+{
+	if (this.ptr)
+		g_native_drawing_file["FreeWasmData"](this.ptr);
+	this.ptr = null;
+};
+CNativePointer.prototype.getMemory = function(isCopy)
+{
+	if (!this.ptr)
+		return null;
+
+	if (!isCopy)
+		return this.ptr;
+
+	let copyArray = new Uint8Array(this.ptr.length);
+	copyArray.set(this.ptr);
+
+	return copyArray;
+};
+CNativePointer.prototype.getReader = function()
+{
+	if (!this.ptr)
+		return null;
+
+	return new CBinaryReader(this.ptr, 0, this.ptr.length);
+};
+
+var g_module_pointer = new CNativePointer();
+
+// js interface
+CFile.prototype._free = function(ptr)
+{
+	// TODO:
+};
+CFile.prototype._getUint8Array = function(ptr, len)
+{
+	// TODO:
+};
+CFile.prototype._getUint8ClampedArray = function(ptr, len)
+{
+	// TODO:
+};
+
+// FILE
+CFile.prototype._openFile = function(buffer, password)
+{
+	let res = false;
+	if (!buffer)
+		res = -1 !== g_native_drawing_file["GetType"]();
+
+	if (res)
+		this.nativeFile = 1;
+	return res;
+};
+
+CFile.prototype._closeFile = function()
+{
+	g_native_drawing_file["CloseFile"]();
+	this.nativeFile = 0;
+};
+
+CFile.prototype._getType = function()
+{
+	return g_native_drawing_file["GetType"]();
+};
+
+CFile.prototype._getError = function()
+{
+	return g_native_drawing_file["GetErrorCode"]();
+};
+
+CFile.prototype._SplitPages = function(pages, changes)
+{
+	let dataChanges = null;
+	if (changes) 
+		dataChanges = (undefined !== changes.byteLength) ? new Uint8Array(changes) : changes;
+	g_module_pointer.ptr = g_native_drawing_file["SplitPages"](pages, dataChanges);
+	return g_module_pointer;
+};
+
+CFile.prototype._MergePages = function(buffer, maxID, prefixForm)
+{
+	if (!buffer)
+		return false;
+
+	if (!maxID)
+		maxID = 0;
+	if (!prefixForm)
+		prefixForm = "";
+
+	let data = (undefined !== buffer.byteLength) ? new Uint8Array(buffer) : buffer;
+	return g_native_drawing_file["MergePages"](data, maxID, prefixForm);
+};
+
+CFile.prototype._UndoMergePages = function()
+{
+	return g_native_drawing_file["UnmergePages"]();
+};
+
+CFile.prototype._RedactPage = function(pageIndex, box, filler)
+{
+	let dataFiller = (undefined !== filler.byteLength) ? new Uint8Array(filler) : filler;
+	return g_native_drawing_file["RedactPage"](pageIndex, box, dataFiller);
+};
+
+CFile.prototype._UndoRedact = function()
+{
+	return g_native_drawing_file["UndoRedact"]();
+};
+
+CFile.prototype._CheckOwnerPassword = function(password)
+{
+	return true;
+}
+
+CFile.prototype._CheckPerm = function(perm)
+{
+	return true;
+}
+
+// FONTS
+CFile.prototype._isNeedCMap = function()
+{
+	return g_native_drawing_file["IsNeedCMap"]();
+};
+
+CFile.prototype._setCMap = function(memoryBuffer)
+{
+	// none
+};
+
+CFile.prototype._getFontByID = function(ID)
+{
+	return g_native_drawing_file["GetFontBinary"](ID);
+};
+
+CFile.prototype._getGIDByUnicode = function(ID)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetGIDByUnicode"](ID);
+	return g_module_pointer;
+}
+
+CFile.prototype._getInteractiveFormsFonts = function(type)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetInteractiveFormsFonts"](type);
+	return g_module_pointer;
+};
+
+// INFO DOCUMENT
+CFile.prototype._getInfo = function()
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetInfo"]();
+	return g_module_pointer;
+};
+
+CFile.prototype._getStructure = function()
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetStructure"]();
+	return g_module_pointer;
+};
+
+CFile.prototype._getLinks = function(pageIndex)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetLinks"](pageIndex);
+	return g_module_pointer;
+};
+
+// WIDGETS & ANNOTATIONS
+CFile.prototype._getInteractiveFormsInfo = function()
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetInteractiveFormsInfo"]();
+	return g_module_pointer;
+};
+
+CFile.prototype._getAnnotationsInfo = function(pageIndex)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetAnnotationsInfo"](pageIndex === undefined ? -1 : pageIndex);
+	return g_module_pointer;
+};
+
+CFile.prototype._getButtonIcons = function(backgroundColor, pageIndex, isBase64, nWidget, nView)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetButtonIcons"](
+		backgroundColor === undefined ? 0xFFFFFF : backgroundColor, 
+		pageIndex, 
+		isBase64 ? 1 : 0, 
+		nWidget === undefined ? -1 : nWidget, 
+		nView);
+	return g_module_pointer;
+};
+
+CFile.prototype._getAnnotationsAP = function(width, height, backgroundColor, pageIndex, nAnnot, nView)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetAnnotationsAP"](
+		width, 
+		height,
+		backgroundColor === undefined ? 0xFFFFFF : backgroundColor,
+		pageIndex,
+		nAnnot === undefined ? -1 : nAnnot,
+		nView);
+	return g_module_pointer;
+};
+
+CFile.prototype._getInteractiveFormsAP = function(width, height, backgroundColor, pageIndex, nWidget, nView, nButtonView)
+{
+	g_module_pointer.ptr = g_native_drawing_file["GetInteractiveFormsAP"](
+		width, 
+		height,
+		backgroundColor === undefined ? 0xFFFFFF : backgroundColor,
+		pageIndex,
+		nWidget === undefined ? -1 : nWidget,
+		nView, nButtonView);
+	return g_module_pointer;
+};
+
+// SCAN PAGES
+CFile.prototype._setScanPageFonts = function(page)
+{
+	g_native_drawing_file["SetScanPageFonts"](page);
+};
+
+CFile.prototype._scanPage = function(page, mode)
+{
+	g_module_pointer.ptr = g_native_drawing_file["ScanPage"](page, (mode === undefined) ? 0 : mode);
+	return g_module_pointer;
+};
+
+CFile.prototype._getImageBase64 = function(rId)
+{
+	return g_native_drawing_file["GetImageBase64"](rId);
+};
+
+// TEXT
+CFile.prototype._getGlyphs = function(pageIndex)
+{
+	let res = {};
+	res.info = [0, 0, 0, 0];
+	res.result = [];
+	return res;
+};
+
+CFile.prototype._destroyTextInfo = function()
+{
+	g_native_drawing_file["DestroyTextInfo"](rId);
+};
+
+// RASTER
+CFile.prototype._getPixmap = function(pageIndex, width, height, backgroundColor)
+{
+	return null;
+};
+
+// STATIC FUNCTIONS
+CFile.prototype._InitializeFonts = function(basePath) 
+{
+	// none
+};
+
+CFile.prototype._CheckStreamId = function(data, status) 
+{
+	// none
+};
+
+
+CFile.prototype.lockPageNumForFontsLoader = function(pageIndex, type)
+{
+	this.fontPageIndex = pageIndex;
+	this.fontPageUpdateType = type;
+};
+CFile.prototype.unlockPageNumForFontsLoader = function()
+{
+	this.fontPageIndex = -1;
+	drawingFile.fontPageUpdateType = UpdateFontsSource.Undefined;
+};
+
+CFile.prototype["getPages"] = function()
+{
+	return this.pages;
+};
+
+CFile.prototype["openForms"] = function()
+{
+};
+
+CFile.prototype["getDocumentInfo"] = function()
+{
+	return this.info;
+};
+
+CFile.prototype["getStartID"] = function()
+{
+	return this.StartID;
+};
+
+// FILE
+CFile.prototype["loadFromData"] = function(arrayBuffer)
+{
+	let isSuccess = this._openFile(arrayBuffer);
+	let error = this._getError(); // 0 - ok, 4 - password, else: error
+	this.type = this._getType();
+
+	self.drawingFile = this;
+	if (!error)
+		this.getInfo();
+	this._isNeedPassword = (4 === error) ? true : false;
+	return error;
+};
+CFile.prototype["loadFromDataWithPassword"] = function(password)
+{
+	if (0 != this.nativeFile)
+		this._closeFile();
+
+	let isSuccess = this._openFile(undefined, password);
+	let error = this._getError(); // 0 - ok, 4 - password, else: error
+	this.type = this._getType();
+
+	self.drawingFile = this;
+	if (!error)
+		this.getInfo();
+	this._isNeedPassword = (4 === error) ? true : false;
+	return error;
+};
+
+CFile.prototype["getType"] = function()
+{
+	return this.type;
+};
+
+CFile.prototype["close"] = function()
+{
+	this._closeFile();
+	this.nativeFile = 0;
+	this.pages = [];
+	this.info = null;
+	this.StartID = null;
+	if (this.stream > 0)
+		this._free(this.stream);
+	this.stream = -1;
+	self.drawingFile = null;
+};
+
+CFile.prototype["getFileBinary"] = function()
+{
+	if (0 >= this.stream)
+		return "";
+	return new Uint8Array(Module["HEAP8"].buffer, this.stream, this.stream_size);
+};
+
+CFile.prototype["isNeedPassword"] = function()
+{
+	return this._isNeedPassword;
+};
+CFile.prototype["CheckOwnerPassword"] = function(password)
+{
+	return this._CheckOwnerPassword(password);
+};
+CFile.prototype["CheckPerm"] = function(perm)
+{
+	return this._CheckPerm(perm);
+};
+CFile.prototype["SplitPages"] = function(arrOriginIndex, arrayBufferChanges)
+{
+	let ptr = this._SplitPages(arrOriginIndex, arrayBufferChanges);
+	let res = ptr.getMemory(true);
+	ptr.free();
+	return res;
+};
+CFile.prototype["MergePages"] = function(arrayBuffer, maxID, prefixForm)
+{
+	return this._MergePages(arrayBuffer, maxID, prefixForm);
+};
+CFile.prototype["UndoMergePages"] = function()
+{
+	return this._UndoMergePages();
+};
+CFile.prototype["RedactPage"] = function(originIndex, arrRedactBox, arrayBufferFiller)
+{
+	return this._RedactPage(originIndex, arrRedactBox, arrayBufferFiller);
+};
+CFile.prototype["UndoRedact"] = function()
+{
+	return this._UndoRedact();
+};
+
+// INFO DOCUMENT
+CFile.prototype.getInfo = function()
+{
+	if (!this.nativeFile)
+		return false;
+
+	let ptr = this._getInfo();
+	let reader = ptr.getReader();
+	if (!reader) return false;
+
+	this.StartID = reader.readInt();
+
+	let _pages = reader.readInt();
+	for (let i = 0; i < _pages; i++)
+	{
+		let rec = {};
+		rec["W"] = reader.readInt();
+		rec["H"] = reader.readInt();
+		rec["Dpi"] = reader.readInt();
+		rec["Rotate"] = reader.readInt();
+		rec["originIndex"] = i;
+		rec.fonts = [];
+		rec.fontsUpdateType = UpdateFontsSource.Undefined;
+		rec.text = null;
+		this.pages.push(rec);
+	}
+	let json_info = reader.readString();
+	try
+	{
+		this.info = JSON.parse(json_info);
+	} catch(err) {}
+
+	ptr.free();
+	return this.pages.length > 0;
+};
+CFile.prototype.getPagesInfo = function()
+{
+	if (!this.nativeFile)
+		return [];
+
+	let ptr = this._getInfo();
+	let reader = ptr.getReader();
+	if (!reader) return [];
+
+	// change StartID
+	this.StartID = reader.readInt();
+
+	let _pages = [];
+	let nPages = reader.readInt();
+	for (let i = 0; i < nPages; i++)
+	{
+		let rec = {};
+		rec["W"] = reader.readInt();
+		rec["H"] = reader.readInt();
+		rec["Dpi"] = reader.readInt();
+		rec["Rotate"] = reader.readInt();
+		rec["originIndex"] = i;
+		rec.fonts = [];
+		rec.fontsUpdateType = UpdateFontsSource.Undefined;
+		rec.text = null;
+		_pages.push(rec);
+	}
+	// skip json_info
+
+	ptr.free();
+	return _pages;
+};
+
+CFile.prototype["getStructure"] = function()
+{
+	let ptr = this._getStructure();
+	let reader = ptr.getReader();
+
+	if (!reader) return [];
+
+	let res = [];
+	while (reader.isValid())
+	{
+		let rec = {};
+		rec["page"]  = reader.readInt();
+		rec["level"] = reader.readInt();
+		rec["y"]  = reader.readDouble();
+		rec["description"] = reader.readString();
+		res.push(rec);
+	}
+
+	ptr.free();
+	return res;
+};
+
+CFile.prototype["getLinks"] = function(originIndex)
+{
+	let ptr = this._getLinks(originIndex);
+	let reader = ptr.getReader();
+
+	if (!reader) return [];
+
+	let res = [];
+	while (reader.isValid())
+	{
+		let rec = {};
+		rec["link"] = reader.readString();
+		rec["dest"] = reader.readDouble();
+		rec["x"] = reader.readDouble();
+		rec["y"] = reader.readDouble();
+		rec["w"] = reader.readDouble();
+		rec["h"] = reader.readDouble();
+		res.push(rec);
+	}
+
+	ptr.free();
+	return res;
+};
+
+// TEXT
+CFile.prototype["getGlyphs"] = function(originIndex)
+{
+	let pageIndex = this.pages.findIndex(function(page) {
+		return page.originIndex == originIndex;
+	});
+	let page = this.pages[pageIndex];
+	if (page.fonts.length > 0)
+	{
+		// waiting fonts
+		return null;
+	}
+
+	this.lockPageNumForFontsLoader(pageIndex, UpdateFontsSource.Page);
+	let res = this._getGlyphs(originIndex);
+	// there is no need to delete the result; this buffer is used as a text buffer 
+	// for text commands on other pages. After receiving ALL text pages, 
+	// need to call destroyTextInfo()
+	this.unlockPageNumForFontsLoader();
+
+	if (page.fonts.length > 0)
+	{
+		// waiting fonts
+		res = null;
+		return null;
+	}
+
+	if (res && this.onUpdateStatistics)
+		this.onUpdateStatistics(res.info[0], res.info[1], res.info[2], res.info[3]);
+
+	return res.result || null;
+};
+CFile.prototype["destroyTextInfo"] = function()
+{
+	this._destroyTextInfo();
+};
+
+// FONTS
+CFile.prototype.getWidgetFonts = function(type)
+{
+	let ptr = this._getInteractiveFormsFonts(type);
+	let reader = ptr.getReader();
+	if (!reader) return [];
+
+	let res = [];
+	while (reader.isValid())
+	{
+		let n = reader.readInt();
+		for (let i = 0; i < n; ++i)
+			res.push(reader.readString());
+	}
+
+	ptr.free();
+	return res;
+};
+
+CFile.prototype["getInteractiveFormsEmbeddedFonts"] = function()
+{
+	return this.getWidgetFonts(1);
+};
+
+CFile.prototype["getInteractiveFormsStandardFonts"] = function()
+{
+	return this.getWidgetFonts(2);
+};
+
+CFile.prototype["getFontByID"] = function(ID)
+{
+	return this._getFontByID(ID);
+};
+
+CFile.prototype["getGIDByUnicode"] = function(ID)
+{
+	let ptr = this._getGIDByUnicode(ID);
+	let reader = ptr.getReader();
+	if (!reader)
+		return {};
+
+	let res = {};
+	let nFontLength = reader.readInt();
+	for (let i = 0; i < nFontLength; i++)
+	{
+		let np1 = reader.readInt();
+		let np2 = reader.readInt();
+		res[np2] = np1;
+	}
+
+	ptr.free();
+	return res;
+};
+
+CFile.prototype["setCMap"] = function(memoryBuffer)
+{
+	if (!this.nativeFile)
+		return;
+
+	this._setCMap(memoryBuffer);
+};
+
+CFile.prototype["isNeedCMap"] = function()
+{
+	return this._isNeedCMap();
+};
+
+// WIDGETS & ANNOTATIONS
+function readAction(reader, rec, readDoubleFunc, readStringFunc)
+{
+	let SType = reader.readByte();
+	// 0 - Unknown, 1 - GoTo, 2 - GoToR, 3 - GoToE, 4 - Launch
+	// 5 - Thread, 6 - URI, 7 - Sound, 8 - Movie, 9 - Hide
+	// 10 - Named, 11 - SubmitForm, 12 - ResetForm, 13 - ImportData
+	// 14 - JavaScript, 15 - SetOCGState, 16 - Rendition
+	// 17 - Trans, 18 - GoTo3DView
+	rec["S"] = SType;
+	if (SType == 14)
+	{
+		rec["JS"] = readStringFunc.call(reader);
+	}
+	else if (SType == 1)
+	{
+		rec["page"] = reader.readInt();
+		rec["kind"] = reader.readByte();
+		// 0 - XYZ
+		// 1 - Fit
+		// 2 - FitH
+		// 3 - FitV
+		// 4 - FitR
+		// 5 - FitB
+		// 6 - FitBH
+		// 7 - FitBV
+		switch (rec["kind"])
+		{
+			case 0:
+			case 2:
+			case 3:
+			case 6:
+			case 7:
+			{
+				let nFlag = reader.readInt();
+				if (nFlag & (1 << 0))
+					rec["left"] = readDoubleFunc.call(reader);
+				if (nFlag & (1 << 1))
+					rec["top"]  = readDoubleFunc.call(reader);
+				if (nFlag & (1 << 2))
+					rec["zoom"] = readDoubleFunc.call(reader);
+				break;
+			}
+			case 4:
+			{
+				rec["left"]   = readDoubleFunc.call(reader);
+				rec["top"] = readDoubleFunc.call(reader);
+				rec["right"]  = readDoubleFunc.call(reader);
+				rec["bottom"]    = readDoubleFunc.call(reader);
+				break;
+			}
+			case 1:
+			case 5:
+			default:
+				break;
+		}
+	}
+	else if (SType == 10)
+	{
+		rec["N"] = readStringFunc.call(reader);
+	}
+	else if (SType == 6)
+	{
+		rec["URI"] = readStringFunc.call(reader);
+	}
+	else if (SType == 9)
+	{
+		rec["H"] = reader.readByte();
+		let m = reader.readInt();
+	    rec["T"] = [];
+		// array of annotation names - rec["name"]
+	    for (let j = 0; j < m; ++j)
+			rec["T"].push(readStringFunc.call(reader));
+	}
+	else if (SType == 12)
+	{
+		rec["Flags"] = reader.readInt();
+		let m = reader.readInt();
+	    rec["Fields"] = [];
+		// array of annotation names - rec["name"]
+	    for (let j = 0; j < m; ++j)
+			rec["Fields"].push(readStringFunc.call(reader));
+	}
+	let NextAction = reader.readByte();
+	if (NextAction)
+	{
+		rec["Next"] = {};
+		readAction(reader, rec["Next"], readDoubleFunc, readStringFunc);
+	}
+}
+function readAnnot(reader, rec, readDoubleFunc, readDouble2Func, readStringFunc, isRead = false)
+{
+	rec["AP"] = {};
+	// Annot
+	// number for relations with AP
+	rec["AP"]["i"] = reader.readInt();
+	rec["annotflag"] = reader.readInt();
+	// 12.5.3
+	let bHidden = (rec["annotflag"] >> 1) & 1; // Hidden
+	let bPrint = (rec["annotflag"] >> 2) & 1; // Print
+	rec["noZoom"] = (rec["annotflag"] >> 3) & 1; // NoZoom
+	rec["noRotate"] = (rec["annotflag"] >> 4) & 1; // NoRotate
+	let bNoView = (rec["annotflag"] >> 5) & 1; // NoView
+	rec["locked"] = (rec["annotflag"] >> 7) & 1; // Locked
+	rec["ToggleNoView"] = (rec["annotflag"] >> 8) & 1; // ToggleNoView
+	rec["lockedC"] = (rec["annotflag"] >> 9) & 1; // LockedContents
+	// 0 - visible, 1 - hidden, 2 - noPrint, 3 - noView
+	rec["display"] = 0;
+	if (bHidden)
+		rec["display"] = 1;
+	else
+	{
+		if (bPrint)
+		{
+			if (bNoView)
+				rec["display"] = 3;
+			else
+				rec["display"] = 0;
+		}
+		else
+		{
+			if (bNoView)
+				rec["display"] = 0; // ??? no hidden, but noView and no print
+			else
+				rec["display"] = 2;
+		}
+	}
+	rec["page"] = reader.readInt();
+	// offsets like getStructure and viewer.navigate
+	rec["rect"] = {};
+	rec["rect"]["x1"] = readDouble2Func.call(reader);
+	rec["rect"]["y1"] = readDouble2Func.call(reader);
+	rec["rect"]["x2"] = readDouble2Func.call(reader);
+	rec["rect"]["y2"] = readDouble2Func.call(reader);
+	let flags = reader.readInt();
+	// Unique name - NM
+	if (flags & (1 << 0))
+		rec["UniqueName"] = readStringFunc.call(reader);
+	// Alternate annotation text - Contents
+	if (flags & (1 << 1))
+		rec["Contents"] = readStringFunc.call(reader);
+	// Border effect - BE
+	if (flags & (1 << 2))
+	{
+		rec["BE"] = {};
+		rec["BE"]["S"] = reader.readByte();
+		rec["BE"]["I"] = readDoubleFunc.call(reader);
+	}
+	// Special annotation color - C
+	if (flags & (1 << 3))
+	{
+		let n = reader.readInt();
+		rec["C"] = [];
+		for (let i = 0; i < n; ++i)
+			rec["C"].push(readDouble2Func.call(reader));
+	}
+	// Border/BS
+	if (flags & (1 << 4))
+	{
+		// 0 - solid, 1 - beveled, 2 - dashed, 3 - inset, 4 - underline
+		rec["border"] = reader.readByte();
+		rec["borderWidth"] = readDoubleFunc.call(reader);
+		// Border Dash Pattern
+		if (rec["border"] == 2)
+		{
+			let n = reader.readInt();
+			rec["dashed"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["dashed"].push(readDoubleFunc.call(reader));
+		}
+	}
+	// Date of last change - M
+	if (flags & (1 << 5))
+		rec["LastModified"] = readStringFunc.call(reader);
+	// AP
+	if (flags & (1 << 6))
+	{
+		if (isRead)
+			rec["AP"]["render"] = reader.readData(); // TODO use Render - Uint8Array
+		else
+			rec["AP"]["have"] = (flags >> 6) & 1;
+	}
+	// User ID
+	if (flags & (1 << 7))
+		rec["OUserID"] = readStringFunc.call(reader);
+	// if (flags & (1 << 8))
+	// 	reader.readInt();
+	if (flags & (1 << 9))
+		rec["meta"] = readStringFunc.call(reader);
+}
+function readAnnotAP(reader, AP)
+{
+	// number for relations with AP
+	AP["i"] = reader.readInt();
+	AP["x"] = reader.readDouble();
+	AP["y"] = reader.readDouble();
+	AP["w"] = reader.readInt();
+	AP["h"] = reader.readInt();
+	let n = reader.readInt();
+	for (let i = 0; i < n; ++i)
+	{
+		let APType = reader.readString();
+		if (!AP[APType])
+			AP[APType] = {};
+		let APi = AP[APType];
+		let ASType = reader.readString();
+		if (ASType)
+		{
+			AP[APType][ASType] = {};
+			APi = AP[APType][ASType];
+		}
+		let np1 = reader.readInt();
+		let np2 = reader.readInt();
+		// this memory needs to be deleted
+		APi["retValue"] = np2 << 32 | np1;
+		// 0 - Normal, 1 - Multiply, 2 - Screen, 3 - Overlay, 4 - Darken, 5 - Lighten, 6 - ColorDodge, 7 - ColorBurn, 8 - HardLight,
+		// 9 - SoftLight, 10 - Difference, 11 - Exclusion, 12 - Hue, 13 - Saturation, 14 - Color, 15 - Luminosity
+		APi["BlendMode"] = reader.readByte();
+	}
+}
+function readAnnotType(reader, rec, readDoubleFunc, readDouble2Func, readStringFunc, isRead = false)
+{
+	// Markup
+	let flags = 0;
+	if ((rec["type"] < 18 && rec["type"] != 1 && rec["type"] != 15) || rec["type"] == 25)
+	{
+		flags = reader.readInt();
+		if (flags & (1 << 0))
+			rec["Popup"] = reader.readInt();
+		// T
+		if (flags & (1 << 1))
+			rec["User"] = readStringFunc.call(reader);
+		// CA
+		if (flags & (1 << 2))
+			rec["CA"] = readDoubleFunc.call(reader);
+		// RC
+		if (flags & (1 << 3))
+		{
+			let n = reader.readInt();
+			rec["RC"] = [];
+			for (let i = 0; i < n; ++i)
+			{
+				let oFont = {};
+				// 0 - left, 1 - centered, 2 - right, 3 - justify
+				oFont["alignment"] = reader.readByte();
+				let nFontFlag = reader.readInt();
+				oFont["bold"] = (nFontFlag >> 0) & 1;
+				oFont["italic"] = (nFontFlag >> 1) & 1;
+				oFont["strikethrough"] = (nFontFlag >> 3) & 1;
+				oFont["underlined"] = (nFontFlag >> 4) & 1;
+				if (nFontFlag & (1 << 5))
+					oFont["vertical"] = readDoubleFunc.call(reader);
+				if (nFontFlag & (1 << 6))
+					oFont["actual"] = readStringFunc.call(reader);
+				oFont["rtl"] = (nFontFlag >> 7) & 1;
+				oFont["size"] = readDoubleFunc.call(reader);
+				oFont["color"] = [];
+				oFont["color"].push(readDouble2Func.call(reader));
+				oFont["color"].push(readDouble2Func.call(reader));
+				oFont["color"].push(readDouble2Func.call(reader));
+				oFont["name"] = readStringFunc.call(reader);
+				oFont["text"] = readStringFunc.call(reader);
+				rec["RC"].push(oFont);
+			}
+		}
+		// CreationDate
+		if (flags & (1 << 4))
+			rec["CreationDate"] = readStringFunc.call(reader);
+		// IRT
+		if (flags & (1 << 5))
+			rec["RefTo"] = reader.readInt();
+		// RT
+		// 0 - R, 1 - Group
+		if (flags & (1 << 6))
+			rec["RefToReason"] = reader.readByte();
+		// Subj
+		if (flags & (1 << 7))
+			rec["Subj"] = readStringFunc.call(reader);
+	}
+	// Text
+	if (rec["type"] == 0)
+	{
+		// Background color - C->IC
+		if (rec["C"])
+		{
+			rec["IC"] = rec["C"];
+			delete rec["C"];
+		}
+		rec["Open"] = (flags >> 15) & 1;
+		// icon - Name
+		// 0 - Check, 1 - Checkmark, 2 - Circle, 3 - Comment, 4 - Cross, 5 - CrossHairs, 6 - Help, 7 - Insert, 8 - Key, 9 - NewParagraph, 10 - Note, 11 - Paragraph, 12 - RightArrow, 13 - RightPointer, 14 - Star, 15 - UpArrow, 16 - UpLeftArrow
+		if (flags & (1 << 16))
+			rec["Icon"] = reader.readByte();
+		// StateModel
+		// 0 - Marked, 1 - Review
+		if (flags & (1 << 17))
+			rec["StateModel"] = reader.readByte();
+		// State
+		// 0 - Marked, 1 - Unmarked, 2 - Accepted, 3 - Rejected, 4 - Cancelled, 5 - Completed, 6 - None
+		if (flags & (1 << 18))
+			rec["State"] = reader.readByte();
+		
+	}
+	// Line
+	else if (rec["type"] == 3)
+	{
+		// L
+		rec["L"] = [];
+		for (let i = 0; i < 4; ++i)
+			rec["L"].push(readDoubleFunc.call(reader));
+		// LE
+		// 0 - Square, 1 - Circle, 2 - Diamond, 3 - OpenArrow, 4 - ClosedArrow, 5 - None, 6 - Butt, 7 - ROpenArrow, 8 - RClosedArrow, 9 - Slash
+		if (flags & (1 << 15))
+		{
+			rec["LE"] = [];
+			rec["LE"].push(reader.readByte());
+			rec["LE"].push(reader.readByte());
+		}
+		// IC
+		if (flags & (1 << 16))
+		{
+			let n = reader.readInt();
+			rec["IC"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["IC"].push(readDouble2Func.call(reader));
+		}
+		// LL
+		if (flags & (1 << 17))
+			rec["LL"] = readDoubleFunc.call(reader);
+		// LLE
+		if (flags & (1 << 18))
+			rec["LLE"] = readDoubleFunc.call(reader);
+		// Cap
+		rec["Cap"] = (flags >> 19) & 1;
+		// IT
+		// 0 - LineDimension, 1 - LineArrow
+		if (flags & (1 << 20))
+			rec["IT"] = reader.readByte();
+		// LLO
+		if (flags & (1 << 21))
+			rec["LLO"] = readDoubleFunc.call(reader);
+		// CP
+		// 0 - Inline, 1 - Top
+		if (flags & (1 << 22))
+			rec["CP"] = reader.readByte();
+		// CO
+		if (flags & (1 << 23))
+		{
+			rec["CO"] = [];
+			rec["CO"].push(readDoubleFunc.call(reader));
+			rec["CO"].push(readDoubleFunc.call(reader));
+		}
+	}
+	// Ink
+	else if (rec["type"] == 14)
+	{
+		// offsets like getStructure and viewer.navigate
+		let n = reader.readInt();
+		rec["InkList"] = [];
+		for (let i = 0; i < n; ++i)
+		{
+			rec["InkList"][i] = [];
+			let m = reader.readInt();
+			for (let j = 0; j < m; ++j)
+				rec["InkList"][i].push(readDoubleFunc.call(reader));
+		}
+	}
+	// Highlight, Underline, Squiggly, Strikeout
+	else if (rec["type"] > 7 && rec["type"] < 12)
+	{
+		// QuadPoints
+		let n = reader.readInt();
+		rec["QuadPoints"] = [];
+		for (let i = 0; i < n; ++i)
+			rec["QuadPoints"].push(readDoubleFunc.call(reader));
+	}
+	// Square, Circle
+	else if (rec["type"] == 4 || rec["type"] == 5)
+	{
+		// Rect and RD differences
+		if (flags & (1 << 15))
+		{
+			rec["RD"] = [];
+			for (let i = 0; i < 4; ++i)
+				rec["RD"].push(readDoubleFunc.call(reader));
+		}
+		// IC
+		if (flags & (1 << 16))
+		{
+			let n = reader.readInt();
+			rec["IC"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["IC"].push(readDouble2Func.call(reader));
+		}
+	}
+	// Polygon, PolyLine
+	else if (rec["type"] == 6 || rec["type"] == 7)
+	{
+		let nVertices = reader.readInt();
+		rec["Vertices"] = [];
+		for (let i = 0; i < nVertices; ++i)
+			rec["Vertices"].push(readDoubleFunc.call(reader));
+		// LE
+		// 0 - Square, 1 - Circle, 2 - Diamond, 3 - OpenArrow, 4 - ClosedArrow, 5 - None, 6 - Butt, 7 - ROpenArrow, 8 - RClosedArrow, 9 - Slash
+		if (flags & (1 << 15))
+		{
+			rec["LE"] = [];
+			rec["LE"].push(reader.readByte());
+			rec["LE"].push(reader.readByte());
+		}
+		// IC
+		if (flags & (1 << 16))
+		{
+			let n = reader.readInt();
+			rec["IC"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["IC"].push(readDouble2Func.call(reader));
+		}
+		// IT
+		// 0 - PolygonCloud, 1 - PolyLineDimension, 2 - PolygonDimension
+		if (flags & (1 << 20))
+			rec["IT"] = reader.readByte();
+	}
+	// Popup
+	else if (rec["type"] == 15)
+	{
+		flags = reader.readInt();
+		rec["Open"] = (flags >> 0) & 1;
+		// Link to parent-annotation
+		if (flags & (1 << 1))
+			rec["PopupParent"] = reader.readInt();
+	}
+	// FreeText
+	else if (rec["type"] == 2)
+	{
+		// Background color - C->IC
+		if (!isRead && rec["C"])
+		{
+			rec["IC"] = rec["C"];
+			delete rec["C"];
+		}
+		// 0 - left-justified, 1 - centered, 2 - right-justified
+		rec["alignment"] = reader.readByte();
+		rec["Rotate"] = reader.readInt();
+		// Rect and RD differences
+		if (flags & (1 << 15))
+		{
+			rec["RD"] = [];
+			for (let i = 0; i < 4; ++i)
+				rec["RD"].push(readDoubleFunc.call(reader));
+		}
+		// CL
+		if (flags & (1 << 16))
+		{
+			let n = reader.readInt();
+			rec["CL"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["CL"].push(readDoubleFunc.call(reader));
+		}
+		// Default style (CSS2 format) - DS
+		if (flags & (1 << 17))
+			rec["defaultStyle"] = readStringFunc.call(reader);
+		// LE
+		// 0 - Square, 1 - Circle, 2 - Diamond, 3 - OpenArrow, 4 - ClosedArrow, 5 - None, 6 - Butt, 7 - ROpenArrow, 8 - RClosedArrow, 9 - Slash
+		if (flags & (1 << 18))
+			rec["LE"] = reader.readByte();
+		// IT
+		// 0 - FreeText, 1 - FreeTextCallout, 2 - FreeTextTypeWriter
+		if (flags & (1 << 20))
+			rec["IT"] = reader.readByte();
+		// Border color - from DA (write to C)
+		if (flags & (1 << 21))
+		{
+			let n = reader.readInt();
+			if (isRead)
+			{
+				rec["IC"] = [];
+				for (let i = 0; i < n; ++i)
+					rec["IC"].push(readDouble2Func.call(reader));
+			}
+			else
+			{
+				rec["C"] = [];
+				for (let i = 0; i < n; ++i)
+					rec["C"].push(readDouble2Func.call(reader));
+			}
+		}
+	}
+	// Caret
+	else if (rec["type"] == 13)
+	{
+		// Rect and RD differenses
+		if (flags & (1 << 15))
+		{
+			rec["RD"] = [];
+			for (let i = 0; i < 4; ++i)
+				rec["RD"].push(readDoubleFunc.call(reader));
+		}
+		// Sy
+		// 0 - None, 1 - P, 2 - S
+		if (flags & (1 << 16))
+			rec["Sy"] = reader.readByte();
+	}
+	// FileAttachment
+	else if (rec["type"] == 16)
+	{
+		if (flags & (1 << 15))
+			rec["Icon"] = readStringFunc.call(reader);
+		if (flags & (1 << 16))
+			rec["FS"] = readStringFunc.call(reader);
+		if (flags & (1 << 17))
+		{
+			rec["F"] = {};
+			rec["F"]["FileName"] = readStringFunc.call(reader);
+		}
+		if (flags & (1 << 18))
+		{
+			rec["UF"] = {};
+			rec["UF"]["FileName"] = readStringFunc.call(reader);
+		}
+		if (flags & (1 << 19))
+		{
+			rec["DOS"] = {};
+			rec["DOS"]["FileName"] = readStringFunc.call(reader);
+		}
+		if (flags & (1 << 20))
+		{
+			rec["Mac"] = {};
+			rec["Mac"]["FileName"] = readStringFunc.call(reader);
+		}
+		if (flags & (1 << 21))
+		{
+			rec["Unix"] = {};
+			rec["Unix"]["FileName"] = readStringFunc.call(reader);
+		}
+		if (flags & (1 << 22))
+		{
+			rec["ID"] = [];
+			rec["ID"].push(readStringFunc.call(reader));
+			rec["ID"].push(readStringFunc.call(reader));
+		}
+		rec["V"] = flags & (1 << 23);
+		if (flags & (1 << 24))
+		{
+			if (isRead)
+			{
+
+			}
+			else
+			{
+				let flag = reader.readInt();
+				if (flag & (1 << 0))
+				{
+					let n = reader.readInt();
+					let np1 = reader.readInt();
+					let np2 = reader.readInt();
+					let pPoint = np2 << 32 | np1;
+					rec["F"]["File"] = new Uint8Array(Module["HEAP8"].buffer, pPoint, n);
+					Module["_free"](pPoint);
+				}
+				if (flag & (1 << 1))
+				{
+					let n = reader.readInt();
+					let np1 = reader.readInt();
+					let np2 = reader.readInt();
+					let pPoint = np2 << 32 | np1;
+					rec["UF"]["File"] = new Uint8Array(Module["HEAP8"].buffer, pPoint, n);
+					Module["_free"](pPoint);
+				}
+				if (flag & (1 << 2))
+				{
+					let n = reader.readInt();
+					let np1 = reader.readInt();
+					let np2 = reader.readInt();
+					let pPoint = np2 << 32 | np1;
+					rec["DOS"]["File"] = new Uint8Array(Module["HEAP8"].buffer, pPoint, n);
+					Module["_free"](pPoint);
+				}
+				if (flag & (1 << 3))
+				{
+					let n = reader.readInt();
+					let np1 = reader.readInt();
+					let np2 = reader.readInt();
+					let pPoint = np2 << 32 | np1;
+					rec["Mac"]["File"] = new Uint8Array(Module["HEAP8"].buffer, pPoint, n);
+					Module["_free"](pPoint);
+				}
+				if (flag & (1 << 4))
+				{
+					let n = reader.readInt();
+					let np1 = reader.readInt();
+					let np2 = reader.readInt();
+					let pPoint = np2 << 32 | np1;
+					rec["Unix"]["File"] = new Uint8Array(Module["HEAP8"].buffer, pPoint, n);
+					Module["_free"](pPoint);
+				}
+			}
+			
+		}
+		if (flags & (1 << 26))
+			rec["Desc"] = readStringFunc.call(reader);
+	}
+	// Stamp
+	else if (rec["type"] == 12)
+	{
+		rec["Icon"] = readStringFunc.call(reader);
+		rec["Rotate"] = readDouble2Func.call(reader);
+		rec["InRect"] = [];
+		for (let i = 0; i < 8; ++i)
+			rec["InRect"].push(readDouble2Func.call(reader));
+	}
+	// Redact
+	else if (rec["type"] == 25)
+	{
+		// QuadPoints
+		if (flags & (1 << 15))
+		{
+			let n = reader.readInt();
+			rec["QuadPoints"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["QuadPoints"].push(readDoubleFunc.call(reader));
+		}
+		// IC
+		if (flags & (1 << 16))
+		{
+			let n = reader.readInt();
+			rec["IC"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["IC"].push(readDouble2Func.call(reader));
+		}
+		// OverlayText
+		if (flags & (1 << 17))
+			rec["OverlayText"] = readStringFunc.call(reader);
+		// Repeat
+		rec["Repeat"] = (flags >> 18) & 1;
+		// Q - alignment
+		if (flags & (1 << 19))
+		{
+			// 0 - left-justified, 1 - centered, 2 - right-justified
+			rec["alignment"] = reader.readByte();
+		}
+		// Font from DA
+		if (flags & (1 << 20))
+		{
+			rec["font"] = {};
+			let n = reader.readInt();
+			rec["font"]["color"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["font"]["color"].push(readDouble2Func.call(reader));
+			rec["font"]["size"] = readDoubleFunc.call(reader);
+			rec["font"]["name"] = readStringFunc.call(reader);
+			if (!isRead)
+			{
+				let fontActual = readStringFunc.call(reader);
+				if (fontActual != "")
+					rec["font"]["actual"] = fontActual;
+			}
+			rec["font"]["style"] = reader.readInt();
+		}
+	}
+	// Link
+	else if (rec["type"] == 1)
+	{
+		flags = reader.readInt();
+		if (flags & (1 << 0))
+		{
+			rec["A"] = {};
+			if (isRead)
+				readStringFunc.call(reader);
+			readAction(reader, rec["A"], readDoubleFunc, readStringFunc);
+		}
+		if (flags & (1 << 1))
+		{
+			rec["PA"] = {};
+			if (isRead)
+				readStringFunc.call(reader);
+			readAction(reader, rec["PA"], readDoubleFunc, readStringFunc);
+		}
+		// Selection mode - H
+		// 0 - none, 1 - invert, 2 - push, 3 - outline
+		if (flags & (1 << 2))
+			rec["highlight"] = reader.readByte();
+		// QuadPoints
+		if (flags & (1 << 3))
+		{
+			let n = reader.readInt();
+			rec["QuadPoints"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["QuadPoints"].push(readDoubleFunc.call(reader));
+		}
+	}
+}
+function readWidgetType(reader, rec, readDoubleFunc, readDouble2Func, readStringFunc, isRead = false)
+{
+	// Widget
+	rec["font"] = {};
+	rec["font"]["name"] = readStringFunc.call(reader);
+	rec["font"]["size"] = readDoubleFunc.call(reader);
+	if (isRead)
+		rec["font"]["sizeAP"] = readDoubleFunc.call(reader);
+	rec["font"]["style"] = reader.readInt();
+	let tc = reader.readInt();
+	if (tc)
+	{
+		rec["font"]["color"] = [];
+		for (let i = 0; i < tc; ++i)
+			rec["font"]["color"].push(readDouble2Func.call(reader));
+	}
+	// 0 - left-justified, 1 - centered, 2 - right-justified
+	if (!isRead || (rec["type"] != 29 && rec["type"] != 28 && rec["type"] != 27))
+		rec["alignment"] = reader.readByte();
+	rec["flag"] = reader.readInt();
+	// 12.7.3.1
+	if (rec["flag"] >= 0)
+	{
+		rec["readOnly"] = (rec["flag"] >> 0) & 1; // ReadOnly
+		rec["required"] = (rec["flag"] >> 1) & 1; // Required
+		rec["noexport"] = (rec["flag"] >> 2) & 1; // NoExport
+	}
+	let flags = reader.readInt();
+	// Alternative field name, used in tooltip and error messages - TU
+	if (flags & (1 << 0))
+		rec["tooltip"] = readStringFunc.call(reader);
+	// Default style string (CSS2 format) - DS
+	if (flags & (1 << 1))
+		rec["defaultStyle"] = readStringFunc.call(reader);
+	// Actual font
+	if (flags & (1 << 2))
+		rec["font"]["actual"] = readStringFunc.call(reader);
+	// Selection mode - H
+	// 0 - none, 1 - invert, 2 - push, 3 - outline
+	if (flags & (1 << 3))
+		rec["highlight"] = reader.readByte();
+	// Font key
+	if (flags & (1 << 4))
+		rec["font"]["key"] = readStringFunc.call(reader);
+	// Border color - BC. Even if the border is not specified by BS/Border, 
+	// then if BC is present, a default border is provided (solid, thickness 1). 
+	// If the text annotation has MaxLen, borders appear for each character
+	if (flags & (1 << 5))
+	{
+		let n = reader.readInt();
+		rec["BC"] = [];
+		for (let i = 0; i < n; ++i)
+			rec["BC"].push(readDouble2Func.call(reader));
+	}
+	// Rotate an annotation relative to the page - R
+	if (flags & (1 << 6))
+		rec["rotate"] = reader.readInt();
+	// Annotation background color - BG
+	if (flags & (1 << 7))
+	{
+		let n = reader.readInt();
+		rec["BG"] = [];
+		for (let i = 0; i < n; ++i)
+			rec["BG"].push(readDouble2Func.call(reader));
+	}
+	// Default value - DV
+	if (flags & (1 << 8))
+		rec["defaultValue"] = readStringFunc.call(reader);
+	if (flags & (1 << 17))
+		rec["Parent"] = reader.readInt();
+	if (flags & (1 << 18))
+		rec["name"] = readStringFunc.call(reader);
+	if (flags & (1 << 19))
+		rec["font"]["AP"] = readStringFunc.call(reader);
+	// if (flags & (1 << 20))
+	// 	readStringFunc.call(reader);
+	if (flags & (1 << 21))
+		rec["MEOptions"] = reader.readInt();
+	// Action
+	let nAction = reader.readInt();
+	if (nAction > 0)
+		rec["AA"] = {};
+	for (let i = 0; i < nAction; ++i)
+	{
+		let AAType = readStringFunc.call(reader);
+		rec["AA"][AAType] = {};
+		readAction(reader, rec["AA"][AAType], readDoubleFunc, readStringFunc);
+	}
+	// Widget types
+	if (rec["type"] == 27)
+	{
+		if (flags & (1 << 9))
+			rec["value"] = readStringFunc.call(reader);
+		let IFflags = reader.readInt();
+		// Header - CA
+		if (flags & (1 << 10))
+			rec["caption"] = readStringFunc.call(reader);
+		// Rollover header - RC
+		if (flags & (1 << 11))
+			rec["rolloverCaption"] = readStringFunc.call(reader);
+		// Alternate header - AC
+		if (flags & (1 << 12))
+			rec["alternateCaption"] = readStringFunc.call(reader);
+		// Header position - TP
+		if (flags & (1 << 13))
+			// 0 - textOnly, 1 - iconOnly, 2 - iconTextV, 3 - textIconV, 4 - iconTextH, 5 - textIconH, 6 - overlay
+			rec["position"] = reader.readByte();
+		// Icons - IF
+		if (IFflags & (1 << 0))
+		{
+			rec["IF"] = {};
+			// Scaling IF.SW
+			// 0 - Always, 1 - Never, 2 - too big, 3 - too small
+			if (IFflags & (1 << 1))
+				rec["IF"]["SW"] = reader.readByte();
+			// Scaling type - IF.S
+			// 0 - Proportional, 1 - Anamorphic
+			if (IFflags & (1 << 2))
+				rec["IF"]["S"] = reader.readByte();
+			if (IFflags & (1 << 3))
+			{
+				rec["IF"]["A"] = [];
+				rec["IF"]["A"].push(readDoubleFunc.call(reader));
+				rec["IF"]["A"].push(readDoubleFunc.call(reader));
+			}
+			rec["IF"]["FB"] = (IFflags >> 4) & 1;
+		}
+		if (isRead)
+		{
+			if (IFflags & (1 << 5))
+				rec["I"] = reader.readInt();
+			if (IFflags & (1 << 6))
+				rec["RI"] = reader.readInt();
+			if (IFflags & (1 << 7))
+				rec["IX"] = reader.readInt();
+		}
+	}
+	else if (rec["type"] == 29 || rec["type"] == 28)
+	{
+		if (flags & (1 << 9))
+			rec["value"] = readStringFunc.call(reader);
+		// 0 - check, 1 - cross, 2 - diamond, 3 - circle, 4 - star, 5 - square
+		rec["style"] = reader.readByte();
+		if (flags & (1 << 10))
+		{
+			let n = reader.readInt();
+			rec["opt"] = [];
+			for (let i = 0; i < n; ++i)
+			{
+				let opt1 = readStringFunc.call(reader);
+				let opt2 = readStringFunc.call(reader);
+				if (opt1 == "")
+					rec["opt"].push(opt2);
+				else
+					rec["opt"].push([opt2, opt1]);
+			}
+		}
+		if (flags & (1 << 14))
+			rec["ExportValue"] = readStringFunc.call(reader);
+		// 12.7.4.2.1
+		if (rec["flag"] >= 0)
+		{
+			rec["NoToggleToOff"]  = (rec["flag"] >> 14) & 1; // NoToggleToOff
+			rec["radiosInUnison"] = (rec["flag"] >> 25) & 1; // RadiosInUnison
+		}
+	}
+	else if (rec["type"] == 30)
+	{
+		if (flags & (1 << 9))
+			rec["value"] = readStringFunc.call(reader);
+		if (flags & (1 << 10))
+			rec["maxLen"] = reader.readInt();
+		if (flags & (1 << 11))
+			rec["richValue"] = readStringFunc.call(reader);
+		if (isRead)
+		{
+			if (flags & (1 << 12))
+				rec["AP"]["V"] = readStringFunc.call(reader);
+			if (flags & (1 << 13))
+				rec["AP"]["render"] = reader.readData(); // TODO use Render - Uint8Array
+		}
+		// 12.7.4.3
+		if (rec["flag"] >= 0)
+		{
+			rec["multiline"]       = (rec["flag"] >> 12) & 1; // Multiline
+			rec["password"]        = (rec["flag"] >> 13) & 1; // Password
+			rec["fileSelect"]      = (rec["flag"] >> 20) & 1; // FileSelect
+			rec["doNotSpellCheck"] = (rec["flag"] >> 22) & 1; // DoNotSpellCheck
+			rec["doNotScroll"]     = (rec["flag"] >> 23) & 1; // DoNotScroll
+			rec["comb"]            = (rec["flag"] >> 24) & 1; // Comb
+			rec["richText"]        = (rec["flag"] >> 25) & 1; // RichText
+		}
+	}
+	else if (rec["type"] == 31 || rec["type"] == 32)
+	{
+		if (flags & (1 << 9))
+			rec["value"] = readStringFunc.call(reader);
+		if (flags & (1 << 10))
+		{
+			let n = reader.readInt();
+			rec["opt"] = [];
+			for (let i = 0; i < n; ++i)
+			{
+				let opt1 = readStringFunc.call(reader);
+				let opt2 = readStringFunc.call(reader);
+				if (opt1 == "")
+					rec["opt"].push(opt2);
+				else
+					rec["opt"].push([opt2, opt1]);
+			}
+		}
+		if (flags & (1 << 11))
+			rec["TI"] = reader.readInt();
+		if (isRead)
+		{
+			if (flags & (1 << 12))
+				rec["AP"]["V"] = readStringFunc.call(reader);
+		}
+		else
+		{
+			if (flags & (1 << 12))
+			{
+				let n = reader.readInt();
+				rec["curIdxs"] = [];
+				for (let i = 0; i < n; ++i)
+					rec["curIdxs"].push(reader.readInt());
+			}
+		}
+		if (flags & (1 << 13))
+		{
+			let n = reader.readInt();
+			rec["value"] = [];
+			for (let i = 0; i < n; ++i)
+				rec["value"].push(readStringFunc.call(reader));
+		}
+		if (isRead)
+		{
+			if (flags & (1 << 14))
+			{
+				let n = reader.readInt();
+				rec["I"] = [];
+				for (let i = 0; i < n; ++i)
+					rec["I"].push(reader.readInt());
+			}
+			if (flags & (1 << 15))
+				rec["AP"]["render"] = reader.readData(); // TODO use Render - Uint8Array
+		}
+		// 12.7.4.4
+		if (rec["flag"] >= 0)
+		{
+			rec["editable"]          = (rec["flag"] >> 18) & 1; // Edit
+			rec["multipleSelection"] = (rec["flag"] >> 21) & 1; // MultiSelect
+			rec["doNotSpellCheck"]   = (rec["flag"] >> 22) & 1; // DoNotSpellCheck
+			rec["commitOnSelChange"] = (rec["flag"] >> 26) & 1; // CommitOnSelChange
+		}
+		
+	}
+	else if (rec["type"] == 33)
+	{
+		rec["Sig"] = (flags >> 9) & 1;
+	}
+	if (rec["flag"] < 0)
+		delete rec["flag"];
+}
+
+CFile.prototype["getInteractiveFormsInfo"] = function()
+{
+	let ptr = this._getInteractiveFormsInfo();
+	let reader = ptr.getReader();
+	if (!reader) return {};
+
+	let res = {};
+	while (reader.isValid())
+	{
+		let k = reader.readInt();
+		if (k > 0 && res["CO"] == undefined)
+			res["CO"] = [];
+		for (let i = 0; i < k; ++i)
+			res["CO"].push(reader.readInt());
+		
+		k = reader.readInt();
+		if (k > 0 && res["Parents"] == undefined)
+			res["Parents"] = [];
+		for (let i = 0; i < k; ++i)
+		{
+			let rec = {};
+			rec["i"] = reader.readInt();
+			let flags = reader.readInt();
+			if (flags & (1 << 0))
+				rec["name"] = reader.readString();
+			if (flags & (1 << 1))
+				rec["value"] = reader.readString();
+			if (flags & (1 << 2))
+				rec["defaultValue"] = reader.readString();
+			if (flags & (1 << 3))
+			{
+				let n = reader.readInt();
+				rec["curIdxs"] = [];
+				for (let i = 0; i < n; ++i)
+					rec["curIdxs"].push(reader.readInt());
+			}
+			if (flags & (1 << 4))
+				rec["Parent"] = reader.readInt();
+			if (flags & (1 << 5))
+			{
+				let n = reader.readInt();
+				rec["value"] = [];
+				for (let i = 0; i < n; ++i)
+					rec["value"].push(reader.readString());
+			}
+			if (flags & (1 << 6))
+			{
+				let n = reader.readInt();
+				rec["opt"] = [];
+				for (let i = 0; i < n; ++i)
+				{
+					let opt1 = reader.readString();
+					let opt2 = reader.readString();
+					if (opt1 == "")
+						rec["opt"].push(opt2);
+					else
+						rec["opt"].push([opt2, opt1]);
+				}
+			}
+			if (flags & (1 << 7))
+			{
+				rec["flag"] = reader.readInt();
+
+				rec["readOnly"] = (rec["flag"] >> 0) & 1; // ReadOnly
+				rec["required"] = (rec["flag"] >> 1) & 1; // Required
+				rec["noexport"] = (rec["flag"] >> 2) & 1; // NoExport
+
+				rec["NoToggleToOff"]  = (rec["flag"] >> 14) & 1; // NoToggleToOff
+				if ((rec["flag"] >> 15) & 1) // If radiobutton
+					rec["radiosInUnison"] = (rec["flag"] >> 25) & 1; // RadiosInUnison
+				else
+					rec["richText"]       = (rec["flag"] >> 25) & 1; // RichText
+
+				rec["multiline"]       = (rec["flag"] >> 12) & 1; // Multiline
+				rec["password"]        = (rec["flag"] >> 13) & 1; // Password
+				rec["fileSelect"]      = (rec["flag"] >> 20) & 1; // FileSelect
+				rec["doNotSpellCheck"] = (rec["flag"] >> 22) & 1; // DoNotSpellCheck
+				rec["doNotScroll"]     = (rec["flag"] >> 23) & 1; // DoNotScroll
+				rec["comb"]            = (rec["flag"] >> 24) & 1; // Comb
+
+				rec["editable"]          = (rec["flag"] >> 18) & 1; // Edit
+				rec["multipleSelection"] = (rec["flag"] >> 21) & 1; // MultiSelect
+				rec["commitOnSelChange"] = (rec["flag"] >> 26) & 1; // CommitOnSelChange
+			}
+			if (flags & (1 << 8))
+			{
+				let nAction = reader.readInt();
+				if (nAction > 0)
+					rec["AA"] = {};
+				for (let i = 0; i < nAction; ++i)
+				{
+					let AAType = reader.readString();
+					rec["AA"][AAType] = {};
+					readAction(reader, rec["AA"][AAType], reader.readDouble, reader.readString);
+				}
+			}
+			if (flags & (1 << 9))
+				rec["maxLen"] = reader.readInt();
+			if (flags & (1 << 10))
+				rec["tooltip"] = reader.readString();			
+			if (flags & (1 << 11))
+				rec["MEOptions"] = reader.readInt();
+			res["Parents"].push(rec);
+		}
+
+		k = reader.readInt();
+		if (k > 0 && res["Fields"] == undefined)
+			res["Fields"] = [];
+		for (let q = 0; reader.isValid() && q < k; ++q)
+		{
+			let rec = {};
+			// Widget type - FT
+			// 26 - Unknown, 27 - button, 28 - radiobutton, 29 - checkbox, 30 - text, 31 - combobox, 32 - listbox, 33 - signature
+			rec["type"] = reader.readByte();
+			// Annot
+			readAnnot(reader, rec, reader.readDouble, reader.readDouble2, reader.readString);
+			// Widget type
+			readWidgetType(reader, rec, reader.readDouble, reader.readDouble2, reader.readString);
+
+			res["Fields"].push(rec);
+		}
+	}
+
+	ptr.free();
+	return res;
+};	
+
+// optional nWidget     - rec["AP"]["i"]
+// optional sView       - N/D/R
+// optional sButtonView - state pushbutton-annotation - Off/Yes(or rec["ExportValue"])
+CFile.prototype["getInteractiveFormsAP"] = function(originIndex, width, height, backgroundColor, nWidget, sView, sButtonView)
+{
+	let nView = -1;
+	if (sView)
+	{
+		if (sView == "N")
+			nView = 0;
+		else if (sView == "D")
+			nView = 1;
+		else if (sView == "R")
+			nView = 2;
+	}
+	let nButtonView = -1;
+	if (sButtonView)
+		nButtonView = (sButtonView == "Off" ? 0 : 1);
+
+	let pageIndex = this.pages.findIndex(function(page) {
+		return page.originIndex == originIndex;
+	});
+	this.lockPageNumForFontsLoader(pageIndex, UpdateFontsSource.Forms);
+	let ptr = this._getInteractiveFormsAP(width, height, backgroundColor, originIndex, nWidget, nView, nButtonView);
+	let reader = ptr.getReader();
+	this.unlockPageNumForFontsLoader();
+	
+	if (!reader)
+		return [];
+
+	let res = [];
+
+	while (reader.isValid())
+	{
+		// Annotation view
+		let AP = {};
+		readAnnotAP(reader, AP);
+		res.push(AP);
+	}
+
+	ptr.free();
+	return res;
+};
+// optional bBase64   - true/false base64 result
+// optional nWidget ...
+// optional sIconView - icon - I/RI/IX
+CFile.prototype["getButtonIcons"] = function(pageIndex, width, height, backgroundColor, bBase64, nWidget, sIconView)
+{
+	let nView = -1;
+	if (sIconView)
+	{
+		if (sIconView == "I")
+			nView = 0;
+		else if (sIconView == "RI")
+			nView = 1;
+		else if (sIconView == "IX")
+			nView = 2;
+	}
+
+	let ptr = this._getButtonIcons(backgroundColor, pageIndex, bBase64, nWidget, nView);
+	let reader = ptr.getReader();
+
+	if (!reader) return {};
+
+	let res = {};
+	
+	res["MK"] = [];
+	res["View"] = [];
+
+	while (reader.isValid())
+	{
+		// View pushbutton annotation
+		let MK = {};
+		// Relation with AP
+		MK["i"] = reader.readInt();
+		let n = reader.readInt();
+		for (let i = 0; i < n; ++i)
+		{
+			let MKType = reader.readString();
+			MK[MKType] = reader.readInt();
+			let unique = reader.readByte();
+			if (unique)
+			{
+				let ViewMK = {};
+				ViewMK["j"] = MK[MKType];
+				ViewMK["w"] = reader.readInt();
+				ViewMK["h"] = reader.readInt();
+				if (bBase64)
+				{
+					// base64 string with image
+					ViewMK["retValue"] = reader.readString();
+				}
+				else
+				{
+					let np1 = reader.readInt();
+					let np2 = reader.readInt();
+					// this memory needs to be deleted
+					ViewMK["retValue"] = np2 << 32 | np1;
+				}
+				res["View"].push(ViewMK);
+			}
+		}
+		res["MK"].push(MK);
+	}
+
+	ptr.free();
+	return res;
+};
+// optional originIndex - get annotations from specific page
+CFile.prototype["getAnnotationsInfo"] = function(originIndex)
+{
+	if (!this.nativeFile)
+		return [];
+
+	let ptr = this._getAnnotationsInfo(originIndex);
+	let reader = ptr.getReader();
+
+	if (!reader) return [];
+
+	let res = [];
+	while (reader.isValid())
+	{
+		let n = reader.readInt();
+		for (let i = 0; i < n; ++i)
+		{
+			let rec = {};
+			// Annotation type
+			// 0 - Text, 1 - Link, 2 - FreeText, 3 - Line, 4 - Square, 5 - Circle,
+			// 6 - Polygon, 7 - PolyLine, 8 - Highlight, 9 - Underline, 10 - Squiggly, 
+			// 11 - Strikeout, 12 - Stamp, 13 - Caret, 14 - Ink, 15 - Popup, 16 - FileAttachment, 
+			// 17 - Sound, 18 - Movie, 19 - Widget, 20 - Screen, 21 - PrinterMark,
+			// 22 - TrapNet, 23 - Watermark, 24 - 3D, 25 - Redact
+			rec["type"] = reader.readByte();
+			// Annot
+			readAnnot(reader, rec, reader.readDouble, reader.readDouble2, reader.readString);
+			// Annot type
+			readAnnotType(reader, rec, reader.readDouble, reader.readDouble2, reader.readString);
+			res.push(rec);
+		}
+	}
+	
+	ptr.free();
+	return res;
+};
+// optional nAnnot ...
+// optional sView ...
+CFile.prototype["getAnnotationsAP"] = function(originIndex, width, height, backgroundColor, nAnnot, sView)
+{
+	let nView = -1;
+	if (sView)
+	{
+		if (sView == "N")
+			nView = 0;
+		else if (sView == "D")
+			nView = 1;
+		else if (sView == "R")
+			nView = 2;
+	}
+
+	let pageIndex = this.pages.findIndex(function(page) {
+		return page.originIndex == originIndex;
+	});
+	this.lockPageNumForFontsLoader(pageIndex, UpdateFontsSource.Annotation);
+	let ptr = this._getAnnotationsAP(width, height, backgroundColor, originIndex, nAnnot, nView);
+	let reader = ptr.getReader();
+	this.unlockPageNumForFontsLoader();
+
+	if (!reader)
+		return [];
+
+	let res = [];
+	while (reader.isValid())
+	{
+		// Annotation view
+		let AP = {};
+		readAnnotAP(reader, AP);
+		res.push(AP);
+	}
+
+	ptr.free();
+	return res;
+};
+
+// AnnotInfo - Uint8Array with ctAnnotField format
+CFile.prototype["readAnnotationsInfoFromBinary"] = function(AnnotInfo)
+{
+	if (!AnnotInfo)
+		return [];
+
+	let reader = new CBinaryReader(AnnotInfo, 0, AnnotInfo.length);
+	if (!reader) return [];
+
+	let res = { annots:[], imgs:[] };
+	while (reader.isValid())
+	{
+		let nCommand = reader.readByte();
+		let nPos = reader.pos;
+		let nSize = reader.readInt();
+		if (nCommand == 164) // ctAnnotField
+		{
+			let rec = {};
+			// Annotation type
+			// 0 - Text, 1 - Link, 2 - FreeText, 3 - Line, 4 - Square, 5 - Circle,
+			// 6 - Polygon, 7 - PolyLine, 8 - Highlight, 9 - Underline, 10 - Squiggly, 
+			// 11 - Strikeout, 12 - Stamp, 13 - Caret, 14 - Ink, 15 - Popup, 16 - FileAttachment, 
+			// 17 - Sound, 18 - Movie, 19 - Widget, 20 - Screen, 21 - PrinterMark,
+			// 22 - TrapNet, 23 - Watermark, 24 - 3D, 25 - Redact
+			rec["type"] = reader.readByte();
+			// Annot
+			readAnnot(reader, rec, reader.readDouble3, reader.readDouble3, reader.readString2, true);
+			// Annot type
+			readAnnotType(reader, rec, reader.readDouble3, reader.readDouble3, reader.readString2, true);
+			if (rec["type"] >= 26 && rec["type"] <= 33)
+			{
+				// Widget type
+				readWidgetType(reader, rec, reader.readDouble3, reader.readDouble3, reader.readString2, true);
+			}
+			res.annots.push(rec);
+		}
+		else if (nCommand == 166) // ctWidgetsInfo
+		{
+			reader.readInt(); // CO must be 0
+			reader.readInt(); // Parents must be 0
+			// ButtonImg
+			let n = reader.readInt();
+			for (let i = 0; i < n; ++i)
+			{
+				let data = reader.readString();
+				res.imgs.push(data);
+			}
+		}
+		else
+		{
+			reader.pos = nPos + nSize;
+			continue;
+		}
+	}
+
+	return res;
+};
+
+// SCAN PAGES
+CFile.prototype["scanPageFonts"] = function(page)
+{
+	this._setScanPageFonts(page);
+};
+
+CFile.prototype["scanPage"] = function(page, mode)
+{
+	let ptr = this._scanPage(page, mode);
+	if (mode == 2) {
+		data = ptr.getMemory(true);
+		ptr.free();
+		return data;
+	}
+
+	let reader = ptr.getReader();
+	if (!reader) return [];
+
+	let shapesCount = reader.readInt();
+	let shapes = new Array(shapesCount);
+
+	for (let i = 0; i < shapesCount; i++)
+		shapes[i] = reader.readString();
+
+	ptr.free();
+	return shapes;
+};
+
+CFile.prototype["getImageBase64"] = function(rId)
+{
+	let strId = "" + rId;
+	if (this.scannedImages[strId])
+		return this.scannedImages[strId];
+
+	this.scannedImages[strId] = this._getImageBase64(rId);
+	return this.scannedImages[strId];
+};
+
+CFile.prototype["changeImageUrl"] = function(baseUrl, resultUrl)
+{
+	for (let i in this.scannedImages)
+	{
+		if (this.scannedImages[i] == baseUrl)
+			this.scannedImages[i] = resultUrl;
+	}
+};
+
+// MEMORY
+CFile.prototype["getUint8Array"] = function(ptr, len)
+{
+	return this._getUint8Array(ptr, len);
+};
+CFile.prototype["getUint8ClampedArray"] = function(ptr, len)
+{
+	return this._getUint8ClampedArray(ptr, len);
+};
+CFile.prototype["free"] = function(pointer)
+{
+	this._free(pointer);
+};
+
+// PIXMAP
+CFile.prototype["getPagePixmap"] = function(pageIndex, width, height, backgroundColor)
+{
+	let page = this.pages[pageIndex];
+	if (page.originIndex == undefined)
+		return null;
+	if (page.fonts.length > 0)
+	{
+		// waiting fonts
+		return null;
+	}
+
+	this.lockPageNumForFontsLoader(pageIndex, UpdateFontsSource.Page);
+	let ptr = this._getPixmap(page.originIndex, width, height, backgroundColor);
+	this.unlockPageNumForFontsLoader();
+
+	if (page.fonts.length > 0)
+	{
+		// waiting fonts
+		this._free(ptr);
+		ptr = null;
+	}
+	return ptr;
+};
+
+// CLOUD FONTS
+function addToArrayAsDictionary(arr, value)
+{
+	let isFound = false;
+	for (let i = 0, len = arr.length; i < len; i++)
+	{
+		if (arr[i] == value)
+		{
+			isFound = true;
+			break;
+		}
+	}
+	if (!isFound)
+		arr.push(value);
+	return isFound;
+}
+
+function fontToMemory(file, isCheck)
+{
+	let idBuffer = file.GetID().toUtf8();
+	let idPointer = Module["_malloc"](idBuffer.length);
+	Module["HEAP8"].set(idBuffer, idPointer);
+
+	if (isCheck)
+	{
+		let nExist = Module["_IsFontBinaryExist"](idPointer);
+		if (nExist != 0)
+		{
+			Module["_free"](idPointer);
+			return;
+		}
+	}
+
+	let stream_index = file.GetStreamIndex();
+	
+	let stream = AscFonts.getFontStream(stream_index);
+	let streamPointer = Module["_malloc"](stream.size);
+	Module["HEAP8"].set(stream.data, streamPointer);
+
+	Module["_SetFontBinary"](idPointer, streamPointer, stream.size);
+
+	Module["_free"](streamPointer);
+	Module["_free"](idPointer);
+}
+
+// FONTS
+CFile.prototype["addPage"] = function(pageIndex, pageObj)
+{
+	this.pages.splice(pageIndex, 0, pageObj);
+	if (this.fontStreams)
+	{
+		for (let i in this.fontStreams)
+		{
+			let pages = this.fontStreams[i].pages;
+			for (let j = 0; j < pages.length; j++)
+			{
+				if (pages[j] >= pageIndex)
+					pages[j] += 1;
+			}
+		}
+	}
+};
+CFile.prototype["removePage"] = function(pageIndex)
+{
+	let result = this.pages.splice(pageIndex, 1);
+	if (this.fontStreams)
+	{
+		for (let i in this.fontStreams)
+		{
+			let pages = this.fontStreams[i].pages;
+			for (let j = 0; j < pages.length; j++)
+			{
+				if (pages[j] > pageIndex)
+					pages[j] -= 1;
+				else if (pages[j] == pageIndex)
+					pages.splice(j, 1);
+			}
+		}
+	}
+	return result;
+};
+
+// ONLY WEB
+self["AscViewer"]["Free"] = function(pointer)
+{
+	CFile.prototype._free(pointer);
+};
+self["AscViewer"]["InitializeFonts"] = function(basePath) 
+{
+	return CFile.prototype._InitializeFonts(basePath);
+};
+
+self["AscViewer"]["CheckStreamId"] = function(data, status) 
+{
+	return CFile.prototype._CheckStreamId(data, status);
+};
+
+// export
+self["AscViewer"]["CDrawingFile"] = CFile;
+
+self.drawingFile = null;

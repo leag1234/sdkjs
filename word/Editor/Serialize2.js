@@ -344,7 +344,9 @@ var c_oSerProp_rPrType = {
 	Reflection: 52,
 	Glow: 53,
 	Props3d: 54,
-	Scene3d: 55
+	Scene3d: 55,
+	Kern: 56,
+	Border: 57 // must equal c_oSerProp_rPrType::Border in core BinReaderWriterDefines.h
 };
 var c_oSerProp_rowPrType = {
     CantSplit:0,
@@ -3358,6 +3360,12 @@ function Binary_rPrWriter(memory, saveParams)
 			this.memory.WriteByte(c_oSerProp_rPrType.Shd);
             this.memory.WriteByte(c_oSerPropLenType.Variable);
             this.bs.WriteItemWithLength(function () { _this.bs.WriteShd(rPr.Shd); });
+		}
+		if (rPr.Border)
+		{
+			this.memory.WriteByte(c_oSerProp_rPrType.Border);
+			this.memory.WriteByte(c_oSerPropLenType.Variable);
+			this.bs.WriteItemWithLength(function () { _this.bs.WriteBorder(rPr.Border); });
 		}
 		if(null != rPr.Vanish)
 		{
@@ -10322,6 +10330,14 @@ function Binary_rPrReader(doc, oReadResult, stream)
                 rPr.Shd = new CDocumentShd();
 				ReadDocumentShd(length, this.bcr, rPr.Shd);
                 break;
+			case c_oSerProp_rPrType.Border:
+				var bpPrrBorder = new Binary_pPrReader(this.Document, this.oReadResult, this.stream);
+				var oBorder = new CDocumentBorder();
+				res = this.bcr.Read2(length, function(t, l) {
+					return bpPrrBorder.ReadBorder(t, l, oBorder);
+				});
+				rPr.Border = oBorder;
+				break;
 			case c_oSerProp_rPrType.Vanish:
                 rPr.Vanish = this.stream.GetBool();
                 break;

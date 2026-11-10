@@ -3133,6 +3133,72 @@ function isAllowPasteLink(pastedWb) {
     };
 
     // ----- Drawing for print -----
+	/**
+	 * Page margins (mm) that leave less than this share of the page for the content are considered broken
+	 * (e.g. a bottom margin of 149 cm on an A4 page) and are replaced by the default ones when printing.
+	 * @type {number}
+	 */
+	var c_nMinPrintableShare = 0.2;
+
+	/**
+	 * Checks the stored margins against the page size and falls back to the default margins when no usable
+	 * printable area is left (Excel does the same). All values are in mm, the page size already takes the
+	 * orientation into account.
+	 * @returns {{left: number, right: number, top: number, bottom: number, fallback: boolean}}
+	 */
+	function fixPrintMargins(pageWidth, pageHeight, left, right, top, bottom) {
+		var all = [left, right, top, bottom];
+		var usable = true;
+		for (var i = 0; i < all.length; ++i) {
+			if (!isFinite(all[i]) || all[i] < 0) {
+				usable = false;
+			}
+		}
+		if (usable) {
+			usable = (pageWidth - left - right) >= pageWidth * c_nMinPrintableShare &&
+				(pageHeight - top - bottom) >= pageHeight * c_nMinPrintableShare;
+		}
+		if (usable) {
+			return {left: left, right: right, top: top, bottom: bottom, fallback: false};
+		}
+		return {left: c_oAscPrintDefaultSettings.PageLeftField, right: c_oAscPrintDefaultSettings.PageRightField,
+			top: c_oAscPrintDefaultSettings.PageTopField, bottom: c_oAscPrintDefaultSettings.PageBottomField, fallback: true};
+	}
+
+	/**
+	 * Margins that are really used for printing with the given page options, and whether the stored ones were
+	 * replaced by the defaults because they leave no usable printable area.
+	 * @param {Asc.asc_CPageOptions} [pageOptions] the sheet options when omitted
+	 * @returns {{fallback: boolean, stored: {left: number, right: number, top: number, bottom: number}, used: {left: number, right: number, top: number, bottom: number}, pageWidth: number, pageHeight: number}}
+	 */
+	WorksheetView.prototype.getPrintMarginsInfo = function (pageOptions) {
+		var options = pageOptions || this.model.PagePrintOptions;
+		var margins = options && options.asc_getPageMargins();
+		var setup = options && options.asc_getPageSetup();
+		var d = c_oAscPrintDefaultSettings;
+		var pageWidth = setup && null != setup.asc_getWidth() ? setup.asc_getWidth() : d.PageWidth;
+		var pageHeight = setup && null != setup.asc_getHeight() ? setup.asc_getHeight() : d.PageHeight;
+		var orientation = setup && null != setup.asc_getOrientation() ? setup.asc_getOrientation() : d.PageOrientation;
+		if (Asc.c_oAscPageOrientation.PageLandscape === orientation) {
+			var tmp = pageWidth;
+			pageWidth = pageHeight;
+			pageHeight = tmp;
+		}
+		var field = function (val, min, def) {
+			return null == val ? def : Math.max(val, min);
+		};
+		var stored = {
+			left: field(margins && margins.asc_getLeft(), d.MinPageLeftField, d.PageLeftField),
+			right: field(margins && margins.asc_getRight(), d.MinPageRightField, d.PageRightField),
+			top: field(margins && margins.asc_getTop(), d.MinPageTopField, d.PageTopField),
+			bottom: field(margins && margins.asc_getBottom(), d.MinPageBottomField, d.PageBottomField)
+		};
+		var fixed = fixPrintMargins(pageWidth, pageHeight, stored.left, stored.right, stored.top, stored.bottom);
+		return {fallback: fixed.fallback, stored: stored,
+			used: {left: fixed.left, right: fixed.right, top: fixed.top, bottom: fixed.bottom},
+			pageWidth: pageWidth, pageHeight: pageHeight};
+	};
+
     WorksheetView.prototype._calcPagesPrint = function(range, pageOptions, indexWorksheet, arrPages, printScale, adjustPrint, bPrintArea, opt_prepareTextMetrics) {
         if (0 > range.r2 || 0 > range.c2) {
 			// Ничего нет
@@ -3252,6 +3318,15 @@ function isAllowPasteLink(pastedWb) {
             pageWidth = pageHeight;
             pageHeight = tmp;
         }
+
+		//margins that leave no printable area (stored by mistake) are replaced by the default ones
+		let fixedMargins = fixPrintMargins(pageWidth, pageHeight, pageLeftField, pageRightField, pageTopField, pageBottomField);
+		if (fixedMargins.fallback) {
+			pageLeftField = fixedMargins.left;
+			pageRightField = fixedMargins.right;
+			pageTopField = fixedMargins.top;
+			pageBottomField = fixedMargins.bottom;
+		}
 
 		let pageWidthWithFields = pageWidth - pageLeftField - pageRightField;
 		let pageHeightWithFields = pageHeight - pageTopField - pageBottomField;
@@ -3765,7 +3840,8 @@ function isAllowPasteLink(pastedWb) {
 		let mergedRanges = this.model.mergeManager.getAll();
 		if (mergedRanges) {
 			for (let i = 0; i < mergedRanges.length; i++) {
-				if (mergedRanges[i].bbox) {
+				//only merged cells that touch the requested range may extend it (e.g. a print area of whole columns)
+				if (mergedRanges[i].bbox && range.isIntersect(mergedRanges[i].bbox)) {
 					let type = mergedRanges[i].bbox.getType();
 					if (c_oAscSelectionType.RangeCells === type) {
 						maxCol = Math.max(maxCol, mergedRanges[i].bbox.c2);
@@ -4641,6 +4717,14 @@ function isAllowPasteLink(pastedWb) {
 			var tmp = pageWidth;
 			pageWidth = pageHeight;
 			pageHeight = tmp;
+		}
+
+		var fixedMargins = fixPrintMargins(pageWidth, pageHeight, pageLeftField, pageRightField, pageTopField, pageBottomField);
+		if (fixedMargins.fallback) {
+			pageLeftField = fixedMargins.left;
+			pageRightField = fixedMargins.right;
+			pageTopField = fixedMargins.top;
+			pageBottomField = fixedMargins.bottom;
 		}
 
 		var pageWidthWithFields = pageWidth - pageLeftField - pageRightField;
@@ -27097,36 +27181,112 @@ function isAllowPasteLink(pastedWb) {
 		activeCell.col = realCol;
 	};
 
-	WorksheetView.prototype.getMaxRowColWithData = function (doNotRecalc) {
+	/**
+	 * Computes the used print range of the sheet: the last column/row that has a value, a formula, a visible
+	 * format (fill, border), a merged range, a sparkline, an autofilter or a drawing. Columns and rows that only
+	 * carry a custom width/height or a default cell style never extend the range.
+	 * @param {boolean} [doNotRecalc]
+	 * @returns {{row: number, col: number, sources: Object}} row/col are -1 when the sheet has nothing to print;
+	 * sources tells which kind of object defined the last column/row ({col, row} per kind)
+	 */
+	WorksheetView.prototype.getPrintRangeInfo = function (doNotRecalc) {
 		let modelRowsCount = this.model.getRowsCount();
 		let modelColsCount = this.model.getColsCount();
-		/*if (modelRowsCount > nMaxPrintRows) {
-			return null;
-		}*/
 		let range = new asc_Range(0, 0, modelColsCount - 1, modelRowsCount - 1);
-		let maxCell = this._calculateMaxPrintRange(range, doNotRecalc/*, modelRowsCount > nMaxPrintRows*/);
-		/*if (!maxCell) {
-			return maxCell;
-		}*/
+		let sources = {};
+		let maxCell = this._calculateMaxPrintRange(range, doNotRecalc);
+		sources.cells = {col: maxCell.col, row: maxCell.row};
 		let maxCol = maxCell.col;
 		let maxRow = maxCell.row;
 
 		maxCell = this.model.getSparkLinesMaxColRow();
+		sources.sparklines = {col: maxCell.col, row: maxCell.row};
 		maxCol = Math.max(maxCol, maxCell.col);
 		maxRow = Math.max(maxRow, maxCell.row);
 
 		maxCell = this.model.autoFilters.getMaxColRow();
+		sources.autoFilters = {col: maxCell.col, row: maxCell.row};
 		maxCol = Math.max(maxCol, maxCell.col);
 		maxRow = Math.max(maxRow, maxCell.row);
 
 		// Получаем максимальную колонку/строку для изображений/чатов
 		maxCell = this.objectRender && this.objectRender.getMaxColRow();
+		sources.drawings = {col: maxCell ? maxCell.col : -1, row: maxCell ? maxCell.row : -1};
 		if (maxCell) {
 			maxCol = Math.max(maxCol, maxCell.col);
 			maxRow = Math.max(maxRow, maxCell.row);
 		}
 
-		return {row: maxRow, col: maxCol};
+		return {row: maxRow, col: maxCol, sources: sources};
+	};
+
+	/**
+	 * Size in mm, at 100% scale, of the range that is printed for this sheet (a user print area that is not ignored,
+	 * or else the used range), computed from the print column widths and row heights that calcPagesPrint uses.
+	 * With several print areas the width is the widest area and the height the sum of the areas.
+	 * @param {boolean} [ignorePrintArea]
+	 * @returns {{widthMm: number, heightMm: number, hasPrintArea: boolean}}
+	 */
+	WorksheetView.prototype.getPrintSizeMm = function (ignorePrintArea) {
+		var t = this;
+		var vectorKoef = AscCommonExcel.vector_koef / this.getZoom();
+		if (AscCommon.AscBrowser.isCustomScaling()) {
+			vectorKoef /= this.getRetinaPixelRatio();
+		}
+		var sizeOf = function (c1, r1, c2, r2) {
+			var w = 0, h = 0, i;
+			for (i = c1; i <= c2; ++i) {
+				w += t._getWidthForPrint(i) || t._getColumnWidth(i);
+			}
+			for (i = r1; i <= r2; ++i) {
+				h += t._getHeightForPrint(i) || t._getRowHeight(i);
+			}
+			return {w: w * vectorKoef, h: h * vectorKoef};
+		};
+
+		var printArea = !ignorePrintArea && this.model.workbook.getDefinesNames("Print_Area", this.model.getId());
+		var areas = null;
+		if (printArea) {
+			AscCommonExcel.executeInR1C1Mode(false, function () {
+				areas = AscCommonExcel.getRangeByRef(printArea.ref, t.model, true, true, true);
+			});
+			if (!areas || !areas.length) {
+				areas = null;
+			}
+		}
+
+		var width = 0, height = 0;
+		if (areas) {
+			for (var j = 0; j < areas.length; ++j) {
+				var range = areas[j] && areas[j].bbox;
+				if (!range) {
+					continue;
+				}
+				if (c_oAscSelectionType.RangeCells !== range.getType()) {
+					var maxCell = this._calculateMaxPrintRange(range, true);
+					range = new asc_Range(range.c1, range.r1, maxCell.col, maxCell.row);
+				}
+				if (0 > range.c2 || 0 > range.r2) {
+					continue;
+				}
+				var size = sizeOf(range.c1, range.r1, range.c2, range.r2);
+				width = Math.max(width, size.w);
+				height += size.h;
+			}
+		} else {
+			var info = this.getPrintRangeInfo(true);
+			if (0 <= info.col && 0 <= info.row) {
+				var all = sizeOf(0, 0, info.col, info.row);
+				width = all.w;
+				height = all.h;
+			}
+		}
+		return {widthMm: width, heightMm: height, hasPrintArea: !!areas};
+	};
+
+	WorksheetView.prototype.getMaxRowColWithData = function (doNotRecalc) {
+		let info = this.getPrintRangeInfo(doNotRecalc);
+		return {row: info.row, col: info.col};
 	};
 
 

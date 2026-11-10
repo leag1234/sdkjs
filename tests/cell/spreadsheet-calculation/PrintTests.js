@@ -26,6 +26,8 @@ QUnit.config.autostart = false;
 $(function() {
 
 
+	AscCommon.InitBrowserInputContext = function() {};
+	Asc.spreadsheet_api.prototype.CheckChangedDocument = function() {};
 	Asc.spreadsheet_api.prototype._init = function() {
 		this._loadModules();
 	};
@@ -67,6 +69,7 @@ $(function() {
 	};
 	Asc.spreadsheet_api.prototype._onUpdateDocumentCanSave = function() {
 	};
+	AscCommonExcel.WorkbookView.prototype._onScrollReinitialize = function() {};
 	AscCommonExcel.WorkbookView.prototype._onWSSelectionChanged = function() {
 	};
 	AscCommonExcel.WorkbookView.prototype.showWorksheet = function() {
@@ -122,6 +125,7 @@ $(function() {
 		AscCommon.g_oTableId.init();
 		api._onEndLoadSdk();
 		api.isOpenOOXInBrowser = false;
+		api.initCollaborativeEditing({});
 		api.OpenDocumentFromBin(null, binaryData);
 	}
 
