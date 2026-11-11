@@ -82,7 +82,11 @@ var c_oSerFontTableTypes = {
 	Font: 0,
 	Name: 1,
 	AltName: 2,
-	Family: 3
+	Family: 3,
+	EmbedRegular: 4,	// embedded font faces: media path of the plain font file (string); same numbers as core
+	EmbedBold: 5,
+	EmbedItalic: 6,
+	EmbedBoldItalic: 7
 };
 var c_oSerSigTypes = {
     Version:0
@@ -136,7 +140,15 @@ var c_oSerNumTypes = {
 	LegacyIndent: 35,
 	LegacySpace: 36,
 	lvl_Jc: 37,
-	Nsid: 38
+	Nsid: 38,
+	// Picture bullets (w:lvlPicBulletId / w:numPicBullet). Numbers are shared with core BinReaderWriterDefines.h
+	lvl_PicBulletId: 39,
+	NumPicBullets: 40,
+	NumPicBullet: 41,
+	NumPicBullet_Id: 42,
+	NumPicBullet_Image: 43,
+	NumPicBullet_Width: 44,
+	NumPicBullet_Height: 45
 };
 var c_oSerOtherTableTypes = {
     ImageMap:0,
@@ -4992,10 +5004,45 @@ function BinaryNumberingTableWriter(memory, doc, oNumIdMap, oUsedNumIdMap, saveP
         var oThis = this;
         if(null != this.Document.Numbering)
         {
+            //Picture bullets (written only when the document has some, so other documents keep the old binary form)
+            if (this.Document.Numbering.HasPicBullets && this.Document.Numbering.HasPicBullets())
+                this.bs.WriteItem(c_oSerNumTypes.NumPicBullets, function(){oThis.WriteNumPicBullets();});
             //ANums
             this.bs.WriteItem(c_oSerNumTypes.AbstractNums, function(){oThis.WriteAbstractNums();});
             //Nums
             this.bs.WriteItem(c_oSerNumTypes.Nums, function(){oThis.WriteNums();});
+        }
+    };
+    this.WriteNumPicBullets = function()
+    {
+        var oThis = this;
+        var picBullets = this.Document.Numbering.GetPicBullets();
+        for (var id in picBullets)
+        {
+            if (picBullets.hasOwnProperty(id))
+                this.bs.WriteItem(c_oSerNumTypes.NumPicBullet, function(){oThis.WriteNumPicBullet(parseInt(id, 10), picBullets[id]);});
+        }
+    };
+    this.WriteNumPicBullet = function(id, picBullet)
+    {
+        this.memory.WriteByte(c_oSerNumTypes.NumPicBullet_Id);
+        this.memory.WriteByte(c_oSerPropLenType.Long);
+        this.memory.WriteLong(id);
+        if (picBullet.Image)
+        {
+            this.memory.WriteByte(c_oSerNumTypes.NumPicBullet_Image);
+            this.memory.WriteByte(c_oSerPropLenType.Variable);
+            this.memory.WriteString2(picBullet.Image);
+        }
+        // size of the picture in twips (1/20 pt)
+        if (picBullet.Width > 0 && picBullet.Height > 0)
+        {
+            this.memory.WriteByte(c_oSerNumTypes.NumPicBullet_Width);
+            this.memory.WriteByte(c_oSerPropLenType.Long);
+            this.memory.WriteLong(Math.round(picBullet.Width * 20));
+            this.memory.WriteByte(c_oSerNumTypes.NumPicBullet_Height);
+            this.memory.WriteByte(c_oSerPropLenType.Long);
+            this.memory.WriteLong(Math.round(picBullet.Height * 20));
         }
     };
     this.WriteNums = function()
@@ -5201,6 +5248,13 @@ function BinaryNumberingTableWriter(memory, doc, oNumIdMap, oUsedNumIdMap, saveP
 			this.memory.WriteByte(c_oSerNumTypes.ILvl);
 			this.memory.WriteByte(c_oSerPropLenType.Long);
 			this.memory.WriteLong(ILvl);
+		}
+		// the id is written only if the picture is known (it is written to the NumPicBullets table)
+		if (undefined !== lvl.PicBulletId && this.Document.Numbering && this.Document.Numbering.GetPicBullet && this.Document.Numbering.GetPicBullet(lvl.PicBulletId))
+		{
+			this.memory.WriteByte(c_oSerNumTypes.lvl_PicBulletId);
+			this.memory.WriteByte(c_oSerPropLenType.Long);
+			this.memory.WriteLong(lvl.PicBulletId);
 		}
 		// if(null != lvl.Tentative)
 		// {
@@ -8528,6 +8582,8 @@ function BinaryFileReader(doc, openParams)
 			AscFonts.g_fontApplication.SetDocumentAltNames(this.oReadResult.fontAltNames);
 			if (AscFonts.g_fontApplication.SetDocumentFontFamilies)
 				AscFonts.g_fontApplication.SetDocumentFontFamilies(this.oReadResult.fontFamilies);
+			if (AscFonts.g_fontApplication.SetDocumentEmbeddedFonts)
+				AscFonts.g_fontApplication.SetDocumentEmbeddedFonts(this.oReadResult.embeddedFonts);
 		}
 		if(null !== this.oReadResult.defaultTabStop && this.oReadResult.defaultTabStop > 0) {
 			AscCommonWord.Default_Tab_Stop = this.oReadResult.defaultTabStop;
@@ -11021,6 +11077,7 @@ function Binary_NumberingTableReader(doc, oReadResult, stream)
 	this.oReadResult = oReadResult;
     this.stream = stream;
 	this.m_oANums = {};
+	this.m_oPicBulletIds = {}; // id of the picture bullet in the file -> id in the document numbering
     this.bcr = new Binary_CommonReader(this.stream);
     this.brPrr = new Binary_rPrReader(this.Document, this.oReadResult, this.stream);
     this.bpPrr = new Binary_pPrReader(this.Document, this.oReadResult, this.stream);
@@ -11042,6 +11099,12 @@ function Binary_NumberingTableReader(doc, oReadResult, stream)
                 return oThis.ReadAbstractNums(t, l);
             });
         }
+        else if ( c_oSerNumTypes.NumPicBullets === type )
+        {
+            res = this.bcr.Read1(length, function(t, l){
+                return oThis.ReadNumPicBullets(t, l);
+            });
+        }
         else if ( c_oSerNumTypes.Nums === type )
         {
 			var tmpNum = {NumId: null, Num: null};
@@ -11053,6 +11116,44 @@ function Binary_NumberingTableReader(doc, oReadResult, stream)
             res = c_oSerConstants.ReadUnknown;
         return res;
     },
+    this.ReadNumPicBullets = function(type, length)
+    {
+        var oThis = this;
+        var res = c_oSerConstants.ReadOk;
+        if ( c_oSerNumTypes.NumPicBullet === type )
+        {
+            var tmp = {Id: null, Image: null, Width: 0, Height: 0};
+            res = this.bcr.Read2(length, function(t, l){
+                return oThis.ReadNumPicBullet(t, l, tmp);
+            });
+            if (null !== tmp.Id && tmp.Image)
+            {
+                var oNumbering = this.oReadResult.logicDocument.GetNumbering();
+                // the id may already be used by another picture (paste from another document): remap it
+                this.m_oPicBulletIds[tmp.Id] = oNumbering.AddPicBullet(tmp.Id, tmp.Image, tmp.Width / 20, tmp.Height / 20);
+                if (AscCommon.pptx_content_loader && AscCommon.pptx_content_loader.ImageMapChecker)
+                    AscCommon.pptx_content_loader.ImageMapChecker[tmp.Image] = true;
+            }
+        }
+        else
+            res = c_oSerConstants.ReadUnknown;
+        return res;
+    };
+    this.ReadNumPicBullet = function(type, length, tmp)
+    {
+        var res = c_oSerConstants.ReadOk;
+        if ( c_oSerNumTypes.NumPicBullet_Id === type )
+            tmp.Id = this.stream.GetLongLE();
+        else if ( c_oSerNumTypes.NumPicBullet_Image === type )
+            tmp.Image = this.stream.GetString2LE(length);
+        else if ( c_oSerNumTypes.NumPicBullet_Width === type )
+            tmp.Width = this.stream.GetLongLE();
+        else if ( c_oSerNumTypes.NumPicBullet_Height === type )
+            tmp.Height = this.stream.GetLongLE();
+        else
+            res = c_oSerConstants.ReadUnknown;
+        return res;
+    };
     this.ReadNums = function(type, length, tmpNum)
     {
         var oThis = this;
@@ -11251,6 +11352,11 @@ function Binary_NumberingTableReader(doc, oReadResult, stream)
 		else if ( c_oSerNumTypes.ILvl === type )
 		{
 			tmp.nLevelNum = this.stream.GetULongLE();
+		}
+		else if ( c_oSerNumTypes.lvl_PicBulletId === type )
+		{
+			var nPicBulletId = this.stream.GetLongLE();
+			oNewLvl.PicBulletId = undefined !== this.m_oPicBulletIds[nPicBulletId] ? this.m_oPicBulletIds[nPicBulletId] : nPicBulletId;
 		}
 		// else if ( c_oSerNumTypes.Tentative === type )
 		// {
@@ -16489,7 +16595,7 @@ function Binary_FontTableReader(oReadResult, stream)
 			if (c_oSerFontTableTypes.Font !== t)
 				return c_oSerConstants.ReadUnknown;
 
-			let font = {name : "", altName : "", family : ""};
+			let font = {name : "", altName : "", family : "", embed : []};
 			let res = oThis.bcr.Read1(l, function(t, l){
 				if (c_oSerFontTableTypes.Name === t)
 					font.name = oThis.stream.GetString2LE(l);
@@ -16497,10 +16603,19 @@ function Binary_FontTableReader(oReadResult, stream)
 					font.altName = oThis.stream.GetString2LE(l);
 				else if (c_oSerFontTableTypes.Family === t)
 					font.family = oThis.stream.GetString2LE(l);
+				else if (t >= c_oSerFontTableTypes.EmbedRegular && t <= c_oSerFontTableTypes.EmbedBoldItalic)
+					font.embed.push({slot : t - c_oSerFontTableTypes.EmbedRegular, path : oThis.stream.GetString2LE(l)});
 				else
 					return c_oSerConstants.ReadUnknown;
 				return c_oSerConstants.ReadOk;
 			});
+			if (font.name) {
+				for (let i = 0; i < font.embed.length; ++i) {
+					// only a file of the media folder written by the converter (media/fonts/<name>.ttf|otf|ttc)
+					if (/^fonts\/[A-Za-z0-9_.\-]+\.(ttf|otf|ttc)$/i.test(font.embed[i].path) && font.embed[i].path.indexOf("..") < 0)
+						oThis.oReadResult.embeddedFonts.push({name : font.name, slot : font.embed[i].slot, path : font.embed[i].path});
+				}
+			}
 			if (font.name && font.altName && font.name !== font.altName)
 				oThis.oReadResult.fontAltNames[font.name] = font.altName;
 			if (font.name && font.family)
@@ -17548,6 +17663,7 @@ function DocReadResult(doc) {
 	this.ImageMap = {};
 	this.fontAltNames = {};
 	this.fontFamilies = {};
+	this.embeddedFonts = [];	// fonts embedded in the document: {name, slot (0 regular, 1 bold, 2 italic, 3 bold italic), path}
 	this.oComments = {};
 	this.oDocumentComments = {};
 	this.oCommentsPlaces = {};

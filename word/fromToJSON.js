@@ -16337,6 +16337,10 @@
 		if (undefined !== this.IsLgl && null !== this.IsLgl && false !== this.IsLgl)
 			oResult["isLgl"] = this.IsLgl;
 
+		// the id refers to the picture bullets table of the document numbering
+		if (undefined !== this.PicBulletId)
+			oResult["lvlPicBulletId"] = this.PicBulletId;
+
 		if (this.Legacy)
 		{
 			oResult["legacy"] = {};
@@ -16412,6 +16416,8 @@
 			this.IsLgl = oParsedJson["isLgl"];
 		else
 			this.IsLgl = false;
+
+		this.PicBulletId = undefined !== oParsedJson["lvlPicBulletId"] ? oParsedJson["lvlPicBulletId"] : undefined;
 
 		if (undefined !== oParsedJson["legacy"])
 			this.Legacy = new CNumberingLvlLegacy(oParsedJson["legacy"]["legacy"], oParsedJson["legacy"]["legacyIndent"], oParsedJson["legacy"]["legacySpace"]);

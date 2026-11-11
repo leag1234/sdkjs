@@ -3001,6 +3001,8 @@
 
 		this.GetFontFile = function(name, lStyle)
 		{
+			if (this.DocumentEmbedded[name])
+				return this.DocumentEmbedded[name];
 			if (lStyle === undefined)
 				lStyle = 0;
 
@@ -3038,6 +3040,169 @@
 		{
 			this.DocumentFontFamilies = families || {};
 			this.FontPickerMap = {};
+		};
+
+		// ---- Fonts embedded in the open document (word/fonts/*.odttf of a DOCX, plain files made by the converter) ----
+		// Only for this document: the font data is read through the document media, registered in the engine tables
+		// and taken out again when the next document is read. An installed or bundled font of the same name keeps
+		// the styles it has; the embedded face is only added to a style the font lacks.
+		this.EmbeddedPending = [];		// {name, slot (0 regular, 1 bold, 2 italic, 3 bold italic), path}, not loaded yet
+		this.DocumentEmbedded = {};		// name => {m_wsFontName} of the families registered by the document
+		this.EmbeddedUndo = [];
+
+		this.SetDocumentEmbeddedFonts = function(list)
+		{
+			this.ClearDocumentEmbeddedFonts();
+			this.EmbeddedPending = list ? list.slice() : [];
+		};
+		this.HasPendingEmbeddedFonts = function()
+		{
+			return this.EmbeddedPending.length > 0;
+		};
+		this.ClearDocumentEmbeddedFonts = function()
+		{
+			var A = AscFonts;
+			for (var i = this.EmbeddedUndo.length - 1; i >= 0; --i)
+			{
+				var u = this.EmbeddedUndo[i];
+				if (u.info)
+				{
+					u.info[u.indexKey] = -1;
+					u.info[u.faceKey] = u.oldFace;
+				}
+				else
+				{
+					delete A.g_map_font_index[u.name];
+					if (A.g_font_infos[A.g_font_infos.length - 1] === u.newInfo)
+						A.g_font_infos.pop();
+				}
+			}
+			this.EmbeddedUndo = [];
+			this.EmbeddedPending = [];
+			this.DocumentEmbedded = {};
+			this.FontPickerMap = {};
+		};
+		// faces: [{name, slot, data: Uint8Array of a plain sfnt font}]; returns the names of the families touched
+		this.RegisterEmbeddedFonts = function(faces)
+		{
+			var A = AscFonts, SLOT_KEYS = ["R", "B", "I", "BI"], byName = {}, order = [], touched = [];
+			for (var i = 0; i < faces.length; ++i)
+			{
+				var f = faces[i];
+				if (!f || !f.name || !f.data || f.slot < 0 || f.slot > 3)
+					continue;
+				if (!byName[f.name]) { byName[f.name] = {}; order.push(f.name); }
+				if (!byName[f.name][f.slot])
+					byName[f.name][f.slot] = f;
+			}
+			var addLoader = function(f)
+			{
+				var loader = new A.CFontFileLoader("embedded-font:" + A.g_font_files.length + ":" + f.name + ":" + f.slot);
+				loader.LoadFontFromData(f.data);
+				A.g_font_files.push(loader);
+				return A.g_font_files.length - 1;
+			};
+			for (var n = 0; n < order.length; ++n)
+			{
+				var name = order[n], slots = byName[name];
+				var existingIndex = A.g_map_font_index[name];
+				var existing = (undefined !== existingIndex) ? A.g_font_infos[existingIndex] : null;
+				if (existing)
+				{
+					for (var s = 0; s < 4; ++s)
+					{
+						var indexKey = "index" + SLOT_KEYS[s], faceKey = "faceIndex" + SLOT_KEYS[s];
+						if (!slots[s] || existing[indexKey] !== -1)
+							continue;
+						this.EmbeddedUndo.push({info : existing, indexKey : indexKey, faceKey : faceKey, oldFace : existing[faceKey]});
+						existing[indexKey] = addLoader(slots[s]);
+						existing[faceKey] = 0;
+						touched.push(name);
+					}
+					continue;
+				}
+				var idx = [-1, -1, -1, -1], first = -1;
+				for (var s2 = 0; s2 < 4; ++s2)
+				{
+					if (!slots[s2])
+						continue;
+					idx[s2] = addLoader(slots[s2]);
+					if (first < 0)
+						first = idx[s2];
+				}
+				if (first < 0)
+					continue;
+				if (idx[0] < 0)
+					idx[0] = first;		// no regular face (subsetted): the first face stands for it
+				var info = new A.CFontInfo(name, 0, idx[0], 0, idx[2], 0, idx[1], 0, idx[3], 0);
+				info.isEmbeddedFont = true;
+				A.g_font_infos.push(info);
+				A.g_map_font_index[name] = A.g_font_infos.length - 1;
+				this.DocumentEmbedded[name] = {m_wsFontName : name};
+				this.EmbeddedUndo.push({name : name, newInfo : info});
+				touched.push(name);
+			}
+			if (touched.length)
+				this.FontPickerMap = {};
+			return touched;
+		};
+		// Reads the pending files, registers those that are valid fonts, then calls back (always, also on errors:
+		// a font that cannot be read is left out and the document behaves as without embedded fonts).
+		this.LoadPendingEmbeddedFonts = function(callback)
+		{
+			var oThis = this, pending = this.EmbeddedPending;
+			this.EmbeddedPending = [];
+			var results = new Array(pending.length), left = pending.length, done = false;
+			var finish = function()
+			{
+				if (done)
+					return;
+				done = true;
+				var faces = [];
+				for (var i = 0; i < results.length; ++i)
+					if (results[i])
+						faces.push(results[i]);
+				try { oThis.RegisterEmbeddedFonts(faces); } catch (e) { if (window.console) console.warn("[embedded fonts]", e); }
+				callback();
+			};
+			if (!left)
+				return finish();
+			var isSfnt = function(d)
+			{
+				if (!d || d.length < 12)
+					return false;
+				var m = String.fromCharCode(d[0], d[1], d[2], d[3]);
+				return (d[0] === 0 && d[1] === 1 && d[2] === 0 && d[3] === 0) || m === "OTTO" || m === "true" || m === "ttcf";
+			};
+			var MAX = 32 * 1024 * 1024;
+			pending.forEach(function(item, i)
+			{
+				var one = function(data)
+				{
+					if (data && data.length <= MAX && isSfnt(data))
+						results[i] = {name : item.name, slot : item.slot, data : data};
+					if (--left === 0)
+						finish();
+				};
+				var url = null;
+				try { url = AscCommon.g_oDocumentUrls.getImageUrl(item.path); } catch (e) { url = null; }
+				if (!url)
+					return one(null);
+				try
+				{
+					var xhr = new XMLHttpRequest();
+					xhr.open("GET", url, true);
+					xhr.responseType = "arraybuffer";
+					xhr.timeout = 30000;
+					xhr.onload = function() { one((xhr.status === 200 || xhr.status === 0) && xhr.response ? new Uint8Array(xhr.response) : null); };
+					xhr.onerror = xhr.ontimeout = xhr.onabort = function() { one(null); };
+					xhr.send(null);
+				}
+				catch (e)
+				{
+					one(null);
+				}
+			});
 		};
 
 		// Installed font for "name": the font itself or the first installed font of FD_Substitutes; null if none.
@@ -3137,6 +3302,8 @@
 
 		this.GetFontFileWeb = function(name, lStyle)
 		{
+			if (this.DocumentEmbedded[name])
+				return this.DocumentEmbedded[name];
 			// здесь не учитываем стиль. Иначе будет проблемой загрузка шрифтов,
 			if (undefined !== this.FontPickerMap[name])
 			{

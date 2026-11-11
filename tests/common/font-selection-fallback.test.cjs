@@ -34,6 +34,7 @@ test('a known symbol face missing from the runtime inventory falls back to the r
 	const selected = {m_wsFontName: 'Marlett'};
 	const app = {
 		FontPickerMap: {},
+		DocumentEmbedded: {},
 		DefaultIndex: 0,
 		g_fontSelections: {List: [fallback]},
 		g_fontDictionary: {FD_UnknownFontSubstitute: 'Calibri'},

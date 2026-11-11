@@ -379,7 +379,9 @@
                 (0 !== (style & FontStyle.FontStyleItalic)) ? true : false,
                 info.needB, info.needI,
                 isNoSetupToManager,
-                AscFonts.DesktopFontPolicy && this.isLocalFont ? {name: this.Name, style: style} : null);
+                // a font embedded in the document is known under the name of the document, whatever family name
+                // the font file itself carries: text shaping looks the font up again by that name
+                (this.isEmbeddedFont || (AscFonts.DesktopFontPolicy && this.isLocalFont)) ? {name: this.Name, style: style} : null);
 
             if (!pFontFile && -1 === fontfile.stream_index && true === AscFonts.IsLoadFontOnCheckSymbols && true != AscFonts.IsLoadFontOnCheckSymbolsWait)
             {

@@ -38,6 +38,9 @@ function CNumberingLvl()
 	this.LvlText = [];
 	this.Legacy  = undefined;
 	this.IsLgl   = false;
+	
+	// Id of the picture bullet (see CNumbering.GetPicBullet), undefined if the bullet is a text
+	this.PicBulletId = undefined;
 
 	this.private_CheckSymbols();
 }
@@ -816,6 +819,8 @@ CNumberingLvl.prototype.Copy = function()
 		oLvl.Legacy = this.Legacy.Copy();
 
 	oLvl.IsLgl = this.IsLgl;
+	
+	oLvl.PicBulletId = this.PicBulletId;
 
 	return oLvl;
 };
@@ -828,6 +833,9 @@ CNumberingLvl.prototype.Copy = function()
  */
 CNumberingLvl.prototype.SetByType = function(nType, nLvl, sText, oTextPr)
 {
+	// A new bullet type replaces the picture bullet
+	this.PicBulletId = undefined;
+	
 	switch (nType)
 	{
 		case c_oAscNumberingLevel.None:
@@ -1070,6 +1078,7 @@ CNumberingLvl.prototype.GetPresetType = function()
  */
 CNumberingLvl.prototype.SetByFormat = function(nLvl, nType, sFormatText, nAlign)
 {
+	this.PicBulletId = undefined;
 	this.Jc      = nAlign;
 	this.SetFormat(nType);
 	this.SetLvlTextFormat(nLvl, sFormatText);
@@ -1213,7 +1222,8 @@ CNumberingLvl.prototype.IsEqual = function(numLvl)
 		&& this.TextPr.IsEqual(numLvl.TextPr)
 		&& this.ParaPr.IsEqual(numLvl.ParaPr)
 		&& this.Legacy === numLvl.Legacy
-		&& this.IsLgl === numLvl.IsLgl);
+		&& this.IsLgl === numLvl.IsLgl
+		&& this.PicBulletId === numLvl.PicBulletId);
 };
 /**
  * Заполняем специальный класс для работы с интерфейсом
@@ -1255,6 +1265,9 @@ CNumberingLvl.prototype.FillToAscNumberingLvl = function(oAscLvl)
  */
 CNumberingLvl.prototype.FillFromAscNumberingLvl = function(oAscLvl)
 {
+	if (undefined !== oAscLvl.get_Format() || undefined !== oAscLvl.get_Text())
+		this.PicBulletId = undefined;
+	
 	if (undefined !== oAscLvl.get_Format())
 		this.SetFormat(oAscLvl.get_Format());
 
@@ -1459,6 +1472,7 @@ CNumberingLvl.prototype.WriteToBinary = function(oWriter)
 	// Bool               : true -> CNumberingLegacy
 	//                    : false -> Legacy = undefined
 	// Bool               : IsLgl
+	// Long               : PicBulletId (-1 -> undefined)
 
 	oWriter.WriteLong(this.Jc);
 	oWriter.WriteLong(this.Format);
@@ -1489,6 +1503,8 @@ CNumberingLvl.prototype.WriteToBinary = function(oWriter)
 	}
 
 	oWriter.WriteBool(this.IsLgl);
+	
+	oWriter.WriteLong(undefined !== this.PicBulletId ? this.PicBulletId : -1);
 };
 CNumberingLvl.prototype.ReadFromBinary = function(oReader)
 {
@@ -1505,6 +1521,7 @@ CNumberingLvl.prototype.ReadFromBinary = function(oReader)
 	// Bool               : true -> CNumberingLegacy
 	//                    : false -> Legacy = undefined
 	// Bool               : IsLgl
+	// Long               : PicBulletId (-1 -> undefined)
 
 
 	this.Jc     = oReader.GetLong();
@@ -1539,6 +1556,9 @@ CNumberingLvl.prototype.ReadFromBinary = function(oReader)
 	}
 
 	this.IsLgl = oReader.GetBool();
+	
+	let nPicBulletId = oReader.GetLong();
+	this.PicBulletId = nPicBulletId >= 0 ? nPicBulletId : undefined;
 };
 CNumberingLvl.prototype.private_ReadLvlTextFromBinary = function(oReader)
 {

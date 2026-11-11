@@ -521,6 +521,72 @@ CNum.prototype.private_GetNumberedLvlText = function(nLvl, nNumShift, isForceAra
 	return AscCommon.IntToNumberFormat(nNumShift, nFormat, {lang: oLangForTextNumbering});
 };
 /**
+ * Get the picture of the bullet of the given level. Returns null (the text bullet must be used) if the level has no
+ * picture bullet or the picture is unknown or not loaded (yet)
+ * @param oLvl {CNumberingLvl}
+ * @returns {?{Url : string, Ratio : number}} Url is the key of the image in the image loader, Ratio is width / height
+ */
+CNum.prototype.private_GetPicBullet = function(oLvl)
+{
+	if (undefined === oLvl.PicBulletId || !this.Numbering || !this.Numbering.GetPicBullet)
+		return null;
+	
+	let picBullet = this.Numbering.GetPicBullet(oLvl.PicBulletId);
+	if (!picBullet || !picBullet.Image)
+		return null;
+	
+	let api = Asc.editor || editor;
+	if (!api || !api.ImageLoader || !api.ImageLoader.map_image_index)
+		return null;
+	
+	let url = AscCommon.getFullImageSrc2(picBullet.Image);
+	let img = api.ImageLoader.map_image_index[url];
+	if (!img || !img.Image || img.Status === AscFonts.ImageLoadStatus.Loading)
+		return null;
+	
+	let w = img.Image.width;
+	let h = img.Image.height;
+	if (!(w > 0 && h > 0))
+	{
+		// The size of the picture in the numbering definition is the fallback
+		w = picBullet.Width;
+		h = picBullet.Height;
+	}
+	
+	if (!(w > 0 && h > 0))
+		return null;
+	
+	return {Url : url, Ratio : w / h, Entry : picBullet, ImageHeightPx : img.Image.height > 0 ? img.Image.height : 0};
+};
+/**
+ * Height of the picture bullet in mm. Word draws the picture with the height
+ * (font size - 2) * shapeHeightPt / naturalHeightPt, where naturalHeightPt is the image pixel height * 0.75 (96 dpi)
+ * and shapeHeightPt is the height of the v:shape from the file; if the shape height or the image pixel height is
+ * missing or not positive the factor is 1. The height is never below 1 pt.
+ * @param oNumTextPr {CTextPr}
+ * @param dKoef {number}
+ * @param picBullet {{Entry : {Height : number}, ImageHeightPx : number}} result of private_GetPicBullet
+ * @returns {number}
+ */
+CNum.prototype.private_GetPicBulletHeight = function(oNumTextPr, dKoef, picBullet)
+{
+	var nBase = oNumTextPr.FontSize - 2;
+	if (!(nBase >= 1))
+		nBase = 1;
+	
+	var nShapeH = picBullet && picBullet.Entry ? picBullet.Entry.Height : 0;
+	var nImgH   = picBullet ? picBullet.ImageHeightPx : 0;
+	var nFactor = 1;
+	if (nShapeH > 0 && nImgH > 0)
+		nFactor = nShapeH / (nImgH * 0.75);
+	
+	var nHeightPt = nBase * nFactor;
+	if (!(nHeightPt >= 1))
+		nHeightPt = 1;
+	
+	return nHeightPt * dKoef * g_dKoef_pt_to_mm;
+};
+/**
  * Функция отрисовки заданного уровня нумерации в заданной позиции
  * @param nX
  * @param nY
@@ -536,6 +602,14 @@ CNum.prototype.Draw = function(nX, nY, oContext, nLvl, oNumInfo, oNumTextPr, oTh
 	var oLvl    = this.GetLvl(nLvl);
 	var arrText = oLvl.GetLvlText();
 	var dKoef   = oNumTextPr.VertAlign !== AscCommon.vertalign_Baseline ? AscCommon.vaKSize : 1;
+	
+	let picBullet = this.private_GetPicBullet(oLvl);
+	if (picBullet && oContext.drawImage && !(oContext.isTextDrawer && oContext.isTextDrawer()))
+	{
+		let picH = this.private_GetPicBulletHeight(oNumTextPr, dKoef, picBullet);
+		oContext.drawImage(picBullet.Url, nX, nY - picH, picH * picBullet.Ratio, picH);
+		return;
+	}
 	
 	oContext.SetTextPr(oNumTextPr, oTheme);
 	g_oTextMeasurer.SetTextPr(oNumTextPr, oTheme);
@@ -598,6 +672,15 @@ CNum.prototype.Measure = function(oContext, nLvl, oNumInfo, oNumTextPr, oTheme)
 	oContext.SetTextPr(oNumTextPr, oTheme);
 	oContext.SetFontSlot(AscWord.fontslot_ASCII, dKoef);
 	var nAscent = oContext.GetAscender();
+	
+	let picBullet = this.private_GetPicBullet(oLvl);
+	if (picBullet)
+	{
+		return {
+			Width  : this.private_GetPicBulletHeight(oNumTextPr, dKoef, picBullet) * picBullet.Ratio,
+			Ascent : nAscent
+		};
+	}
 
 	for (var nTextIndex = 0, nTextLen = arrText.length; nTextIndex < nTextLen; ++nTextIndex)
 	{

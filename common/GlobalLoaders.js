@@ -118,6 +118,18 @@
 
         this.LoadDocumentFonts = function(fonts)
         {
+            // fonts embedded in the document are read and registered first
+            if (g_fontApplication.HasPendingEmbeddedFonts && g_fontApplication.HasPendingEmbeddedFonts())
+            {
+                let _t = this;
+                g_fontApplication.LoadPendingEmbeddedFonts(function() { _t.LoadDocumentFontsNow(fonts); });
+                return;
+            }
+            return this.LoadDocumentFontsNow(fonts);
+        };
+
+        this.LoadDocumentFontsNow = function(fonts)
+        {
             if (this.IsLoadDocumentFonts2)
                 return this.LoadDocumentFonts2(fonts);
 
@@ -126,7 +138,7 @@
             for (let i = 0; i < this.fontInfos.length; i++)
             {
                 let info = this.fontInfos[i];
-                if (info.Name !== "ASCW3")
+                if (info.Name !== "ASCW3" && !info.isEmbeddedFont)
                     gui_fonts[gui_count++] = new AscFonts.CFont(info.Name, "", info.Thumbnail);
             }
 

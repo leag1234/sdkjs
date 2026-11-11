@@ -15333,6 +15333,11 @@ CTextPr.prototype.GetFontInfo = function(nFontSlot)
 		}
 	}
 
+	// Word clamps a font size below 0.5 pt to 0.5 pt for layout/drawing metrics only
+	// (the stored FontSize value is left untouched, so w:sz="0" still saves as 0).
+	if (nFontSize < 0.5)
+		nFontSize = 0.5;
+
 	return new AscFonts.CTextFontInfo(sFontName, (isBold ? 1  : 0) | (isItalic ? 2 : 0), nFontSize);
 };
 

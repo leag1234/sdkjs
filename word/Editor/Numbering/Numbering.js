@@ -37,7 +37,73 @@
 		this.Num         = {};
 		
 		this.AbstractNumByNsid = {};
+		
+		// Pictures used as bullets (w:numPicBullet): id -> {Image : string, Width : number (pt), Height : number (pt)}
+		// Image is the name of the media file as written in the binary document (e.g. "image1.png")
+		this.PicBullets = {};
 	}
+	
+	/**
+	 * Is there any picture bullet in the document
+	 * @returns {boolean}
+	 */
+	CNumbering.prototype.HasPicBullets = function()
+	{
+		for (let id in this.PicBullets)
+		{
+			if (this.PicBullets.hasOwnProperty(id))
+				return true;
+		}
+		return false;
+	};
+	/**
+	 * @returns {Object} id -> {Image, Width, Height}
+	 */
+	CNumbering.prototype.GetPicBullets = function()
+	{
+		return this.PicBullets;
+	};
+	/**
+	 * Get description of the picture bullet by its id
+	 * @param id {number}
+	 * @returns {?{Image : string, Width : number, Height : number}}
+	 */
+	CNumbering.prototype.GetPicBullet = function(id)
+	{
+		if (undefined === id || null === id || !this.PicBullets.hasOwnProperty(id))
+			return null;
+		
+		return this.PicBullets[id];
+	};
+	/**
+	 * Register a picture bullet. If the same picture is already registered, its id is returned. If the requested id
+	 * is occupied by another picture, a new id is chosen.
+	 * @param id {number} wanted id
+	 * @param image {string} name of the media file
+	 * @param width {number} pt, 0 if unknown
+	 * @param height {number} pt, 0 if unknown
+	 * @returns {number} the id to use
+	 */
+	CNumbering.prototype.AddPicBullet = function(id, image, width, height)
+	{
+		let maxId = -1;
+		for (let curId in this.PicBullets)
+		{
+			if (!this.PicBullets.hasOwnProperty(curId))
+				continue;
+			
+			if (this.PicBullets[curId].Image === image)
+				return parseInt(curId, 10);
+			
+			maxId = Math.max(maxId, parseInt(curId, 10));
+		}
+		
+		if (this.PicBullets.hasOwnProperty(id))
+			id = maxId + 1;
+		
+		this.PicBullets[id] = {Image : image, Width : width, Height : height};
+		return id;
+	};
 
 	/**
 	 * Копируем все нумерации и абстрактные нумерации. Возвращаем новые объекты с мапом из старых Id в новые
@@ -81,6 +147,31 @@
 
 			oNewNums[sNewId] = oNewNum;
 			oNumMap[sOldId]  = sNewId;
+		}
+		
+		// The ids of the picture bullets belong to the numbering of the source document. The pictures are not
+		// transferred to another document, so the copies use their text bullets
+		if (oNumbering !== this && this.HasPicBullets())
+		{
+			for (var sNewAbstractId in oNewAbstractNums)
+			{
+				var arrLvls = oNewAbstractNums[sNewAbstractId].Lvl;
+				for (var nLvlIndex = 0; arrLvls && nLvlIndex < arrLvls.length; ++nLvlIndex)
+				{
+					if (arrLvls[nLvlIndex])
+						arrLvls[nLvlIndex].PicBulletId = undefined;
+				}
+			}
+			
+			for (var sNewNumId in oNewNums)
+			{
+				for (var nOverrideLvl = 0; nOverrideLvl < 9; ++nOverrideLvl)
+				{
+					var oOverride = oNewNums[sNewNumId].LvlOverride[nOverrideLvl];
+					if (oOverride && oOverride.NumberingLvl)
+						oOverride.NumberingLvl.PicBulletId = undefined;
+				}
+			}
 		}
 
 		return {
