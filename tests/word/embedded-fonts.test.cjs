@@ -83,7 +83,8 @@ function readTable(ctx, bytes) {
 
 test('item numbers of sdkjs equal core BinReaderWriterDefines.h and old numbers are not changed', () => {
 	eq(Object.assign({}, cur.Types), {
-		Font: 0, Name: 1, AltName: 2, Family: 3, EmbedRegular: 4, EmbedBold: 5, EmbedItalic: 6, EmbedBoldItalic: 7
+		Font: 0, Name: 1, AltName: 2, Family: 3, EmbedRegular: 4, EmbedBold: 5, EmbedItalic: 6, EmbedBoldItalic: 7,
+		EmbedKeyRegular: 8, EmbedKeyBold: 9, EmbedKeyItalic: 10, EmbedKeyBoldItalic: 11, EmbedSubsetted: 12
 	});
 	const core = path.resolve(root, '../core/OOXML/Binary/Document/BinWriter/BinReaderWriterDefines.h');
 	if (!fs.existsSync(core))
@@ -105,9 +106,9 @@ test('the font table reader collects the embedded faces of a font', () => {
 	const {res, result} = readTable(cur, bytes);
 	assert.equal(res, AC.c_oSerConstants.ReadOk);
 	eq(result.embeddedFonts, [
-		{name: 'Zz Embedded Test', slot: 0, path: 'fonts/Zz_Embedded_Test_regular.ttf'},
-		{name: 'Zz Embedded Test', slot: 1, path: 'fonts/Zz_Embedded_Test_bold.otf'},
-		{name: 'Zz Embedded Test', slot: 3, path: 'fonts/Zz_Embedded_Test_bolditalic.ttf'}
+		{name: 'Zz Embedded Test', slot: 0, path: 'fonts/Zz_Embedded_Test_regular.ttf', key: '', subsetted: false},
+		{name: 'Zz Embedded Test', slot: 1, path: 'fonts/Zz_Embedded_Test_bold.otf', key: '', subsetted: false},
+		{name: 'Zz Embedded Test', slot: 3, path: 'fonts/Zz_Embedded_Test_bolditalic.ttf', key: '', subsetted: false}
 	]);
 	assert.equal(result.fontAltNames.Arial, 'Arimo');
 	assert.equal(result.fontFamilies['Zz Embedded Test'], 'swiss');
@@ -117,7 +118,7 @@ test('paths that are not files of media/fonts are ignored', () => {
 	const bytes = fontTable([[strItem(1, 'X'), strItem(4, '../secret.ttf'), strItem(5, 'fonts/../a.ttf'),
 		strItem(6, 'image1.png'), strItem(7, 'http://example.com/a.ttf'), strItem(4, 'fonts/ok.ttf')]]);
 	const {result} = readTable(cur, bytes);
-	eq(result.embeddedFonts, [{name: 'X', slot: 0, path: 'fonts/ok.ttf'}]);
+	eq(result.embeddedFonts, [{name: 'X', slot: 0, path: 'fonts/ok.ttf', key: '', subsetted: false}]);
 });
 
 test('a font table without embedded fonts is read exactly as before', () => {

@@ -41,6 +41,18 @@
 	}
 
 	var enabled = true;
+	var blobDownloadBlocked = false;   // page CSP blocks blob: downloads: go straight to the server
+	// A host page whose Content-Security-Policy has no blob: in frame-src (Nextcloud) blocks the blob: download link of the
+	// client-built PDF in Firefox and Safari, and the violation is reported to the host page, not to this frame, so it cannot
+	// be detected here. Chromium does not apply that rule to a download link. Inside a frame in a browser that is not
+	// Chromium, the PDF is made by the server, which downloads through an ordinary http link.
+	function embeddedInNonChromium() {
+		try {
+			if (window.self === window.top) return false;
+			var ua = navigator.userAgent || "";
+			return !/(Chrome|Chromium|CriOS|Edg|OPR)\//.test(ua);
+		} catch (e) { return true; }   // a cross-origin top that throws is still a frame
+	}
 	try { if (window.localStorage && window.localStorage.getItem('elixir.clientpdf') === 'off') enabled = false; } catch (e) { /* private mode */ }
 
 	var libs = null;
@@ -399,7 +411,7 @@
 		},
 		// Word only for now; Download (to the host integration) and mail merge keep the server path
 		canHandle: function (api, actionType, options, downloadType) {
-			if (!enabled || options.eoClientPdfSkip) return false;
+			if (!enabled || options.eoClientPdfSkip || blobDownloadBlocked || embeddedInNonChromium()) return false;
 			if (Asc.c_oAscFileType.PDF !== options.fileType) return false;    // PDF/A: server
 			if (window['AscDesktopEditor'] || window.isCloudCryptoDownloadAs) return false;
 			if (options.oDocumentMailMerge || options.oMailMergeSendData || options.isSaveAs || options.wopiSaveAsPath) return false;
@@ -425,7 +437,16 @@
 					api.sendEvent(downloadType, url, Asc.c_oAscFileType.PDF);
 					setTimeout(function () { URL.revokeObjectURL(url); }, 10 * 60 * 1000);
 				} else {
-					AscCommon.DownloadFileFromBytes(res.bytes, title, 'application/pdf');
+					var fellBack = false;
+					AscCommon.DownloadFileFromBytes(res.bytes, title, 'application/pdf', undefined, function () {
+						// blob: navigation is blocked by the page CSP (e.g. Nextcloud in Firefox): drop the
+						// client-built bytes and re-run the export through the server, once per export
+						if (fellBack) return;
+						fellBack = true;
+						blobDownloadBlocked = true;   // later exports skip the client build entirely
+						options.eoClientPdfSkip = true;
+						api.downloadAs(actionType, options);
+					});
 				}
 				api.sendEvent('asc_onClientPdf', { state: 'done', pages: res.stats.pages, bytes: res.stats.bytes, ms: res.stats.totalMs });
 			}, function (err) {

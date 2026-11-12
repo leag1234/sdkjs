@@ -2430,7 +2430,7 @@
 			error: fError
 		});
 	}
-	function DownloadFileFromBytes(data, filename, mime, opt_bom) {
+	function DownloadFileFromBytes(data, filename, mime, opt_bom, opt_onBlocked) {
 		//'js-download' https://github.com/kennethjiang/js-file-download
 		var blobData = (typeof opt_bom !== 'undefined') ? [opt_bom, data] : [data];
 		var blob = new Blob(blobData, {type: mime || 'application/octet-stream'});
@@ -2440,33 +2440,74 @@
 			// These URLs will no longer resolve as the data backing
 			// the URL has been freed."
 			window.navigator.msSaveBlob(blob, filename);
+			return;
 		}
-		else {
-			var blobURL = (window.URL || window.webkitURL).createObjectURL(blob);
-			var tempLink = document.createElement('a');
-			tempLink.style.display = 'none';
-			tempLink.href = blobURL;
-			tempLink.setAttribute('download', filename);
-			//to prevent click hook in web-apps/vendor/framework7-react/node_modules/framework7/esm/modules/clicks/clicks.js
-			tempLink.classList.add("external");
-
-			// Safari thinks _blank anchor are pop ups. We only want to set _blank
-			// target if the browser does not support the HTML5 download attribute.
-			// This allows you to download files in desktop safari if pop up blocking
-			// is enabled.
-			if (typeof tempLink.download === 'undefined') {
-				tempLink.setAttribute('target', '_blank');
+		var notified = false;
+		var notifyBlocked = function () {
+			if (notified) return;
+			notified = true;
+			if (typeof opt_onBlocked === 'function') {
+				try { opt_onBlocked(); } catch (e) { /* the caller's fallback must not break the download path */ }
+			} else if (window.console && console.warn) {
+				console.warn('DownloadFileFromBytes: blob: download is blocked by the page CSP; no fallback available.');
 			}
-
-			document.body.appendChild(tempLink);
-			tempLink.click();
-
-			// Fixes "webkit blob resource error 1"
-			setTimeout(function() {
-				document.body.removeChild(tempLink);
-				(window.URL || window.webkitURL).revokeObjectURL(blobURL);
-			}, 200)
+		};
+		try {
+			downloadViaBlobLink(blob, filename);
 		}
+		catch (e) {
+			// a CSP that blocks blob: navigation can make the click throw
+			notifyBlocked();
+			return;
+		}
+		// Some hosts (e.g. Nextcloud in Firefox) block blob: navigation via CSP without
+		// throwing: the click is a no-op and the page reports a securitypolicyviolation.
+		// Watch for that briefly; if it fires, let the caller decide what to do.
+		var onViolation = function (event) {
+			var blocked = event && event.blockedURI;
+			if (typeof blocked === 'string' && blocked.indexOf('blob:') === 0) {
+				cleanup();
+				notifyBlocked();
+			}
+		};
+		var cleanup = function () {
+			document.removeEventListener('securitypolicyviolation', onViolation, true);
+			window.removeEventListener('securitypolicyviolation', onViolation, true);
+			if (timer) {
+				clearTimeout(timer);
+				timer = null;
+			}
+		};
+		var timer = setTimeout(cleanup, 1500);
+		document.addEventListener('securitypolicyviolation', onViolation, true);
+		window.addEventListener('securitypolicyviolation', onViolation, true);
+	}
+
+	function downloadViaBlobLink(blob, filename) {
+		var blobURL = (window.URL || window.webkitURL).createObjectURL(blob);
+		var tempLink = document.createElement('a');
+		tempLink.style.display = 'none';
+		tempLink.href = blobURL;
+		tempLink.setAttribute('download', filename);
+		//to prevent click hook in web-apps/vendor/framework7-react/node_modules/framework7/esm/modules/clicks/clicks.js
+		tempLink.classList.add("external");
+
+		// Safari thinks _blank anchor are pop ups. We only want to set _blank
+		// target if the browser does not support the HTML5 download attribute.
+		// This allows you to download files in desktop safari if pop up blocking
+		// is enabled.
+		if (typeof tempLink.download === 'undefined') {
+			tempLink.setAttribute('target', '_blank');
+		}
+
+		document.body.appendChild(tempLink);
+		tempLink.click();
+
+		// Fixes "webkit blob resource error 1"
+		setTimeout(function() {
+			document.body.removeChild(tempLink);
+			(window.URL || window.webkitURL).revokeObjectURL(blobURL);
+		}, 200)
 	}
 
 	function getImageFileFromDataURL(dataUrl) {

@@ -7888,6 +7888,12 @@ function CStyles(bCreateDefault)
 		this.Style = [];
 	}
 
+    if (bCreateDefault !== false)
+    {
+        for (var styleId in this.Style)
+            this.Style[styleId].EoBuiltinGallery = true;
+    }
+
     this.LogicDocument = null;
 	this.OnChangeDefaultTextPr();
 }
@@ -16290,6 +16296,8 @@ function CParaPr()
 	this.ReviewInfo        = undefined;
 
 	this.SuppressLineNumbers = undefined;
+	this.AutoSpaceDE       = undefined;
+	this.AutoSpaceDN       = undefined;
 }
 
 CParaPr.fromObject = function(obj)
@@ -16397,6 +16405,8 @@ CParaPr.prototype.Copy = function(bCopyPrChange, oPr)
 
 	if (undefined !== this.SuppressLineNumbers)
 		ParaPr.SuppressLineNumbers = this.SuppressLineNumbers;
+	ParaPr.AutoSpaceDE = this.AutoSpaceDE;
+	ParaPr.AutoSpaceDN = this.AutoSpaceDN;
 
 	return ParaPr;
 };
@@ -16572,6 +16582,10 @@ CParaPr.prototype.Merge = function(ParaPr)
 
 	if (undefined !== ParaPr.SuppressLineNumbers)
 		this.SuppressLineNumbers = ParaPr.SuppressLineNumbers;
+	if (undefined !== ParaPr.AutoSpaceDE)
+		this.AutoSpaceDE = ParaPr.AutoSpaceDE;
+	if (undefined !== ParaPr.AutoSpaceDN)
+		this.AutoSpaceDN = ParaPr.AutoSpaceDN;
 };
 CParaPr.prototype.InitDefault = function(nCompatibilityMode)
 {
@@ -16607,6 +16621,8 @@ CParaPr.prototype.InitDefault = function(nCompatibilityMode)
 	this.FramePr                   = undefined;
 	this.OutlineLvl                = undefined;
 	this.SuppressLineNumbers       = false;
+	this.AutoSpaceDE               = true;
+	this.AutoSpaceDN               = true;
 
 	this.DefaultRunPr   = undefined;
 	this.Bullet         = undefined;
@@ -16740,6 +16756,8 @@ CParaPr.prototype.Set_FromObject = function(ParaPr)
 
 	if (undefined !== ParaPr.SuppressLineNumbers)
 		this.SuppressLineNumbers = ParaPr.SuppressLineNumbers;
+	this.AutoSpaceDE = ParaPr.AutoSpaceDE;
+	this.AutoSpaceDN = ParaPr.AutoSpaceDN;
 };
 CParaPr.prototype.SetFromObject = function(oPr)
 {
@@ -16874,6 +16892,10 @@ CParaPr.prototype.Compare = function(ParaPr)
 
 	if (this.SuppressLineNumbers === ParaPr.SuppressLineNumbers)
 		Result_ParaPr.SuppressLineNumbers = this.SuppressLineNumbers;
+	if (this.AutoSpaceDE === ParaPr.AutoSpaceDE)
+		Result_ParaPr.AutoSpaceDE = this.AutoSpaceDE;
+	if (this.AutoSpaceDN === ParaPr.AutoSpaceDN)
+		Result_ParaPr.AutoSpaceDN = this.AutoSpaceDN;
 
 	return Result_ParaPr;
 };
@@ -17039,6 +17061,16 @@ CParaPr.prototype.Write_ToBinary = function(Writer)
 		Writer.WriteBool(this.Bidi);
 		Flags |= (1 << 25);
 	}
+	if (undefined !== this.AutoSpaceDE)
+	{
+		Writer.WriteBool(this.AutoSpaceDE);
+		Flags |= (1 << 26);
+	}
+	if (undefined !== this.AutoSpaceDN)
+	{
+		Writer.WriteBool(this.AutoSpaceDN);
+		Flags |= (1 << 27);
+	}
 
 	var EndPos = Writer.GetCurPosition();
 	Writer.Seek(StartPos);
@@ -17174,6 +17206,10 @@ CParaPr.prototype.Read_FromBinary = function(Reader)
 	
 	if (Flags & (1 << 25))
 		this.Bidi = Reader.GetBool();
+	if (Flags & (1 << 26))
+		this.AutoSpaceDE = Reader.GetBool();
+	if (Flags & (1 << 27))
+		this.AutoSpaceDN = Reader.GetBool();
 };
 CParaPr.prototype.isEqual = function(ParaPrUOld,ParaPrNew)
 {
@@ -17222,6 +17258,8 @@ CParaPr.prototype.Is_Equal = function(ParaPr)
 		|| this.OutlineLvl !== ParaPr.OutlineLvl
 		|| this.SuppressLineNumbers !== ParaPr.SuppressLineNumbers
 		|| this.Bidi !== ParaPr.Bidi
+		|| this.AutoSpaceDE !== ParaPr.AutoSpaceDE
+		|| this.AutoSpaceDN !== ParaPr.AutoSpaceDN
 	);
 };
 CParaPr.prototype.IsEqual = function(paraPr)
@@ -17299,6 +17337,10 @@ CParaPr.prototype.GetDiff = function(oParaPr)
 
 	if (this.SuppressLineNumbers !== oParaPr.SuppressLineNumbers)
 		oResultParaPr.SuppressLineNumbers = this.SuppressLineNumbers;
+	if (this.AutoSpaceDE !== oParaPr.AutoSpaceDE)
+		oResultParaPr.AutoSpaceDE = this.AutoSpaceDE;
+	if (this.AutoSpaceDN !== oParaPr.AutoSpaceDN)
+		oResultParaPr.AutoSpaceDN = this.AutoSpaceDN;
 	
 	if (this.Bidi !== oParaPr.Bidi)
 		oResultParaPr.Bidi = this.Bidi;
@@ -17434,6 +17476,8 @@ CParaPr.prototype.Is_Empty = function(oPr)
 		|| undefined !== this.PStyle
 		|| undefined !== this.OutlineLvl
 		|| undefined !== this.SuppressLineNumbers
+		|| undefined !== this.AutoSpaceDE
+		|| undefined !== this.AutoSpaceDN
 		|| undefined !== this.Bidi
 	);
 };

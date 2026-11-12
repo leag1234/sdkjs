@@ -51,5 +51,6 @@
 	window['AscWord'].fieldtype_FORMCHECKBOX = 0x0015;
 	window['AscWord'].fieldtype_FORMDROPDOWN = 0x0016;
 	window['AscWord'].fieldtype_XE           = 0x0017; // ElixirOffice: index entry
+	window['AscWord'].fieldtype_SET          = 0x0018; // ElixirOffice: bookmark definition, result is not shown
 	
 })(window);

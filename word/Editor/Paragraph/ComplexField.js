@@ -1915,7 +1915,8 @@ CComplexField.prototype.IsHidden = function()
 	if (!this.BeginChar || !this.SeparateChar)
 		return false;
 	
-	return (AscWord.fieldtype_ASK === oInstruction.GetType());
+	return (AscWord.fieldtype_ASK === oInstruction.GetType()
+		|| AscWord.fieldtype_SET === oInstruction.GetType());
 };
 CComplexField.prototype.RemoveFieldWrap = function()
 {

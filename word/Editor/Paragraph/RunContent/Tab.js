@@ -26,12 +26,12 @@
 "use strict";
 
 var tab_Bar     = Asc.c_oAscTabType.Bar;
-var tab_Center  = Asc.c_oAscTabType.Center;
 var tab_Clear   = Asc.c_oAscTabType.Clear;
 var tab_Decimal = Asc.c_oAscTabType.Decimal;
 var tab_Num     = Asc.c_oAscTabType.Num;
 var tab_Right   = Asc.c_oAscTabType.Right;
 var tab_Left    = Asc.c_oAscTabType.Left;
+var tab_Center  = Asc.c_oAscTabType.Center;
 
 let tab_Symbol     = 0x0022;//0x2192;
 let tab_Symbol_Rtl = 0x0021;
@@ -195,8 +195,118 @@ let tab_Symbol_Rtl = 0x0021;
 	{
 		return AscBidi.TYPE.PM;
 	};
+	/**
+	 * Absolute position tab (w:ptab): a tab to a position given relative to the margin or the paragraph indent,
+	 * not to the tab stops. It behaves like a tab of the matching kind (left/center/right) whose stop is computed
+	 * from the page frame when the line is recalculated (see Paragraph.prototype.private_RecalculateGetPTabPos).
+	 * @constructor
+	 * @extends {AscWord.CRunTab}
+	 */
+	function CRunPTab()
+	{
+		CRunTab.call(this);
+		
+		this.Alignment  = "left";   // left | center | right
+		this.RelativeTo = "margin"; // margin | indent
+		this.Leader     = "none";   // none | dot | hyphen | underscore | middleDot
+	}
+	CRunPTab.prototype = Object.create(CRunTab.prototype);
+	CRunPTab.prototype.constructor = CRunPTab;
+	
+	CRunPTab.alignments  = ["left", "center", "right"];
+	CRunPTab.relativeTos = ["margin", "indent"];
+	CRunPTab.leaders     = ["none", "dot", "hyphen", "underscore", "middleDot"];
+	
+	CRunPTab.prototype.IsPTab = function()
+	{
+		return true;
+	};
+	CRunPTab.prototype.GetAlignment = function()
+	{
+		return this.Alignment;
+	};
+	CRunPTab.prototype.GetRelativeTo = function()
+	{
+		return this.RelativeTo;
+	};
+	CRunPTab.prototype.GetLeader = function()
+	{
+		return this.Leader;
+	};
+	CRunPTab.prototype.SetAlignment = function(value)
+	{
+		if (-1 !== CRunPTab.alignments.indexOf(value))
+			this.Alignment = value;
+	};
+	CRunPTab.prototype.SetRelativeTo = function(value)
+	{
+		if (-1 !== CRunPTab.relativeTos.indexOf(value))
+			this.RelativeTo = value;
+	};
+	CRunPTab.prototype.SetLeader = function(value)
+	{
+		// The inherited SetLeader(leaderType, textPr) is called by the recalculation with an Asc.c_oAscTabLeader
+		// value and a text properties object, here a string is a request to change the stored leader
+		if (typeof value === "string")
+		{
+			if (-1 !== CRunPTab.leaders.indexOf(value))
+				this.Leader = value;
+			return;
+		}
+		CRunTab.prototype.SetLeader.apply(this, arguments);
+	};
+	CRunPTab.prototype.GetTabLeaderType = function()
+	{
+		switch (this.Leader)
+		{
+			case "dot":        return Asc.c_oAscTabLeader.Dot;
+			case "hyphen":     return Asc.c_oAscTabLeader.Hyphen;
+			case "underscore": return Asc.c_oAscTabLeader.Underscore;
+			case "middleDot":  return Asc.c_oAscTabLeader.MiddleDot;
+		}
+		return Asc.c_oAscTabLeader.None;
+	};
+	CRunPTab.prototype.GetTabType = function()
+	{
+		switch (this.Alignment)
+		{
+			case "center": return tab_Center;
+			case "right":  return tab_Right;
+		}
+		return tab_Left;
+	};
+	CRunPTab.prototype.Copy = function()
+	{
+		let tab = new CRunPTab();
+		tab.Alignment  = this.Alignment;
+		tab.RelativeTo = this.RelativeTo;
+		tab.Leader     = this.Leader;
+		return tab;
+	};
+	CRunPTab.prototype.Write_ToBinary = function(Writer)
+	{
+		// Long   : para_PTab
+		// String : alignment
+		// String : relativeTo
+		// String : leader
+		Writer.WriteLong(para_PTab);
+		Writer.WriteString2(this.Alignment);
+		Writer.WriteString2(this.RelativeTo);
+		Writer.WriteString2(this.Leader);
+	};
+	CRunPTab.prototype.Read_FromBinary = function(Reader)
+	{
+		this.SetAlignment(Reader.GetString2());
+		this.SetRelativeTo(Reader.GetString2());
+		this.SetLeader(Reader.GetString2());
+	};
+	CRunTab.prototype.IsPTab = function()
+	{
+		return false;
+	};
 	//--------------------------------------------------------export----------------------------------------------------
 	window['AscWord'] = window['AscWord'] || {};
-	window['AscWord'].CRunTab = CRunTab;
+	window['AscWord'].CRunTab  = CRunTab;
+	window['AscWord'].CRunPTab = CRunPTab;
 
 })(window);

@@ -2493,6 +2493,54 @@ Paragraph.prototype.private_RecalculateGetTabPos = function(PRS, X, ParaPr, CurP
 	};
 };
 
+/**
+ * Position of an absolute position tab (w:ptab). The result has the shape of private_RecalculateGetTabPos: the tab
+ * stop is the left edge, the center or the right edge of the area between the margins (or the indents).
+ */
+Paragraph.prototype.private_RecalculateGetPTabPos = function(PRS, X, ParaPr, CurPage, ptab)
+{
+	let contentFrame = this.GetPageContentFrame(CurPage);
+	
+	let startX = contentFrame.X;
+	let endX   = contentFrame.XLimit;
+	
+	let paraFrame = this.Get_FramePr();
+	if (paraFrame)
+	{
+		startX = 0;
+		endX   = paraFrame.W;
+	}
+	
+	let left  = startX;
+	let right = endX;
+	if ("indent" === ptab.GetRelativeTo())
+	{
+		left  += ParaPr.Ind.Left;
+		right -= ParaPr.Ind.Right;
+	}
+	
+	let tabType = ptab.GetTabType();
+	let newX    = left;
+	if (tab_Right === tabType)
+		newX = right;
+	else if (tab_Center === tabType)
+		newX = (left + right) / 2;
+	
+	// A tab never moves the text back
+	if (newX < X)
+		newX = X;
+	
+	return {
+		TabWidth     : newX - X,
+		TabValue     : tabType,
+		DefaultTab   : false,
+		TabLeader    : ptab.GetTabLeaderType(),
+		TabRightEdge : false,
+		PageX        : startX,
+		PageXLimit   : endX
+	};
+};
+
 Paragraph.prototype.private_CheckSkipKeepLinesAndWidowControl = function(CurPage)
 {
     var bSkipWidowAndKeepLines = false;

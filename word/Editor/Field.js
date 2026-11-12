@@ -177,7 +177,10 @@ ParaField.prototype.Recalculate_Range_Spaces = function(PRSA, _CurLine, _CurRang
 	var Y0 = PRSA.Y0;
 	var Y1 = PRSA.Y1;
 
-	CParagraphContentWithParagraphLikeContent.prototype.Recalculate_Range_Spaces.apply(this, arguments);
+	if (!this.IsHiddenResult())
+	{
+		CParagraphContentWithParagraphLikeContent.prototype.Recalculate_Range_Spaces.apply(this, arguments);
+	}
 
 	var X1 = PRSA.X;
 
@@ -189,6 +192,20 @@ ParaField.prototype.Recalculate_Range_Spaces = function(PRSA, _CurLine, _CurRang
 		PageIndex    : PRSA.Paragraph.GetAbsolutePage(_CurPage),
 		PageInternal : _CurPage
 	};
+};
+ParaField.prototype.Draw_Lines = function(PDSL)
+{
+	if (this.IsHiddenResult())
+		return;
+
+	CParagraphContentWithParagraphLikeContent.prototype.Draw_Lines.apply(this, arguments);
+};
+ParaField.prototype.SkipDraw = function(PDS)
+{
+	if (this.IsHiddenResult())
+		return;
+
+	CParagraphContentWithParagraphLikeContent.prototype.SkipDraw.apply(this, arguments);
 };
 ParaField.prototype.Draw_HighLights = function(PDSH)
 {
@@ -347,6 +364,10 @@ ParaField.prototype.Get_FieldType = function()
 ParaField.prototype.GetFieldType = function()
 {
 	return this.FieldType;
+};
+ParaField.prototype.IsHiddenResult = function()
+{
+	return (AscWord.fieldtype_SET === this.FieldType);
 };
 ParaField.prototype.Map_MailMerge = function(_Value)
 {
@@ -589,6 +610,11 @@ ParaField.prototype.GetInstructionLine = function()
 		case AscWord.fieldtype_REF :
 		{
 			name = "REF";
+			break;
+		}
+		case AscWord.fieldtype_SET :
+		{
+			name = "SET";
 			break;
 		}
 		case AscWord.fieldtype_HYPERLINK :

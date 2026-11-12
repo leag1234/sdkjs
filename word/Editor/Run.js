@@ -4563,7 +4563,9 @@ ParaRun.prototype.Recalculate_Range = function(PRS, ParaPr, Depth)
                     SpaceLen = 0;
                     WordLen = 0;
 
-                    var TabPos   = Para.private_RecalculateGetTabPos(PRS, X, ParaPr, PRS.Page, false);
+                    var TabPos   = Item.IsPTab()
+						? Para.private_RecalculateGetPTabPos(PRS, X, ParaPr, PRS.Page, Item)
+						: Para.private_RecalculateGetTabPos(PRS, X, ParaPr, PRS.Page, false);
                     var NewX     = X + TabPos.TabWidth;
                     var TabValue = TabPos.TabValue;
 

@@ -300,6 +300,17 @@
 	{
 		this.TempWidth = ((nWidth * (((this.Flags >> 16) & 0xFFFF) / 64)) * AscWord.TEXTWIDTH_DIVIDER) | 0;
 	};
+	CRunText.prototype.AddAutoSpaceWidth = function(nWidth)
+	{
+		if (this.Flags & FLAGS_TEMPORARY)
+			this.TempWidth += (nWidth * AscWord.TEXTWIDTH_DIVIDER) | 0;
+		else
+			this.Width += (nWidth * AscWord.TEXTWIDTH_DIVIDER) | 0;
+	};
+	CRunText.prototype.GetFontSize = function()
+	{
+		return (((this.Flags >> 16) & 0xFFFF) / 64);
+	};
 	CRunText.prototype.SetWidthVisible = function(nWidth, textPr)
 	{
 		if (this.Flags & FLAGS_TEMPORARY_HYPHEN_AFTER)

@@ -117,6 +117,7 @@
 			oThis.HandleRun(oRun, nStartPos, nEndPos);
 		});
 		this.FlushWord();
+		this.ApplyAutoSpace(oParagraph);
 	};
 	CParagraphTextShaper.prototype.ShapeRange = function(oParagraph, oStart, oEnd, isTemporary)
 	{
@@ -127,12 +128,82 @@
 			oThis.HandleRun(oRun, nStartPos, nEndPos);
 		}, oStart, oEnd);
 		this.FlushWord();
+		this.ApplyAutoSpace(oParagraph, oStart, oEnd);
 	};
 	CParagraphTextShaper.prototype.ShapeRun = function(run)
 	{
 		this.Init(false);
 		this.HandleRun(run, 0, run.GetElementsCount());
 		this.FlushWord();
+		// No auto-space pass here: ShapeRun only reshapes an isolated run (field numbering result), and a
+		// paragraph-wide pass would add the gap again to items of runs that were not reshaped.
+	};
+	CParagraphTextShaper.prototype.ApplyAutoSpace = function(oParagraph, oStart, oEnd)
+	{
+		let oParaPr = oParagraph.Get_CompiledPr2(false).ParaPr;
+		let isDE = oParaPr.AutoSpaceDE !== false;
+		let isDN = oParaPr.AutoSpaceDN !== false;
+		if (!isDE && !isDN)
+			return;
+
+		let hasEastAsian = false;
+		let oThis = this;
+		oParagraph.CheckRunContent(function(oRun, nStartPos, nEndPos)
+		{
+			for (let nPos = nStartPos; nPos < nEndPos; ++nPos)
+			{
+				let oItem = oRun.GetElement(nPos);
+				if (oItem.IsText() && !oItem.IsNBSP() && !oItem.IsPdfText()
+					&& AscWord.isEastAsianCodePoint(oThis.GetCodePoint(oItem)))
+				{
+					hasEastAsian = true;
+					return true;
+				}
+			}
+			return false;
+		}, oStart, oEnd);
+		if (!hasEastAsian)
+			return;
+
+		let oPrev = null;
+		let oPrevRun = null;
+		oParagraph.CheckRunContent(function(oRun, nStartPos, nEndPos)
+		{
+			for (let nPos = nStartPos; nPos < nEndPos; ++nPos)
+			{
+				let oItem = oRun.GetElement(nPos);
+				if (!oItem.IsText() || oItem.IsNBSP() || oItem.IsPdfText())
+				{
+					oPrev = null;
+					continue;
+				}
+				if (oPrev)
+				{
+					let nPrevClass = AscWord.getAutoSpaceClass(oThis.GetCodePoint(oPrev));
+					let nCurrClass = AscWord.getAutoSpaceClass(oThis.GetCodePoint(oItem));
+					let isHit = (AscWord.AUTOSPACE_CLASS.EAST_ASIAN === nPrevClass
+						&& ((AscWord.AUTOSPACE_CLASS.LATIN === nCurrClass && isDE)
+							|| (AscWord.AUTOSPACE_CLASS.DIGIT === nCurrClass && isDN)))
+						|| (AscWord.AUTOSPACE_CLASS.EAST_ASIAN === nCurrClass
+							&& ((AscWord.AUTOSPACE_CLASS.LATIN === nPrevClass && isDE)
+								|| (AscWord.AUTOSPACE_CLASS.DIGIT === nPrevClass && isDN)));
+					if (isHit)
+					{
+						let nGapEm = AscWord.getAutoSpaceGapEm(nPrevClass, nCurrClass,
+							oPrevRun.Get_CompiledPr(false).RFonts.Ascii.Name);
+						if (0 === nGapEm)
+						{
+							oPrev = oItem;
+							oPrevRun = oRun;
+							continue;
+						}
+						oPrev.AddAutoSpaceWidth(oPrev.GetFontSize() * nGapEm * AscWord.AUTOSPACE_PT_TO_MM); // font size is in pt, widths in mm
+					}
+				}
+				oPrev = oItem;
+				oPrevRun = oRun;
+			}
+		}, oStart, oEnd);
 	};
 	CParagraphTextShaper.prototype.HandleRun = function(oRun, nStartPos, nEndPos)
 	{
@@ -369,7 +440,7 @@
 		if (this.MaskSymbol)
 			return false;
 
-		if (Asc.editor.isPdfEditor())
+		if (Asc.editor && Asc.editor.isPdfEditor())
 		{
 			let oParent = this.Paragraph.GetParent();
 			if (oParent.ParentPDF && oParent.ParentPDF.IsForm())

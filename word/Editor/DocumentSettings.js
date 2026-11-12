@@ -66,6 +66,9 @@
 		this.BalanceSingleByteDoubleByteWidth = false;
 		this.UlTrailSpace                     = false;
 		this.UseFELayout                      = false;
+		// Raw flag words (w:compat legacy switches) as read from the file: [flags1, flags2, flags3] or null. The bits the
+		// editor does not model are written back unchanged
+		this.CompatFlags                      = null;
 	}
 	DocumentSettings.prototype.getCompatibilityMode = function()
 	{

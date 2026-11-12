@@ -538,6 +538,37 @@ CFieldInstructionASK.prototype.GetPromptText = function()
 };
 
 /**
+ * SET field (ElixirOffice: defines a bookmark; Word does not display the field result)
+ * @constructor
+ */
+function CFieldInstructionSET()
+{
+	AscWord.FieldInstructionBase.call(this);
+
+	this.BookmarkName = "";
+	this.Value        = "";
+}
+CFieldInstructionSET.prototype = Object.create(AscWord.FieldInstructionBase.prototype);
+CFieldInstructionSET.prototype.constructor = CFieldInstructionSET;
+CFieldInstructionSET.prototype.Type = AscWord.fieldtype_SET;
+CFieldInstructionSET.prototype.SetBookmarkName = function(sBookmarkName)
+{
+	this.BookmarkName = sBookmarkName;
+};
+CFieldInstructionSET.prototype.GetBookmarkName = function()
+{
+	return this.BookmarkName;
+};
+CFieldInstructionSET.prototype.SetValue = function(sValue)
+{
+	this.Value = sValue;
+};
+CFieldInstructionSET.prototype.GetValue = function()
+{
+	return this.Value;
+};
+
+/**
  * NUMPAGES field
  * @constructor
  */
@@ -1465,6 +1496,10 @@ CFieldInstructionParser.prototype.private_Parse = function()
 	{
 		this.private_ReadFORMCHECKBOX();
 	}
+	else if("SET" === sBuffer)
+	{
+		this.private_ReadSET();
+	}
 	else if(sBuffer.indexOf("=") === 0)
 	{
 		this.private_ReadFORMULA();
@@ -1781,6 +1816,18 @@ CFieldInstructionParser.prototype.private_ReadASK = function()
 		this.Result.SetBookmarkName(arrArguments[0]);
 
 	// TODO: Switches
+};
+CFieldInstructionParser.prototype.private_ReadSET = function()
+{
+	this.Result = new CFieldInstructionSET();
+
+	var arrArguments = this.private_ReadArguments();
+
+	if (arrArguments.length >= 2)
+		this.Result.SetValue(arrArguments[1]);
+
+	if (arrArguments.length >= 1)
+		this.Result.SetBookmarkName(arrArguments[0]);
 };
 CFieldInstructionParser.prototype.private_ReadREF = function(sBookmarkName)
 {

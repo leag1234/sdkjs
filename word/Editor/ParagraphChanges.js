@@ -44,6 +44,8 @@ AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Spacing_AfterAutoSpacing]  = 
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Spacing_BeforeAutoSpacing] = CChangesParagraphSpacingBeforeAutoSpacing;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Spacing_BeforeLines]       = CChangesParagraphSpacingBeforeLines;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Spacing_AfterLines]        = CChangesParagraphSpacingAfterLines;
+AscDFH.changesFactory[AscDFH.historyitem_Paragraph_AutoSpaceDE]               = CChangesParagraphAutoSpaceDE;
+AscDFH.changesFactory[AscDFH.historyitem_Paragraph_AutoSpaceDN]               = CChangesParagraphAutoSpaceDN;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Shd_Value]                 = CChangesParagraphShdValue;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Shd_Color]                 = CChangesParagraphShdColor;
 AscDFH.changesFactory[AscDFH.historyitem_Paragraph_Shd_Unifill]               = CChangesParagraphShdUnifill;
@@ -193,6 +195,14 @@ AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Shd]                     
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_WidowControl]              = [
 	AscDFH.historyitem_Paragraph_WidowControl,
+	AscDFH.historyitem_Paragraph_Pr
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_AutoSpaceDE]               = [
+	AscDFH.historyitem_Paragraph_AutoSpaceDE,
+	AscDFH.historyitem_Paragraph_Pr
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_AutoSpaceDN]               = [
+	AscDFH.historyitem_Paragraph_AutoSpaceDN,
 	AscDFH.historyitem_Paragraph_Pr
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_Paragraph_Tabs]                      = [
@@ -1201,6 +1211,44 @@ CChangesParagraphWidowControl.prototype.private_SetValue = function(Value)
 CChangesParagraphWidowControl.prototype.Merge = private_ParagraphChangesOnMergePr;
 CChangesParagraphWidowControl.prototype.Load = private_ParagraphChangesOnLoadPr;
 CChangesParagraphWidowControl.prototype.CheckLock = private_ParagraphContentChangesCheckLock;
+function CChangesParagraphAutoSpaceDE(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+}
+CChangesParagraphAutoSpaceDE.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesParagraphAutoSpaceDE.prototype.constructor = CChangesParagraphAutoSpaceDE;
+CChangesParagraphAutoSpaceDE.prototype.Type = AscDFH.historyitem_Paragraph_AutoSpaceDE;
+CChangesParagraphAutoSpaceDE.prototype.private_SetValue = function(Value)
+{
+	var oParagraph = this.Class;
+	oParagraph.Pr.AutoSpaceDE = Value;
+
+	oParagraph.CompiledPr.NeedRecalc = true;
+	oParagraph.RecalcInfo.NeedShapeText();
+	oParagraph.private_UpdateTrackRevisionOnChangeParaPr(false);
+};
+CChangesParagraphAutoSpaceDE.prototype.Merge = private_ParagraphChangesOnMergePr;
+CChangesParagraphAutoSpaceDE.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphAutoSpaceDE.prototype.CheckLock = private_ParagraphContentChangesCheckLock;
+function CChangesParagraphAutoSpaceDN(Class, Old, New, Color)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New, Color);
+}
+CChangesParagraphAutoSpaceDN.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesParagraphAutoSpaceDN.prototype.constructor = CChangesParagraphAutoSpaceDN;
+CChangesParagraphAutoSpaceDN.prototype.Type = AscDFH.historyitem_Paragraph_AutoSpaceDN;
+CChangesParagraphAutoSpaceDN.prototype.private_SetValue = function(Value)
+{
+	var oParagraph = this.Class;
+	oParagraph.Pr.AutoSpaceDN = Value;
+
+	oParagraph.CompiledPr.NeedRecalc = true;
+	oParagraph.RecalcInfo.NeedShapeText();
+	oParagraph.private_UpdateTrackRevisionOnChangeParaPr(false);
+};
+CChangesParagraphAutoSpaceDN.prototype.Merge = private_ParagraphChangesOnMergePr;
+CChangesParagraphAutoSpaceDN.prototype.Load = private_ParagraphChangesOnLoadPr;
+CChangesParagraphAutoSpaceDN.prototype.CheckLock = private_ParagraphContentChangesCheckLock;
 /**
  * @constructor
  * @extends {AscDFH.CChangesBaseObjectProperty}

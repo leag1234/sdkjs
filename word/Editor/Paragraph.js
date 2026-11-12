@@ -12034,6 +12034,34 @@ Paragraph.prototype.Set_WidowControl = function(Value)
 		this.private_UpdateTrackRevisionOnChangeParaPr(true);
 	}
 };
+Paragraph.prototype.Set_AutoSpaceDE = function(Value)
+{
+	if (Value != this.Pr.AutoSpaceDE)
+	{
+		this.private_AddPrChange();
+		AscCommon.History.Add(new CChangesParagraphAutoSpaceDE(this, this.Pr.AutoSpaceDE, Value));
+		this.Pr.AutoSpaceDE = Value;
+
+		// Надо пересчитать конечный стиль
+		this.CompiledPr.NeedRecalc = true;
+		this.RecalcInfo.NeedShapeText();
+		this.private_UpdateTrackRevisionOnChangeParaPr(true);
+	}
+};
+Paragraph.prototype.Set_AutoSpaceDN = function(Value)
+{
+	if (Value != this.Pr.AutoSpaceDN)
+	{
+		this.private_AddPrChange();
+		AscCommon.History.Add(new CChangesParagraphAutoSpaceDN(this, this.Pr.AutoSpaceDN, Value));
+		this.Pr.AutoSpaceDN = Value;
+
+		// Надо пересчитать конечный стиль
+		this.CompiledPr.NeedRecalc = true;
+		this.RecalcInfo.NeedShapeText();
+		this.private_UpdateTrackRevisionOnChangeParaPr(true);
+	}
+};
 Paragraph.prototype.Set_Borders = function(Borders)
 {
 	if (undefined === Borders)

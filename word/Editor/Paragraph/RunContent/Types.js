@@ -76,6 +76,7 @@ var para_PermStart                 = 0x004b;
 var para_PermEnd                   = 0x004c;
 var para_PdfText                   = 0x004d;
 var para_PdfSpace                  = 0x004e;
+var para_PTab                      = 0x004f; // Absolute position tab (history binary only, the run element type is para_Tab)
 
 (function(window)
 {
@@ -103,6 +104,7 @@ var para_PdfSpace                  = 0x004e;
 			case para_NewLine               : oElement = new AscWord.CRunBreak(); break;
 			case para_Numbering             : oElement = new ParaNumbering(); break;
 			case para_Tab                   : oElement = new AscWord.CRunTab(); break;
+			case para_PTab                  : oElement = new AscWord.CRunPTab(); break;
 			case para_PageNum               : oElement = new AscWord.CRunPageNum(); break;
 			case para_Math_Placeholder      : oElement = new CMathText(); break;
 			case para_Math_Text             : oElement = new CMathText(); break;

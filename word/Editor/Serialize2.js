@@ -54,6 +54,117 @@ var c_oAscYAlign = Asc.c_oAscYAlign;
 //Version:3 все рисованные обьекты открываются через презентации
 //Version:4 добавилось свойство CTablePr.TableLayout(проблема в том что если оно отсутствует, то это tbllayout_AutoFit, а у нас в любом случае считалось tbllayout_Fixed)
 //Version:5 добавлены секции, учитываются флаги title и EvenAndOddHeaders, изменен формат chart
+AscWord.EoSelectStylesToWrite = function(styles, document)
+{
+	try
+	{
+		var used = {};
+		var defaults = {};
+		var addId = function(id)
+		{
+			if (null !== id && undefined !== id && "" !== id)
+				used[id] = true;
+		};
+		var addDefault = function(id)
+		{
+			if (null !== id && undefined !== id && "" !== id)
+				defaults[id] = true;
+		};
+		var styleNames = ["Default Paragraph Font", "No List", "Normal", "Normal Table"];
+		for (var i = 0; i < styleNames.length; ++i)
+		{
+			var id = styles.GetStyleIdByName(styleNames[i]);
+			if (id)
+				addDefault(id);
+		}
+		if (styles.Default)
+		{
+			addDefault(styles.Default.Paragraph);
+			addDefault(styles.Default.Character);
+			addDefault(styles.Default.Table);
+			addDefault(styles.Default.Numbering);
+		}
+		if (document)
+		{
+			var paragraphs = document.GetAllParagraphs({All: true});
+			for (var i = 0; i < paragraphs.length; ++i)
+			{
+				var paragraph = paragraphs[i];
+				if (paragraph.Pr && paragraph.Pr.PStyle)
+					addId(paragraph.Pr.PStyle);
+				if (paragraph.CheckRunContent)
+				{
+					paragraph.CheckRunContent(function(run)
+					{
+						if (run && run.Pr && run.Pr.RStyle)
+							addId(run.Pr.RStyle);
+						return false;
+					});
+				}
+			}
+			var tables = document.GetAllTables({All: true});
+			for (var i = 0; i < tables.length; ++i)
+			{
+				if (tables[i].TableStyle)
+					addId(tables[i].TableStyle);
+			}
+			var numbering = document.Get_Number && document.Get_Number();
+			if (numbering && numbering.Numbering)
+			{
+				for (var numId in numbering.Numbering)
+				{
+					var num = numbering.Numbering[numId];
+					if (num && num.GetStyleLink)
+						addId(num.GetStyleLink());
+					if (num && num.GetNumStyleLink)
+						addId(num.GetNumStyleLink());
+				}
+			}
+		}
+		var selected = {};
+		var queue = [];
+		var selectId = function(id)
+		{
+			if (selected[id] || !styles.Style[id])
+				return;
+			selected[id] = styles.Style[id];
+			queue.push(id);
+		};
+		for (var id in styles.Style)
+			if (!styles.Style[id] || !styles.Style[id].EoBuiltinGallery || used[id] || defaults[id])
+				selectId(id);
+		var children = {};
+		var addEdge = function(parentId, childId)
+		{
+			if (!parentId || !childId)
+				return;
+			if (!children[parentId])
+				children[parentId] = [];
+			children[parentId].push(childId);
+		};
+		for (var id in styles.Style)
+		{
+			if (!styles.Style[id])
+				continue;
+			var style = styles.Style[id];
+			addEdge(id, style.GetBasedOn && style.GetBasedOn());
+			addEdge(id, style.GetNext && style.GetNext());
+			addEdge(id, style.GetLink && style.GetLink());
+		}
+		while (queue.length)
+		{
+			var parentId = queue.shift();
+			var childIds = children[parentId] || [];
+			for (var i = 0; i < childIds.length; ++i)
+				selectId(childIds[i]);
+		}
+		return selected;
+	}
+	catch (e)
+	{
+		return styles.Style;
+	}
+};
 var c_oSerTableTypes = {
     Signature:0,
     Info:1,
@@ -86,7 +197,12 @@ var c_oSerFontTableTypes = {
 	EmbedRegular: 4,	// embedded font faces: media path of the plain font file (string); same numbers as core
 	EmbedBold: 5,
 	EmbedItalic: 6,
-	EmbedBoldItalic: 7
+	EmbedBoldItalic: 7,
+	EmbedKeyRegular: 8,		// w:fontKey (GUID string) of each embedded face; kept so that saving re-creates the original file
+	EmbedKeyBold: 9,
+	EmbedKeyItalic: 10,
+	EmbedKeyBoldItalic: 11,
+	EmbedSubsetted: 12		// one byte: bit mask of the slots whose font is subsetted
 };
 var c_oSerSigTypes = {
     Version:0
@@ -298,7 +414,9 @@ var c_oSerProp_pPrType = {
 	SnapToGrid: 46,
 	Bidi: 47,
 	Spacing_AfterLines: 48,
-	Spacing_BeforeLines: 49
+	Spacing_BeforeLines: 49,
+	AutoSpaceDE: 50,
+	AutoSpaceDN: 51
 };
 var c_oSerProp_rPrType = {
     Bold:0,
@@ -551,7 +669,14 @@ var c_oSerRunType = {
 	linebreakClearAll: 32,
 	linebreakClearLeft: 33,
 	linebreakClearRight: 34,
+	ptab: 35,
 	pptxDrawingAlternative: 0x99
+};
+// children of c_oSerRunType.ptab, each holds the OOXML attribute value as a string
+var c_oSerPTabType = {
+	Alignment: 0,
+	RelativeTo: 1,
+	Leader: 2
 };
 var c_oSerImageType = {
     MediaId:0,
@@ -1991,6 +2116,10 @@ function BinaryFileWriter(doc, bMailMergeDocx, bMailMergeHtml, isCompatible, opt
 		}
 		//Write Settings
 		this.WriteTable(c_oSerTableTypes.Settings, new BinarySettingsTableWriter(this.memory, this.Document, this.saveParams));
+		//Write the fonts embedded in the opened file (nothing for a document without them)
+		let embeddedFonts = this.Document.EmbeddedFontsInfo;
+		if (embeddedFonts && embeddedFonts.length > 0 && new BinaryFontTableWriter(this.memory, embeddedFonts).HasFaces())
+			this.WriteTable(c_oSerTableTypes.FontTable, new BinaryFontTableWriter(this.memory, embeddedFonts));
 
 		let oform = this.Document.GetOFormDocument();
 		if (oform) {
@@ -2190,6 +2319,53 @@ function BinaryFileWriter(doc, bMailMergeDocx, bMailMergeHtml, isCompatible, opt
         this.nRealTableCount++;
 	}
 }
+/**
+ * Font table of the saved binary: only the fonts embedded in the opened file (name, media path of the plain font,
+ * w:fontKey, subsetted), so that x2t writes the original word/fonts/*.odttf again. Same layout as Binary_FontTableReader.
+ */
+function BinaryFontTableWriter(memory, faces)
+{
+	this.memory = memory;
+	this.bs = new BinaryCommonWriter(this.memory);
+	this.fonts = [];
+	let byName = {};
+	for (let i = 0; i < faces.length; ++i) {
+		let f = faces[i];
+		if (!f || !f.name || !f.path || !f.key || !(f.slot >= 0 && f.slot <= 3))
+			continue;
+		if (!byName.hasOwnProperty(f.name)) {
+			byName[f.name] = {name : f.name, faces : []};
+			this.fonts.push(byName[f.name]);
+		}
+		byName[f.name].faces.push(f);
+	}
+	this.HasFaces = function()
+	{
+		return this.fonts.length > 0;
+	};
+	this.Write = function()
+	{
+		let oThis = this;
+		let nStart = this.bs.WriteItemWithLengthStart();
+		for (let i = 0; i < this.fonts.length; ++i) {
+			let font = this.fonts[i];
+			this.bs.WriteItem(c_oSerFontTableTypes.Font, function() {
+				oThis.bs.WriteItem(c_oSerFontTableTypes.Name, function() {oThis.memory.WriteString3(font.name);});
+				let subsetted = 0;
+				for (let j = 0; j < font.faces.length; ++j) {
+					let face = font.faces[j];
+					oThis.bs.WriteItem(c_oSerFontTableTypes.EmbedRegular + face.slot, function() {oThis.memory.WriteString3(face.path);});
+					oThis.bs.WriteItem(c_oSerFontTableTypes.EmbedKeyRegular + face.slot, function() {oThis.memory.WriteString3(face.key);});
+					if (face.subsetted)
+						subsetted |= (1 << face.slot);
+				}
+				if (subsetted)
+					oThis.bs.WriteItem(c_oSerFontTableTypes.EmbedSubsetted, function() {oThis.memory.WriteByte(subsetted);});
+			});
+		}
+		this.bs.WriteItemWithLengthEnd(nStart);
+	};
+}
 function BinarySigTableWriter(memory)
 {
     this.memory = memory;
@@ -2233,8 +2409,10 @@ function BinaryStyleTableWriter(memory, doc, oNumIdMap, copyParams, saveParams)
     {
         var oThis = this;
 		var oStyleToWrite = styles.Style;
-		if(this.copyParams && this.copyParams.oUsedStyleMap)
+		if (this.copyParams && this.copyParams.oUsedStyleMap)
 			oStyleToWrite = this.copyParams.oUsedStyleMap;
+		else if (!this.copyParams)
+			oStyleToWrite = AscWord.EoSelectStylesToWrite(styles, this.Document);
         for(var styleId in oStyleToWrite)
         {
 			var style = styles.Style[styleId];
@@ -2568,6 +2746,18 @@ function Binary_pPrWriter(memory, oNumIdMap, oBinaryHeaderFooterTableWriter, sav
 			this.memory.WriteByte(c_oSerProp_pPrType.Bidi);
 			this.memory.WriteByte(c_oSerPropLenType.Byte);
 			this.memory.WriteBool(pPr.Bidi);
+		}
+		if(null != pPr.AutoSpaceDE)
+		{
+			this.memory.WriteByte(c_oSerProp_pPrType.AutoSpaceDE);
+			this.memory.WriteByte(c_oSerPropLenType.Byte);
+			this.memory.WriteBool(pPr.AutoSpaceDE);
+		}
+		if(null != pPr.AutoSpaceDN)
+		{
+			this.memory.WriteByte(c_oSerProp_pPrType.AutoSpaceDN);
+			this.memory.WriteByte(c_oSerPropLenType.Byte);
+			this.memory.WriteBool(pPr.AutoSpaceDN);
 		}
     };
     this.WriteInd = function(Ind)
@@ -6094,6 +6284,14 @@ function BinaryDocumentTableWriter(memory, doc, oMapCommentId, oNumIdMap, copyPa
 			});
 		}
 	};
+	this.WritePTab = function (item) {
+		this.memory.WriteByte(c_oSerPTabType.Alignment);
+		this.memory.WriteString2(item.GetAlignment());
+		this.memory.WriteByte(c_oSerPTabType.RelativeTo);
+		this.memory.WriteString2(item.GetRelativeTo());
+		this.memory.WriteByte(c_oSerPTabType.Leader);
+		this.memory.WriteString2(item.GetLeader());
+	};
 
     this.WriteRunContent = function (oRun, nStart, nEnd, delText)
     {
@@ -6130,8 +6328,12 @@ function BinaryDocumentTableWriter(memory, doc, oMapCommentId, oNumIdMap, copyPa
 					sCurText += AscCommon.encodeSurrogateChar(item.Value);
                     break;
                 case para_Tab:
-                    oThis.memory.WriteByte(c_oSerRunType.tab);
-                    oThis.memory.WriteLong(c_oSerPropLenType.Null);
+                    if (item instanceof AscWord.CRunPTab) {
+                        oThis.bs.WriteItem(c_oSerRunType.ptab, function () { oThis.WritePTab(item); });
+                    } else {
+                        oThis.memory.WriteByte(c_oSerRunType.tab);
+                        oThis.memory.WriteLong(c_oSerPropLenType.Null);
+                    }
                     break;
                 case para_NewLine:
                     switch (item.BreakType) {
@@ -7404,6 +7606,11 @@ function BinarySettingsTableWriter(memory, doc, saveParams)
 		if (oSettings.DoNotExpandShiftReturn) {
 			flags1 |= 1 << 10;
 		}
+		// keep the legacy switches read from the file that are not modeled (the modeled bits come from the settings)
+		let rawFlags = oSettings.CompatFlags;
+		if (rawFlags) {
+			flags1 = (flags1 | (rawFlags[0] & ~((1 << 6) | (1 << 9) | (1 << 10)))) >>> 0;
+		}
 		this.bs.WriteItem(c_oSerCompat.Flags1, function() {oThis.memory.WriteULong(flags1);});
 		var flags2 = 0;
 		flags2 |= (oSettings.DoNotBreakWrappedTables ? 1 : 0) << 9;
@@ -7411,7 +7618,16 @@ function BinarySettingsTableWriter(memory, doc, saveParams)
 		if (this.saveParams.isCompatible) {
 			flags2 |= (oSettings.SplitPageBreakAndParaMark ? 1 : 0) << 27;
 		}
+		if (rawFlags) {
+			// bit 27 (split page break and paragraph mark) is modeled, but written only for compatible saves
+			let modeled2 = (1 << 9) | (1 << 17) | (this.saveParams.isCompatible ? (1 << 27) : 0);
+			flags2 = (flags2 | (rawFlags[1] & ~modeled2)) >>> 0;
+		}
 		this.bs.WriteItem(c_oSerCompat.Flags2, function() {oThis.memory.WriteULong(flags2);});
+		if (rawFlags && rawFlags[2]) {
+			let flags3 = rawFlags[2];
+			this.bs.WriteItem(c_oSerCompat.Flags3, function() {oThis.memory.WriteULong(flags3);});
+		}
 	};
 	this.WriteCompatSetting = function(name, uri, value)
 	{
@@ -8585,6 +8801,10 @@ function BinaryFileReader(doc, openParams)
 			if (AscFonts.g_fontApplication.SetDocumentEmbeddedFonts)
 				AscFonts.g_fontApplication.SetDocumentEmbeddedFonts(this.oReadResult.embeddedFonts);
 		}
+		if (!this.oReadResult.bCopyPaste) {
+			// the embedded fonts of the file (name, slot, media path, key, subsetted) are written again on save
+			this.Document.EmbeddedFontsInfo = this.oReadResult.embeddedFonts.length > 0 ? this.oReadResult.embeddedFonts.slice() : null;
+		}
 		if(null !== this.oReadResult.defaultTabStop && this.oReadResult.defaultTabStop > 0) {
 			AscCommonWord.Default_Tab_Stop = this.oReadResult.defaultTabStop;
 		}
@@ -9386,6 +9606,12 @@ function Binary_pPrReader(doc, oReadResult, stream)
         {
 			case c_oSerProp_pPrType.Bidi:
 				pPr.Bidi = this.stream.GetBool();
+				break;
+			case c_oSerProp_pPrType.AutoSpaceDE:
+				pPr.AutoSpaceDE = this.stream.GetBool();
+				break;
+			case c_oSerProp_pPrType.AutoSpaceDN:
+				pPr.AutoSpaceDN = this.stream.GetBool();
 				break;
             case c_oSerProp_pPrType.contextualSpacing:
 				pPr.ContextualSpacing = this.stream.GetBool();
@@ -12243,6 +12469,18 @@ function Binary_DocumentTableReader(doc, oReadResult, openParams, stream, curNot
 			}
 		}
 	};
+	this.ReadPTab = function (type, length, ptab) {
+		var res = c_oSerConstants.ReadOk;
+		if (c_oSerPTabType.Alignment === type)
+			ptab.SetAlignment(this.stream.GetString2LE(length));
+		else if (c_oSerPTabType.RelativeTo === type)
+			ptab.SetRelativeTo(this.stream.GetString2LE(length));
+		else if (c_oSerPTabType.Leader === type)
+			ptab.SetLeader(this.stream.GetString2LE(length));
+		else
+			res = c_oSerConstants.ReadUnknown;
+		return res;
+	};
 	this.ReadRunContent = function (type, length, run)
     {
         var res = c_oSerConstants.ReadOk;
@@ -12257,6 +12495,14 @@ function Binary_DocumentTableReader(doc, oReadResult, openParams, stream, curNot
         else if (c_oSerRunType.tab === type)
         {
             oNewElem = new AscWord.CRunTab();
+        }
+        else if (c_oSerRunType.ptab === type)
+        {
+            var oPTab = new AscWord.CRunPTab();
+            res = this.bcr.Read1(length, function (t, l) {
+                return oThis.ReadPTab(t, l, oPTab);
+            });
+            oNewElem = oPTab;
         }
         else if (c_oSerRunType.pagenum === type)
         {
@@ -12319,8 +12565,10 @@ function Binary_DocumentTableReader(doc, oReadResult, openParams, stream, curNot
                 }
             }
         }
-        else if(c_oSerRunType.pptxDrawing === type)
+        else if(c_oSerRunType.pptxDrawing === type || (c_oSerRunType.pptxDrawingAlternative === type && this.readDrawingAlternative))
         {
+			// pptxDrawingAlternative is the mc:Fallback of a drawing the editor dropped as unsupported (chartEx)
+			this.readDrawingAlternative = false;
 			var oDrawing = new Object();
 			this.ReadDrawing (type, length, paragraph, oDrawing, res);
 			if(null != oDrawing.content.GraphicObj)
@@ -12511,6 +12759,8 @@ function Binary_DocumentTableReader(doc, oReadResult, openParams, stream, curNot
 			{
 				oParaDrawing.GraphicObj = null;
 				GraphicObj = null;
+				// show the fallback picture in its place
+				this.readDrawingAlternative = true;
 			}
 		}
 		oDrawing.content = oParaDrawing;
@@ -13767,6 +14017,14 @@ function Binary_oMathReader(stream, oReadResult, curNote, openParams)
         else if (c_oSerRunType.tab === type)
         {
             oNewElem = new AscWord.CRunTab();
+        }
+        else if (c_oSerRunType.ptab === type)
+        {
+            var oPTab = new AscWord.CRunPTab();
+            res = this.bcr.Read1(length, function (t, l) {
+                return oThis.ReadPTab(t, l, oPTab);
+            });
+            oNewElem = oPTab;
         }
         else if (c_oSerRunType.pagenum === type)
         {
@@ -16595,7 +16853,7 @@ function Binary_FontTableReader(oReadResult, stream)
 			if (c_oSerFontTableTypes.Font !== t)
 				return c_oSerConstants.ReadUnknown;
 
-			let font = {name : "", altName : "", family : "", embed : []};
+			let font = {name : "", altName : "", family : "", embed : [], keys : [], subsetted : 0};
 			let res = oThis.bcr.Read1(l, function(t, l){
 				if (c_oSerFontTableTypes.Name === t)
 					font.name = oThis.stream.GetString2LE(l);
@@ -16605,6 +16863,10 @@ function Binary_FontTableReader(oReadResult, stream)
 					font.family = oThis.stream.GetString2LE(l);
 				else if (t >= c_oSerFontTableTypes.EmbedRegular && t <= c_oSerFontTableTypes.EmbedBoldItalic)
 					font.embed.push({slot : t - c_oSerFontTableTypes.EmbedRegular, path : oThis.stream.GetString2LE(l)});
+				else if (t >= c_oSerFontTableTypes.EmbedKeyRegular && t <= c_oSerFontTableTypes.EmbedKeyBoldItalic)
+					font.keys[t - c_oSerFontTableTypes.EmbedKeyRegular] = oThis.stream.GetString2LE(l);
+				else if (c_oSerFontTableTypes.EmbedSubsetted === t && l >= 1)
+					font.subsetted = oThis.stream.GetUChar();
 				else
 					return c_oSerConstants.ReadUnknown;
 				return c_oSerConstants.ReadOk;
@@ -16613,7 +16875,13 @@ function Binary_FontTableReader(oReadResult, stream)
 				for (let i = 0; i < font.embed.length; ++i) {
 					// only a file of the media folder written by the converter (media/fonts/<name>.ttf|otf|ttc)
 					if (/^fonts\/[A-Za-z0-9_.\-]+\.(ttf|otf|ttc)$/i.test(font.embed[i].path) && font.embed[i].path.indexOf("..") < 0)
-						oThis.oReadResult.embeddedFonts.push({name : font.name, slot : font.embed[i].slot, path : font.embed[i].path});
+					{
+						let slot = font.embed[i].slot, key = font.keys[slot];
+						// the key is what lets a save re-create the original file: a face without a valid GUID is still used, but not saved
+						oThis.oReadResult.embeddedFonts.push({name : font.name, slot : slot, path : font.embed[i].path,
+							key : (typeof key === "string" && /^\{?[0-9A-Fa-f]{8}-?[0-9A-Fa-f]{4}-?[0-9A-Fa-f]{4}-?[0-9A-Fa-f]{4}-?[0-9A-Fa-f]{12}\}?$/.test(key)) ? key : "",
+							subsetted : !!(font.subsetted & (1 << slot))});
+					}
 				}
 			}
 			if (font.name && font.altName && font.name !== font.altName)
@@ -17245,11 +17513,18 @@ function Binary_SettingsTableReader(doc, oReadResult, stream)
 			Settings.BalanceSingleByteDoubleByteWidth = 0 !== ((flags1 >> 6) & 1);
 			Settings.UlTrailSpace = 0 !== ((flags1 >> 9) & 1);
 			Settings.DoNotExpandShiftReturn = 0 != ((flags1 >> 10) & 1);
+			Settings.CompatFlags = Settings.CompatFlags || [0, 0, 0];
+			Settings.CompatFlags[0] = flags1 >>> 0;
 		} else if (c_oSerCompat.Flags2 === type) {
 			var flags2 = this.stream.GetULong(length);
 			Settings.DoNotBreakWrappedTables = 0 !== ((flags2 >> 9) & 1);
 			Settings.UseFELayout = 0 != ((flags2 >> 17) & 1);
 			Settings.SplitPageBreakAndParaMark = 0 != ((flags2 >> 27) & 1);
+			Settings.CompatFlags = Settings.CompatFlags || [0, 0, 0];
+			Settings.CompatFlags[1] = flags2 >>> 0;
+		} else if (c_oSerCompat.Flags3 === type) {
+			Settings.CompatFlags = Settings.CompatFlags || [0, 0, 0];
+			Settings.CompatFlags[2] = this.stream.GetULong(length) >>> 0;
 		} else
 			res = c_oSerConstants.ReadUnknown;
 		return res;

@@ -50,7 +50,7 @@
 		var l = X, t = PDSE.LineTop, r = X + this.GetWidth(), b = PDSE.BaseLine;
 
 		Context.p_color(0, 0, 0, 255);
-		Context.drawHorLineExt(c_oAscLineDrawingRule.Center, (t + b) / 2, l, r, this.LineW, 0, 0);
+		Context.drawHorLineExt(c_oAscLineDrawingRule.Center, t + (b - t) * 0.75, l, r, this.LineW, 0, 0);
 
 		if (editor && editor.ShowParaMarks && Context.DrawFootnoteRect)
 		{
