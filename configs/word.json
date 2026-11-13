@@ -15,6 +15,7 @@
 			"vendor/string.js",
 			"vendor/array.js",
 			"common/editorscommon.js",
+			"common/EoSvgHairline.js",
 			"common/externalChartCollector.js",
 			"common/frameManager.js",
 			"common/BulletPreviewDrawer.js",

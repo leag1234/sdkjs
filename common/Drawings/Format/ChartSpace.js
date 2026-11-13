@@ -5014,6 +5014,10 @@ function(window, undefined) {
 						oTrendlineLbl.updatePosition(posX, posY);
 					}
 				}
+				var aSunburstLbls = this.getSunburstDLbls();
+				for (var nSb = 0; nSb < aSunburstLbls.length; ++nSb) {
+					aSunburstLbls[nSb].updatePosition(posX, posY);
+				}
 				var aAxes = this.chart.plotArea.axId;
 				for (var i = 0; i < aAxes.length; ++i) {
 					var oAxis = aAxes[i];
@@ -5912,6 +5916,15 @@ function(window, undefined) {
 			let sPts = seria.getCatPts();
 			let sPtsIndex = 0;
 
+			if (chartType === AscFormat.SERIES_LAYOUT_SUNBURST) {
+				// one label per segment, not one per value point
+				for (let nPt = 0; nPt < aPts.length; ++nPt) {
+					aPts[nPt].compiledDlb = null;
+				}
+				this.calculateSunburstDLbls(seria, cachedData, default_lbl);
+				return;
+			}
+
 			for(let nPt = 0; nPt < aPts.length; ++nPt) {
 				let pt = null;
 				// if (chartType === AscFormat.SERIES_LAYOUT_TREEMAP) {
@@ -5932,16 +5945,208 @@ function(window, undefined) {
 
 				// treemap show labels rather than numbers
 				if (chartType === AscFormat.SERIES_LAYOUT_TREEMAP) {
-					const label = searchLabel(sPts, pt.idx);
+					// the leaf of the row (a row whose deepest levels are empty has its name on a higher level)
+					const label = (cachedData.leafNames && cachedData.leafNames[pt.idx]) || searchLabel(sPts, pt.idx);
 					pt.compiledDlb.replaceTextContentNoHistory(label);
+					if (cachedData.rects) {
+						this.setSunburstLabelColor(pt.compiledDlb);
+					}
 					pt.compiledDlb.recalculateInternal();
 				}
 				if (cachedData.funnel && pt.compiledDlb.pt <= 0) {
 					pt.compiledDlb = default_lbl;
 				}
 			}
+			if (chartType === AscFormat.SERIES_LAYOUT_TREEMAP && cachedData.rects) {
+				this.calculateTreemapHeaders(seria, cachedData, default_lbl);
+			}
 		}
 	}
+	/**
+	 * The header of every top-level branch of a treemap with several levels: its name, white, at the top left of the
+	 * branch (parentLabelLayout "overlapping", the layout of Office); none when the file asks for no parent labels.
+	 */
+	CChartSpace.prototype.calculateTreemapHeaders = function (seria, cachedData, defaultLbl) {
+		cachedData.compiledDlbs = [];
+		const oVisibility = seria.dataLabels && seria.dataLabels.visibility;
+		const nLayout = seria.layoutPr ? seria.layoutPr.parentLabelLayout : null;
+		if ((oVisibility && !oVisibility.categoryName) || nLayout === AscFormat.PARENT_LABEL_LAYOUT_NONE || !cachedData.branches) {
+			return;
+		}
+		const oThis = this;
+		cachedData.branches.forEach(function (oBranch, nBranch) {
+			if (!oBranch.isGroup || !oBranch.name) {
+				return;
+			}
+			AscFormat.ExecuteNoHistory(function () {
+				const oPt = new AscFormat.CNumericPoint();
+				oPt.setIdx(oBranch.first);
+				oPt.setVal(0);
+				const oLbl = new AscFormat.CDLbl();
+				oLbl.merge(defaultLbl);
+				oLbl.chart = oThis;
+				oLbl.series = seria;
+				oLbl.pt = oPt;
+				oLbl.idx = -1 - nBranch;
+				oLbl.eoBranch = nBranch;
+				oLbl.setShowChartExVal(true);
+				oLbl.recalculate();
+				oLbl.replaceTextContentNoHistory(oBranch.name);
+				oThis.setSunburstLabelColor(oLbl);
+				oLbl.recalculateInternal();
+				cachedData.compiledDlbs.push(oLbl);
+			}, oThis, []);
+		});
+	};
+	/** The fill of the top-level branch with the given index (accent 1, 2, 3... of the theme) in a sunburst or a treemap. */
+	CChartSpace.prototype.getBranchBrush = function (nBranch) {
+		const oBrush = AscFormat.CreateUnifillSolidFillSchemeColor(nBranch % 6, 0);
+		const oParents = this.getParentObjects();
+		oBrush.calculate(oParents.theme, oParents.slide, oParents.layout, oParents.master, {R: 0, G: 0, B: 0, A: 255}, this.clrMapOvr);
+		return oBrush;
+	};
+	/**
+	 * The top-level branches of a sunburst or a treemap with several levels, in the order of the data: the entries of its
+	 * legend (the legend is laid out before the data of the chart is calculated, so it reads the series itself).
+	 * @returns {null|{name: string}[]}
+	 */
+	CChartSpace.prototype.getHierarchyLegendEntries = function () {
+		if (!this.isChartEx()) {
+			return null;
+		}
+		const aSeries = this.chart.plotArea.plotAreaRegion.series;
+		const oSeries = aSeries && aSeries[0];
+		if (!oSeries || (oSeries.layoutId !== AscFormat.SERIES_LAYOUT_SUNBURST && oSeries.layoutId !== AscFormat.SERIES_LAYOUT_TREEMAP)) {
+			return null;
+		}
+		const aLevels = (oSeries.getCatLit(oSeries.layoutId) || []).map(function (oLvl) {
+			return oLvl.pts.filter(function (oPt) {
+				return oPt.val !== '' && oPt.val !== null && oPt.val !== undefined;
+			});
+		}).filter(function (aPts) {
+			return aPts.length > 0;
+		});
+		const oNumLit = oSeries.getValLit();
+		if (aLevels.length < 2 || !oNumLit || !oNumLit.pts) {
+			return null;
+		}
+		const aNames = [], oSeen = {};
+		oNumLit.pts.forEach(function (oRow) {
+			if (!(oRow.val > 0)) {
+				return;
+			}
+			for (let nLvl = 0; nLvl < aLevels.length; ++nLvl) {
+				for (let p = 0; p < aLevels[nLvl].length; ++p) {
+					if (aLevels[nLvl][p].idx === oRow.idx) {
+						const sName = String(aLevels[nLvl][p].val);
+						if (!oSeen[sName]) {
+							oSeen[sName] = true;
+							aNames.push({name: sName});
+						}
+						return;
+					}
+				}
+			}
+		});
+		return aNames;
+	};
+	/**
+	 * The labels of a sunburst chart: one per segment (a node of the tree), with its category name and/or value as
+	 * the data label settings of the series ask. They are kept in cachedData.compiledDlbs; the chart drawer places
+	 * them (drawSunburstChart._calculateDLbl) and hides those that do not fit.
+	 */
+	CChartSpace.prototype.calculateSunburstDLbls = function (seria, cachedData, defaultLbl) {
+		cachedData.compiledDlbs = [];
+		const oVisibility = seria.dataLabels && seria.dataLabels.visibility;
+		const bCat = !oVisibility || oVisibility.categoryName !== false && oVisibility.categoryName !== 0;
+		const bVal = !!(oVisibility && oVisibility.value);
+		const bSer = !!(oVisibility && oVisibility.seriesName);
+		if (!cachedData.data || !(bCat || bVal || bSer)) {
+			return;
+		}
+		const dTotal = cachedData.data.pVal || 0;
+		const sSeriesName = bSer && seria.getSeriesName ? seria.getSeriesName() : "";
+		const oThis = this;
+		const aNodes = [];
+		const collect = function (aChildren) {
+			for (let i = 0; i < aChildren.length; ++i) {
+				aNodes.push(aChildren[i]);
+				if (aChildren[i].children && aChildren[i].children.length) {
+					collect(aChildren[i].children);
+				}
+			}
+		};
+		collect(cachedData.data.getChildren());
+		for (let i = 0; i < aNodes.length; ++i) {
+			const oNode = aNodes[i];
+			const aParts = [];
+			if (bSer && sSeriesName) {
+				aParts.push(sSeriesName);
+			}
+			if (bCat && oNode.name !== null && oNode.name !== undefined && oNode.name !== "") {
+				aParts.push(String(oNode.name));
+			}
+			if (bVal) {
+				aParts.push(String(Math.round(oNode.pVal * dTotal * 100) / 100));
+			}
+			if (aParts.length === 0) {
+				continue;
+			}
+			AscFormat.ExecuteNoHistory(function () {
+				const oPt = new AscFormat.CNumericPoint();
+				oPt.setIdx(oNode.idx);
+				oPt.setVal(oNode.pVal * dTotal);
+				const oLbl = new AscFormat.CDLbl();
+				oLbl.merge(defaultLbl);
+				oLbl.chart = oThis;
+				oLbl.series = seria;
+				oLbl.pt = oPt;
+				oLbl.idx = oNode.idx;
+				oLbl.setShowChartExVal(true);
+				oLbl.recalculate();
+				oLbl.replaceTextContentNoHistory(aParts.join(", "));
+				oThis.setSunburstLabelColor(oLbl);
+				oLbl.recalculateInternal();
+				cachedData.compiledDlbs.push(oLbl);
+			}, this, []);
+		}
+	};
+	/** white text, as the labels of a sunburst chart in Word (they sit on the coloured segments) */
+	CChartSpace.prototype.setSunburstLabelColor = function (oLbl) {
+		const oFill = AscFormat.CreateUnfilFromRGB(255, 255, 255);
+		oFill.check(this.Get_Theme(), this.Get_ColorMap());
+		// the text of the label is kept in its rich text and in the text body compiled from it
+		const aBodies = [oLbl.tx && oLbl.tx.rich, oLbl.txBody];
+		for (let nBody = 0; nBody < aBodies.length; ++nBody) {
+			const oContent = aBodies[nBody] && aBodies[nBody].content;
+			if (!oContent || !oContent.Content) {
+				continue;
+			}
+			for (let nPara = 0; nPara < oContent.Content.length; ++nPara) {
+				const oPara = oContent.Content[nPara];
+				if (oPara.CheckRunContent) {
+					oPara.CheckRunContent(function (oRun) {
+						if (oRun && oRun.Set_Unifill) {
+							oRun.Set_Unifill(oFill, false);
+						}
+						return false;
+					});
+				}
+			}
+		}
+	};
+	/** @returns {CDLbl[]} the labels of the segments of a sunburst chart (empty for the other charts) */
+	CChartSpace.prototype.getSunburstDLbls = function () {
+		if (!this.isChartEx()) {
+			return [];
+		}
+		const oCachedData = this.getCachedData();
+		if (oCachedData && (oCachedData.type === AscFormat.SERIES_LAYOUT_SUNBURST || oCachedData.type === AscFormat.SERIES_LAYOUT_TREEMAP) &&
+			Array.isArray(oCachedData.compiledDlbs)) {
+			return oCachedData.compiledDlbs;
+		}
+		return [];
+	};
 	CChartSpace.prototype.calculateChartExLabelsPositions = function () {
 		if (!this.chartObj || !this.chart || !this.chart.plotArea || !this.chart.plotArea.plotAreaRegion || !this.chart.plotArea.plotAreaRegion.series) {
 			return;
@@ -5952,7 +6157,11 @@ function(window, undefined) {
 		for (let i = 0; i < aDLbls.length; i++) {
 			let oLbl = aDLbls[i];
 			let pos = this.chartObj.recalculatePositionText(oLbl);
-			oLbl.setPosition(pos.x, pos.y);
+			if (oLbl.eoRotation) {
+				oLbl.setPositionRotated(pos.x, pos.y, oLbl.eoRotation);
+			} else {
+				oLbl.setPosition(pos.x, pos.y);
+			}
 		}
 	};
 
@@ -7672,7 +7881,32 @@ function(window, undefined) {
 				series[0].dPt.some(function(dPt) { return dPt.spPr; });
 
 			let bSeriesLegend = aCharts.length > 1 || (bNoPieChart && (!((oFirstChart.varyColors || bHasCustomDPt) && series.length === 1) || bSurfaceChart || bRadarChart));
-			if (bSeriesLegend) {
+			// a sunburst or a treemap with several levels: one entry per top-level branch, with its colour
+			const aBranchEntries = this.getHierarchyLegendEntries();
+			if (aBranchEntries && aBranchEntries.length > 0 && series[0]) {
+				this.legendLength = aBranchEntries.length;
+				for (i = 0; i < aBranchEntries.length; ++i) {
+					entry = legend.findLegendEntryByIndex(i);
+					if (entry && entry.bDelete)
+						continue;
+					arr_str_labels.push(aBranchEntries[i].name);
+					calc_entry = new AscFormat.CalcLegendEntry(legend, this, i);
+					calc_entry.series = series[0];
+					calc_entry.txBody = AscFormat.CreateTextBodyFromString(aBranchEntries[i].name, this.getDrawingDocument(), calc_entry);
+					calc_entryes.push(calc_entry);
+					cur_width = calc_entry.txBody.getRectWidth(2000);
+					if (cur_width > max_width)
+						max_width = cur_width;
+					cur_font_size = calc_entry.txBody.content.Content[0].CompiledPr.Pr.TextPr.FontSize;
+					if (cur_font_size > max_font_size)
+						max_font_size = cur_font_size;
+					calc_entry.calcMarkerUnion = new AscFormat.CUnionMarker();
+					union_marker = calc_entry.calcMarkerUnion;
+					union_marker.marker = AscFormat.CreateMarkerGeometryByType(AscFormat.SYMBOL_SQUARE);
+					union_marker.marker.pen = series[0].compiledSeriesPen;
+					union_marker.marker.brush = this.getBranchBrush(i);
+				}
+			} else if (bSeriesLegend) {
 				if (bSurfaceChart) {
 					this.legendLength = this.chart.plotArea.charts[0].compiledBandFormats.length;
 					ser = series[0];
@@ -10481,6 +10715,10 @@ function(window, undefined) {
 					if(oTrendlineLbl) {
 						oTrendlineLbl.draw(graphics);
 					}
+				}
+				var aSunburstLbls = this.getSunburstDLbls();
+				for (var nSb = 0; nSb < aSunburstLbls.length; ++nSb) {
+					aSunburstLbls[nSb].draw(graphics);
 				}
 				for (var i = 0; i < this.chart.plotArea.axId.length; ++i) {
 					var oAxis = this.chart.plotArea.axId[i];

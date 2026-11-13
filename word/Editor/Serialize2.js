@@ -165,6 +165,67 @@ AscWord.EoSelectStylesToWrite = function(styles, document)
 		return styles.Style;
 	}
 };
+/**
+ * The w:styleId a style is written with. The editor keys its styles by generated ids, so a file written from them
+ * would carry "725" instead of "Heading1", and every reference (pStyle, rStyle, tblStyle, numStyleLink, basedOn,
+ * next, link) would change with it. A style read from a file keeps the id of the file (style.EoDocxStyleId, a plain
+ * flag that is not serialised) when it is unique; the other styles get an id made of their name (what Word does),
+ * made unique against every id already taken.
+ * @param styles {AscWord.CStyles}
+ * @returns {Object} generated id -> id to write
+ */
+AscWord.EoComputeStyleIdsForWrite = function(styles)
+{
+	var map = {}, taken = {}, takenLower = {}, id, style;
+	for (id in styles.Style)
+	{
+		style = styles.Style[id];
+		var orig = style && style.EoDocxStyleId;
+		if (orig && "string" === typeof orig && !taken[orig])
+		{
+			map[id] = orig;
+			taken[orig] = true;
+			takenLower[orig.toLowerCase()] = true;
+		}
+	}
+	for (id in styles.Style)
+	{
+		style = styles.Style[id];
+		if (!style || undefined !== map[id])
+			continue;
+		var base = ("string" === typeof style.Name ? style.Name : "").replace(/[^A-Za-z0-9_\-]/g, "");
+		if (!base || /^[0-9]/.test(base))
+			base = "Style" + base;
+		var candidate = base, n = 2;
+		while (takenLower[candidate.toLowerCase()])
+			candidate = base + (n++);
+		map[id] = candidate;
+		taken[candidate] = true;
+		takenLower[candidate.toLowerCase()] = true;
+	}
+	return map;
+};
+/** Starts the id mapping for a normal save (not for the clipboard); a failure leaves the generated ids as they are. */
+AscWord.EoPrepareStyleIdsForWrite = function(styles)
+{
+	try
+	{
+		AscWord.EoStyleIdWriteMap = AscWord.EoComputeStyleIdsForWrite(styles);
+	}
+	catch (e)
+	{
+		AscWord.EoStyleIdWriteMap = null;
+	}
+};
+AscWord.EoStyleIdForWrite = function(id)
+{
+	var map = AscWord.EoStyleIdWriteMap;
+	if (!map || null === id || undefined === id)
+		return id;
+	var key = id.toString();
+	return undefined !== map[key] ? map[key] : id;
+};
+
 var c_oSerTableTypes = {
     Signature:0,
     Info:1,
@@ -2137,6 +2198,8 @@ function BinaryFileWriter(doc, bMailMergeDocx, bMailMergeHtml, isCompatible, opt
 		var commentUniqueGuids = {};
 		this.WriteTable(c_oSerTableTypes.Comments, new BinaryCommentsTableWriter(this.memory, this.Document, oMapCommentId, commentUniqueGuids, false));
 		this.WriteTable(c_oSerTableTypes.DocumentComments, new BinaryCommentsTableWriter(this.memory, this.Document, oMapCommentId, commentUniqueGuids, true));
+        //Style ids of the file (or made of the style names) instead of the generated ones, from the numbering on
+		AscWord.EoPrepareStyleIdsForWrite(this.Document.Styles);
         //Write Numbering
 		var oNumIdMap = {};
         this.WriteTable(c_oSerTableTypes.Numbering, new BinaryNumberingTableWriter(this.memory, this.Document, oNumIdMap, null, this.saveParams));
@@ -2174,6 +2237,7 @@ function BinaryFileWriter(doc, bMailMergeDocx, bMailMergeHtml, isCompatible, opt
     }
 	this.WriteMainTableEnd = function()
     {
+		AscWord.EoStyleIdWriteMap = null;
         //Пишем количество таблиц
         this.memory.Seek(this.nStart);
         this.memory.WriteByte(this.nRealTableCount);
@@ -2279,6 +2343,7 @@ function BinaryFileWriter(doc, bMailMergeDocx, bMailMergeHtml, isCompatible, opt
 		if (this.saveParams.endnotesIndex > 0) {
 			this.WriteTable(c_oSerTableTypes.Endnotes, new BinaryNotesTableWriter(this.memory, this.Document, this.copyParams.oUsedNumIdMap, null, this.copyParams, this.saveParams, this.saveParams.endnotes));
 		}
+		AscWord.EoStyleIdWriteMap = null;
         this.WriteTable(c_oSerTableTypes.Numbering, new BinaryNumberingTableWriter(this.memory, this.Document, {}, this.copyParams.oUsedNumIdMap, this.saveParams));
         this.WriteTable(c_oSerTableTypes.Style, new BinaryStyleTableWriter(this.memory, this.Document, this.copyParams.oUsedNumIdMap, this.copyParams, this.saveParams));
 
@@ -2438,7 +2503,7 @@ function BinaryStyleTableWriter(memory, doc, oNumIdMap, copyParams, saveParams)
         if(null != id)
         {
             this.memory.WriteByte(c_oSer_sts.Style_Id);
-            this.memory.WriteString2(id.toString());
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(id).toString());
         }
         //Name
         if(null != style.Name)
@@ -2466,18 +2531,18 @@ function BinaryStyleTableWriter(memory, doc, oNumIdMap, copyParams, saveParams)
         if(null != style.BasedOn)
         {
             this.memory.WriteByte(c_oSer_sts.Style_BasedOn);
-            this.memory.WriteString2(style.BasedOn.toString());
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(style.BasedOn).toString());
         }
         //Next
         if(null != style.Next)
         {
             this.memory.WriteByte(c_oSer_sts.Style_Next);
-            this.memory.WriteString2(style.Next.toString());
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(style.Next).toString());
         }
 		if(null != style.Link)
 		{
 			this.memory.WriteByte(c_oSer_sts.Style_Link);
-			this.memory.WriteString2(style.Link);
+			this.memory.WriteString2(AscWord.EoStyleIdForWrite(style.Link));
 		}
         //qFormat
         if(null != style.qFormat)
@@ -2600,7 +2665,7 @@ function Binary_pPrWriter(memory, oNumIdMap, oBinaryHeaderFooterTableWriter, sav
         {
             this.memory.WriteByte(c_oSerProp_pPrType.ParaStyle);
             this.memory.WriteByte(c_oSerPropLenType.Variable);
-            this.memory.WriteString2(pPr.PStyle);
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(pPr.PStyle));
         }
         //Списки надо писать после стилей, т.к. при открытии в методах добавления списка проверяются стили
         if(null != pPr.NumPr)
@@ -3458,7 +3523,7 @@ function Binary_rPrWriter(memory, saveParams)
         {
 		    this.memory.WriteByte(c_oSerProp_rPrType.RStyle);
             this.memory.WriteByte(c_oSerPropLenType.Variable);
-            this.memory.WriteString2(rPr.RStyle);
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(rPr.RStyle));
 		}
 		//Spacing
         if(null != rPr.Spacing)
@@ -4722,7 +4787,7 @@ Binary_tblPrWriter.prototype =
 		if (styleId)
 		{
 			this.memory.WriteByte(c_oSerProp_tblPrType.Style);
-			this.memory.WriteString2(styleId);
+			this.memory.WriteString2(AscWord.EoStyleIdForWrite(styleId));
 		}
 		
 		this.WriteTblPr(table.Pr, table);
@@ -5337,12 +5402,12 @@ function BinaryNumberingTableWriter(memory, doc, oNumIdMap, oUsedNumIdMap, saveP
 		if(null != num.NumStyleLink)
 		{
             this.memory.WriteByte(c_oSerNumTypes.NumStyleLink);
-            this.memory.WriteString2(num.NumStyleLink);
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(num.NumStyleLink));
 		}
         if(null != num.StyleLink)
 		{
             this.memory.WriteByte(c_oSerNumTypes.StyleLink);
-            this.memory.WriteString2(num.StyleLink);
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(num.StyleLink));
 		}
 		let nsid = num.GetNsid();
 		if (undefined !== nsid && null !== nsid)
@@ -5417,7 +5482,7 @@ function BinaryNumberingTableWriter(memory, doc, oNumIdMap, oUsedNumIdMap, saveP
         {
             this.memory.WriteByte(c_oSerNumTypes.lvl_PStyle);
             this.memory.WriteByte(c_oSerPropLenType.Variable);
-            this.memory.WriteString2(lvl.PStyle);
+            this.memory.WriteString2(AscWord.EoStyleIdForWrite(lvl.PStyle));
         }
         //ParaPr
         if(null != lvl.ParaPr)
@@ -8492,6 +8557,8 @@ function BinaryFileReader(doc, openParams)
 			var sNewStyleId = oNewStyle.Get_Id();
 			var oNewId = elem.param;
 			oIdMap[oNewId.id] = sNewStyleId;
+			//the id of the file is written again on save (AscWord.EoComputeStyleIdsForWrite)
+			oNewStyle.EoDocxStyleId = oNewId.id;
             //такой код для сранения имен есть в DrawingDocument.js
             // как только меняется DrawingDocument - меняется и код здесь.
             var sNewStyleName = oNewStyle.Name.toLowerCase().replace(/\s/g,"");

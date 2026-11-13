@@ -3132,6 +3132,37 @@
 			url = 'http://' + url;
 		return isSafeHyperlink(url) ? url : null;
 	}
+	/**
+	 * A link to a file of this computer, as Excel stores it: a file: URL, an absolute path (POSIX /home/me/a.pdf,
+	 * Windows C:\\x\\a.pdf or C:/x/a.pdf, UNC \\\\server\\share\\a.pdf) or a path relative to the document
+	 * (./a.pdf, ../docs/a.pdf, .\\a.pdf, ..\\docs\\a.pdf).
+	 * Opening such a link is up to the desktop application (it checks the file); the editors only store it.
+	 * @param {string} url
+	 * @returns {null|{kind: string, value: string}} kind: "url", "posix", "windows", "unc" or "relative"
+	 */
+	function getLocalFileHyperlink(url)
+	{
+		if (typeof url !== 'string' || /[\x00-\x1f\x7f]/.test(url))
+			return null;
+		url = url.trim();
+		if (!url || url.length > 2083)
+			return null;
+		if (/^file:/i.test(url))
+			return (isValidFileUrl(url.replace(/ /g, '%20').replace(/^file:/i, 'file:')) ? {kind: 'url', value: url} : null);
+		if (/^[A-Za-z]:[\\\/][^\\\/]/.test(url))
+			return {kind: 'windows', value: url};
+		if (/^\\\\[^\\\/\s]+[\\\/][^\\\/]/.test(url))
+			return {kind: 'unc', value: url};
+		if (/^\/(?!\/)\S/.test(url))
+			return {kind: 'posix', value: url};
+		if (/^\.{1,2}[\\\/]\S/.test(url))
+			return {kind: 'relative', value: url};
+		return null;
+	}
+	function isLocalFileHyperlink(url)
+	{
+		return null !== getLocalFileHyperlink(url);
+	}
 	function getUrlType(url)
 	{
 		//todo validate blob, ftp, http, https, ws, wss, file with new URL https://nodejs.org/api/url.html#special-schemes
@@ -15730,6 +15761,8 @@
 	window["AscCommon"].isSafeHyperlink = isSafeHyperlink;
 	window["AscCommon"].getSafeHyperlink = getSafeHyperlink;
 	window["AscCommon"].getUrlType = getUrlType;
+	window["AscCommon"].getLocalFileHyperlink = getLocalFileHyperlink;
+	window["AscCommon"].isLocalFileHyperlink = isLocalFileHyperlink;
 	window["AscCommon"].prepareUrl = prepareUrl;
 	window["AscCommon"].getUserColorById = getUserColorById;
 	window["AscCommon"].setUserColorById = setUserColorById;

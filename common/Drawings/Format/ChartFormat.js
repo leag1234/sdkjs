@@ -2637,6 +2637,10 @@
         if(this.series && this.pt) {
             var oSeries = this.series;
             if(oSeries) {
+                // the series of an extended chart (CSeries of ChartEx.js) keeps its labels in dataLabels, not in dLbls
+                if(typeof oSeries.setDLbls !== "function") {
+                    return null;
+                }
                 var oDlbls;
                 if(!oSeries.dLbls) {
                     var oChart = oSeries.parent;
@@ -3253,6 +3257,10 @@
         return compiled_string;
     };
     CDLbl.prototype.getMaxWidth = function(bodyPr) {
+        if(AscFormat.isRealNumber(this.eoMaxWidth) && this.eoMaxWidth > 0) {
+            //a label of a sunburst chart wraps inside its segment
+            return this.eoMaxWidth;
+        }
         var oChartSpace = this.getChartSpace();
 
 		if (oChartSpace && this.layout) {
@@ -3638,7 +3646,10 @@
         }
     };
     CDLbl.prototype.draw = function () {
-
+        if(this.eoHidden) {
+            //the segment of a sunburst chart is too small for its label
+            return;
+        }
         if(this.txWarpStructNoTransform === undefined) {
 
             if(this.txBody && this.txBody.content) {
@@ -3686,6 +3697,31 @@
         //      global_MatrixTransformer.MultiplyAppend(this.localTransformText, this.chart.localTransform);
         //  }
 
+        this.transformText = this.localTransformText.CreateDublicate();
+        this.invertTransformText = global_MatrixTransformer.Invert(this.transformText);
+    };
+    /**
+     * Places the label like setPosition and turns it (and its text) by dAngle (radians, clockwise on the page)
+     * around the centre of its box. Used by the labels of a sunburst chart, which read along the radius.
+     */
+    CDLbl.prototype.setPositionRotated = function(x, y, dAngle) {
+        this.setPosition(x, y);
+        if(!AscFormat.isRealNumber(dAngle) || dAngle === 0) {
+            return;
+        }
+        var oThis = this;
+        var fRotate = function(oMatrix) {
+            global_MatrixTransformer.TranslateAppend(oMatrix, -oThis.extX / 2, -oThis.extY / 2);
+            global_MatrixTransformer.RotateRadAppend(oMatrix, dAngle);
+            global_MatrixTransformer.TranslateAppend(oMatrix, oThis.extX / 2 + x, oThis.extY / 2 + y);
+        };
+        this.localTransform.Reset();
+        fRotate(this.localTransform);
+        this.transform = this.localTransform.CreateDublicate();
+        this.invertTransform = global_MatrixTransformer.Invert(this.transform);
+
+        this.localTransformText = this.ownTransformText.CreateDublicate();
+        fRotate(this.localTransformText);
         this.transformText = this.localTransformText.CreateDublicate();
         this.invertTransformText = global_MatrixTransformer.Invert(this.transformText);
     };

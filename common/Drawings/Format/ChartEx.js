@@ -2590,6 +2590,7 @@ function (window, undefined) {
 			return false;
 		}
 		let nPtCount = 0;
+		const aNewLevels = [];
 		if (aParsedRef.length > 0) {
 			let nRows = 0, nRef, oRef, oBBox, nPtIdx, nCol, oWS, oCell, sVal, nCols = 0, nRow;
 			let nLvl, oLvl;
@@ -2631,7 +2632,7 @@ function (window, undefined) {
 					}
 					nPtCount = Math.max(nPtCount, nPtIdx);
 					oLvl.setPtCount(nPtIdx);
-					this.addLevelData(oLvl);
+					aNewLevels.push(oLvl);
 				}
 			}
 			else {
@@ -2661,8 +2662,16 @@ function (window, undefined) {
 					}
 					nPtCount = Math.max(nPtCount, nPtIdx);
 					oLvl.setPtCount(nPtIdx);
-					this.addLevelData(oLvl);
+					aNewLevels.push(oLvl);
 				}
+			}
+			// the sheet gives the levels from the first column (the root) to the last; the file stores them from the
+			// deepest to the shallowest, so does the model of the categories of every extended chart
+			if (this.type === AscFormat.STRING_DIMENSION_TYPE_CAT) {
+				aNewLevels.reverse();
+			}
+			for (let nNew = 0; nNew < aNewLevels.length; ++nNew) {
+				this.addLevelData(aNewLevels[nNew]);
 			}
 		}
 		this.onUpdateCache();
@@ -3419,11 +3428,14 @@ function (window, undefined) {
 		if (aCatDim.length > 0) {
 			let oDim = aCatDim[0];
 			if (oDim) {
-				if (type === AscFormat.SERIES_LAYOUT_SUNBURST) {
-					return oDim.levelData;
+				if (type === AscFormat.SERIES_LAYOUT_SUNBURST || type === AscFormat.SERIES_LAYOUT_TREEMAP) {
+					// cx:lvl elements are stored from the deepest level to the shallowest (as Excel writes them),
+					// the tree of a sunburst or a treemap starts from its root: the last level
+					return oDim.levelData.slice().reverse();
 				} else {
-					let index = (type === AscFormat.SERIES_LAYOUT_WATERFALL || type === AscFormat.SERIES_LAYOUT_FUNNEL) ? oDim.levelData.length - 1 : 0;
-					return oDim.levelData[index] || null;
+					// the levels are kept deepest first (as in the file): the first level holds the names of the leaves,
+					// the labels of the axis of a waterfall or a funnel
+					return oDim.levelData[0] || null;
 				}
 			}
 		}

@@ -875,6 +875,11 @@ function MoveChartObjectTrack(oObject, oChartSpace)
             return;
         }
 
+        if(this.originalObject instanceof AscFormat.CDLbl && this.chartSpace && this.chartSpace.isChartEx && this.chartSpace.isChartEx())
+        {
+            //the labels of an extended chart are placed by the chart: dragging them changes nothing
+            return;
+        }
         AscCommon.History.Create_NewPoint(1);
         var oObjectToSet = null;
         if(this.originalObject instanceof AscFormat.CDLbl)

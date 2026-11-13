@@ -7990,10 +7990,30 @@ drawSunburstChart.prototype = {
 			// let i = 0;
 			let currentLayer= 1;
 			// let pathIndex = {};
+			// geometry of every segment, for the colours (one per top-level branch) and the labels
+			this.segments = {};
+			this.segmentCoords = coords;
+			// the ring is sorted by size, the colours follow the order of the data: the first branch of the file is accent 1
+			const aBranches = head.slice().sort(function (a, b) {
+				return a.stIdx - b.stIdx;
+			});
+			let currentBranch = 0;
 
 			cachedData.data.preorderTraverse(
 				function(t, node) {
 					var angle = node.pVal * Math.PI * 2;
+
+					if (currentLayer === 1) {
+						currentBranch = aBranches.indexOf(node);
+					}
+					t.segments[node.idx] = {
+						node: node,
+						startAngle: startAngle,
+						angle: angle,
+						innerRadius: ringWidth * currentLayer,
+						outerRadius: ringWidth * (currentLayer + 1),
+						branch: currentBranch
+					};
 
 					// Do your layout logic here, maybe with external state
 					t.paths[node.idx] = t._calculateSegment(
@@ -8073,7 +8093,7 @@ drawSunburstChart.prototype = {
 				if (this.paths.hasOwnProperty(i) && this.paths[i]) {
 					let nPtIdx = parseInt(i);
 					let pen = oSeries.getPtPen(nPtIdx);
-					let brush = oSeries.getPtBrush(nPtIdx);
+					let brush = this._getSegmentBrush(oSeries, nPtIdx);
 					pen.Fill = brush.createDuplicate();
 					pen.Fill.fill.color.RGBA.B = 255;
 					pen.Fill.fill.color.RGBA.G = 255;
@@ -8086,8 +8106,216 @@ drawSunburstChart.prototype = {
 		this.cChartDrawer.cShapeDrawer.Graphics.RestoreGrState();
 	},
 
+	/**
+	 * The fill of a segment: the explicit data point fill of the file when there is one, else one colour per top-level
+	 * branch (accent 1, 2, 3...) shared by all its descendants, as Word draws a sunburst chart.
+	 */
+	_getSegmentBrush: function (oSeries, nIdx) {
+		const oDpt = oSeries.getDptByIdx ? oSeries.getDptByIdx(nIdx) : null;
+		const oSegment = this.segments ? this.segments[nIdx] : null;
+		if ((oDpt && oDpt.spPr && oDpt.spPr.Fill) || !oSegment) {
+			return oSeries.getPtBrush(nIdx);
+		}
+		if (!this.branchBrushes) {
+			this.branchBrushes = {};
+		}
+		const nAccent = oSegment.branch % 6;
+		if (!this.branchBrushes[nAccent]) {
+			const oBrush = AscFormat.CreateUnifillSolidFillSchemeColor(nAccent, 0);
+			const oParents = this.cChartSpace.getParentObjects();
+			oBrush.calculate(oParents.theme, oParents.slide, oParents.layout, oParents.master, {R: 0, G: 0, B: 0, A: 255}, this.cChartSpace.clrMapOvr);
+			this.branchBrushes[nAccent] = oBrush;
+		}
+		return this.branchBrushes[nAccent];
+	},
+
+	/** limits the width of the text of a segment label (null: no limit) and lays the text out again */
+	_setLabelMaxWidth: function (compiledDlb, dMaxWidth) {
+		const dNew = dMaxWidth === null ? null : Math.max(dMaxWidth, 1);
+		if (compiledDlb.eoMaxWidth === dNew || (compiledDlb.eoMaxWidth === undefined && dNew === null)) {
+			return;
+		}
+		compiledDlb.eoMaxWidth = dNew;
+		AscFormat.ExecuteNoHistory(function () {
+			compiledDlb.recalcInfo.recalculateContent = true;
+			compiledDlb.recalcInfo.recalculateTransformText = true;
+			compiledDlb.recalculateInternal();
+		}, this, []);
+	},
+
+	/** true when the laid out text of a label breaks a line inside a word (a line starting after something else than a space) */
+	_labelSplitsWord: function (compiledDlb) {
+		const oContent = compiledDlb.txBody && compiledDlb.txBody.content;
+		if (!oContent || !oContent.Content) {
+			return false;
+		}
+		for (let i = 0; i < oContent.Content.length; ++i) {
+			const oPar = oContent.Content[i];
+			const aItems = oPar && oPar.Content;
+			if (!aItems) {
+				continue;
+			}
+			for (let j = 0; j < aItems.length; ++j) {
+				const oRun = aItems[j];
+				if (!oRun || !oRun.Content || !oRun.Lines || !oRun.protected_GetLinesCount) {
+					continue;
+				}
+				const nLines = oRun.protected_GetLinesCount();
+				for (let nLine = 1; nLine < nLines; ++nLine) {
+					const nStart = oRun.protected_GetRangeStartPos(nLine, 0);
+					const oPrev = nStart > 0 ? oRun.Content[nStart - 1] : null;
+					if (oPrev && !(oPrev.IsSpace && oPrev.IsSpace())) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	},
+
+	/** lays the text of a label out again */
+	_relayoutLabel: function (compiledDlb) {
+		AscFormat.ExecuteNoHistory(function () {
+			compiledDlb.recalcInfo.recalculateContent = true;
+			compiledDlb.recalcInfo.recalculateTransformText = true;
+			compiledDlb.recalculateInternal();
+		}, this, []);
+	},
+
+	/** scales the font size of the text of a label (1: as compiled); returns true when the scale changed */
+	_setLabelFontScale: function (compiledDlb, dScale) {
+		const dOld = compiledDlb.eoFontScale === undefined ? 1 : compiledDlb.eoFontScale;
+		if (dOld === dScale) {
+			return false;
+		}
+		const aBodies = [compiledDlb.tx && compiledDlb.tx.rich, compiledDlb.txBody];
+		let bChanged = false;
+		AscFormat.ExecuteNoHistory(function () {
+			for (let nBody = 0; nBody < aBodies.length; ++nBody) {
+				const oContent = aBodies[nBody] && aBodies[nBody].content;
+				if (!oContent || !oContent.Content) {
+					continue;
+				}
+				for (let nPara = 0; nPara < oContent.Content.length; ++nPara) {
+					const oPara = oContent.Content[nPara];
+					if (!oPara || !oPara.CheckRunContent) {
+						continue;
+					}
+					oPara.CheckRunContent(function (oRun) {
+						if (oRun && oRun.SetFontSize && oRun.Get_FontSize) {
+							if (oRun.eoBaseFontSize === undefined) {
+								oRun.eoBaseFontSize = oRun.Get_FontSize();
+							}
+							if (AscFormat.isRealNumber(oRun.eoBaseFontSize)) {
+								oRun.SetFontSize(Math.max(4, Math.round(oRun.eoBaseFontSize * dScale * 2) / 2));
+								bChanged = true;
+							}
+						}
+						return false;
+					});
+				}
+			}
+		}, this, []);
+		compiledDlb.eoFontScale = dScale;
+		if (bChanged) {
+			this._relayoutLabel(compiledDlb);
+		}
+		return bChanged;
+	},
+
+	/**
+	 * Fits the text of a label to the width of its ring like Excel: the text is made smaller (down to 65%) to stay on one
+	 * line; when it is still too wide it wraps at spaces only, never inside a word.
+	 * @returns {number} the width of the text
+	 */
+	_wrapLabelAtSpaces: function (compiledDlb, dRingWidth) {
+		let dNatural = compiledDlb.extX;                      // the text on one line
+		// the insets of the label do not shrink with its font, so the scale is refined a few times
+		for (let n = 0; n < 4 && AscFormat.isRealNumber(dRingWidth) && dRingWidth > 0 && AscFormat.isRealNumber(dNatural) && dNatural > dRingWidth * 1.02; ++n) {
+			const dOldScale = compiledDlb.eoFontScale === undefined ? 1 : compiledDlb.eoFontScale;
+			if (!this._setLabelFontScale(compiledDlb, Math.max(0.65, dOldScale * dRingWidth / dNatural * 0.97))) {
+				break;
+			}
+			this._setLabelMaxWidth(compiledDlb, null);
+			dNatural = compiledDlb.extX;
+			if (compiledDlb.eoFontScale <= 0.65) {
+				break;
+			}
+		}
+		if (dNatural <= dRingWidth * 1.02) {
+			return dNatural;
+		}
+		let dWidth = dRingWidth;
+		this._setLabelMaxWidth(compiledDlb, dWidth);
+		for (let n = 0; n < 40 && dWidth < dNatural && this._labelSplitsWord(compiledDlb); ++n) {
+			dWidth = Math.min(dNatural, dWidth * 1.05);
+			this._setLabelMaxWidth(compiledDlb, dWidth);
+		}
+		return dWidth;
+	},
+
+	/** true when the box (centre and half sizes in chart units, turned by dRotation radians clockwise) is inside the ring segment */
+	_boxInSegment: function (oSegment, dCenterX, dCenterY, dHalfW, dHalfH, dRotation) {
+		const aSigns = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+		const dFull = Math.PI * 2;
+		const dCos = Math.cos(dRotation || 0), dSin = Math.sin(dRotation || 0);
+		for (let i = 0; i < aSigns.length; ++i) {
+			const dOffX = aSigns[i][0] * dHalfW, dOffY = aSigns[i][1] * dHalfH;
+			const dRx = dCenterX + dOffX * dCos - dOffY * dSin - this.segmentCoords.x;
+			const dRy = this.segmentCoords.y - (dCenterY + dOffX * dSin + dOffY * dCos);
+			const dRadius = Math.sqrt(dRx * dRx + dRy * dRy);
+			if (dRadius < oSegment.innerRadius || dRadius > oSegment.outerRadius) {
+				return false;
+			}
+			let dDelta = (Math.atan2(dRy, dRx) - oSegment.startAngle) % dFull;
+			if (dDelta < 0) {
+				dDelta += dFull;
+			}
+			if (dDelta > oSegment.angle) {
+				return false;
+			}
+		}
+		return true;
+	},
+
+	/**
+	 * The label of a segment is centred in it (mid angle, mid radius) and hidden when the segment is too small for it.
+	 * @param {CDLbl} compiledDlb the label of the segment with the index compiledDlb.idx
+	 */
 	_calculateDLbl: function (compiledDlb) {
-		return {x: 0, y: 0};
+		const oSegment = this.segments ? this.segments[compiledDlb.idx] : null;
+		const pxToMm = this.chartProp ? this.chartProp.pxToMM : null;
+		if (!oSegment || !this.segmentCoords || !AscFormat.isRealNumber(pxToMm) || pxToMm === 0) {
+			compiledDlb.eoHidden = true;
+			return {x: 0, y: 0};
+		}
+		const dMidAngle = oSegment.startAngle + oSegment.angle / 2;
+		const dMidRadius = (oSegment.innerRadius + oSegment.outerRadius) / 2;
+		const dCenterX = (this.segmentCoords.x + dMidRadius * Math.cos(dMidAngle)) / pxToMm;
+		const dCenterY = (this.segmentCoords.y - dMidRadius * Math.sin(dMidAngle)) / pxToMm;
+		// like Word, the text reads along the radius (upright, never upside down) and wraps inside the segment
+		// when it is longer than the ring is wide; a label that still does not fit is hidden
+		let dText = dMidAngle;
+		if (Math.cos(dText) < 0) {
+			dText += Math.PI;
+		}
+		const dRotation = -dText;
+		const dRingWidth = (oSegment.outerRadius - oSegment.innerRadius) / pxToMm;
+		const oThis = this;
+		const fFits = function () {
+			return oThis._boxInSegment(oSegment, dCenterX * pxToMm, dCenterY * pxToMm,
+				compiledDlb.extX * pxToMm * 0.42, compiledDlb.extY * pxToMm * 0.5, dRotation);
+		};
+		this._setLabelFontScale(compiledDlb, 1);
+		this._setLabelMaxWidth(compiledDlb, null);
+		let bFits = fFits();
+		if (!bFits) {
+			this._wrapLabelAtSpaces(compiledDlb, dRingWidth);
+			bFits = fFits();
+		}
+		compiledDlb.eoHidden = !bFits;
+		compiledDlb.eoRotation = dRotation;
+		return {x: dCenterX - compiledDlb.extX / 2, y: dCenterY - compiledDlb.extY / 2};
 	}
 }
 
@@ -8519,6 +8747,28 @@ drawTreemapChart.prototype = {
 			return;
 		}
 		const plotArea = this.cChartSpace && this.cChartSpace.chart && this.cChartSpace.chart.plotArea;
+		if (cachedData.rects && cachedData.rects.length > 0 && this.chartProp && this.chartProp.chartGutter && plotArea) {
+			// a treemap with several levels: the rectangles of the leaves are laid out in the cached data
+			this.branchOf = {};
+			this.branchCorner = {};
+			const oCorners = {};
+			for (let i = 0; i < cachedData.rects.length; ++i) {
+				const r = cachedData.rects[i];
+				this.paths[r.idx] = this.cChartDrawer._calculateRect(plotArea.x + r.x, plotArea.y + r.y + r.h, r.w, r.h, true);
+				this.branchOf[r.idx] = r.branch;
+				// the leaf at the top left corner of a branch carries its header
+				const c = oCorners[r.branch];
+				if (!c || r.y < c.y - 1e-9 || (Math.abs(r.y - c.y) < 1e-9 && r.x < c.x)) {
+					oCorners[r.branch] = r;
+				}
+			}
+			for (let b in oCorners) {
+				if (oCorners.hasOwnProperty(b)) {
+					this.branchCorner[b] = oCorners[b].idx;
+				}
+			}
+			return;
+		}
 		if (cachedData.data.length > 0 && this.chartProp && this.chartProp.chartGutter && plotArea) {
 			let x = plotArea.x;
 			let y = plotArea.y;
@@ -8579,9 +8829,10 @@ drawTreemapChart.prototype = {
 				if (this.paths.hasOwnProperty(i) && this.paths[i]) {
 					let nPtIdx = parseInt(i);
 					let pen = oSeries.getPtPen(nPtIdx);
-					let brush = oSeries.getPtBrush(nPtIdx);
+					const oBranchBrush = this._getBranchBrush(oSeries, nPtIdx);
+					let brush = oBranchBrush || oSeries.getPtBrush(nPtIdx);
 					
-					if (!brush || !brush.Fill) {
+					if (!oBranchBrush && (!brush || !brush.Fill)) {
 						brush = this._getDefaultTreemapBrush(nPtIdx);
 					}
 					
@@ -8595,13 +8846,36 @@ drawTreemapChart.prototype = {
 		}
 	},
 
+	/**
+	 * The fill of a leaf of a treemap with several levels: the explicit data point fill of the file when there is
+	 * one, else the colour of its top-level branch (accent 1, 2, 3... in the order of the data), as in Office.
+	 * @returns {null|CUniFill} null for a treemap with one level (each point keeps its own colour)
+	 */
+	_getBranchBrush: function (oSeries, nIdx) {
+		if (!this.branchOf || this.branchOf[nIdx] === undefined) {
+			return null;
+		}
+		const oDpt = oSeries.getDptByIdx ? oSeries.getDptByIdx(nIdx) : null;
+		if (oDpt && oDpt.spPr && oDpt.spPr.Fill) {
+			return null;
+		}
+		return this.cChartSpace.getBranchBrush(this.branchOf[nIdx]);
+	},
+
 	_calculateDLbl: function (compiledDlb) {
 		if (!compiledDlb || !this.paths || !this.chartProp || !this.cChartSpace) {
 			return;
 		}
 
-		const path = this.paths[compiledDlb.idx];
+		// the header of a branch: at the top left of the leaf in the corner of the branch
+		const bHeader = AscFormat.isRealNumber(compiledDlb.eoBranch);
+		const nLeaf = bHeader ? (this.branchCorner ? this.branchCorner[compiledDlb.eoBranch] : undefined) : compiledDlb.idx;
+		const path = this.paths[nLeaf];
 		if (!AscFormat.isRealNumber(path)) {
+			if (bHeader) {
+				compiledDlb.eoHidden = true;
+				return {x: 0, y: 0};
+			}
 			return;
 		}
 
@@ -8639,7 +8913,9 @@ drawTreemapChart.prototype = {
 		const paddingY = 2 / pxToMm; // 2px
 
 		let centerX = x + paddingX;
-		let centerY = y - labelH - paddingY;
+		let centerY = bHeader ? y - h + paddingY : y - labelH - paddingY;
+		// a label that does not fit its rectangle is not drawn (the leaf labels of a treemap with several levels)
+		compiledDlb.eoHidden = !!(this.branchOf && (labelW > w || labelH > h));
 
 		const rectLeft = x;
 		const rectRight = x + w;
@@ -19985,6 +20261,172 @@ CErrBarsDraw.prototype = {
 		return isNegative ? -num : num;
 	}
 
+	/**
+	 * Squarified treemap (Bruls, Huizing, van Wijk): the values, largest first, become rectangles of the given area.
+	 * @param {number[]} aValues positive values, sorted in descending order
+	 * @returns {{x: number, y: number, w: number, h: number}[]} one rectangle per value
+	 */
+	function squarifyTreemap(aValues, x, y, w, h) {
+		const aRects = [];
+		let dTotal = 0;
+		for (let i = 0; i < aValues.length; ++i) {
+			dTotal += aValues[i];
+		}
+		if (!(dTotal > 0) || !(w > 0) || !(h > 0)) {
+			return aValues.map(function () { return {x: x, y: y, w: 0, h: 0}; });
+		}
+		const dScale = w * h / dTotal;
+		const worst = function (aAreas, dSide) {
+			let dSum = 0, dMax = 0, dMin = Infinity;
+			for (let i = 0; i < aAreas.length; ++i) {
+				dSum += aAreas[i];
+				dMax = Math.max(dMax, aAreas[i]);
+				dMin = Math.min(dMin, aAreas[i]);
+			}
+			return Math.max(dSide * dSide * dMax / (dSum * dSum), dSum * dSum / (dSide * dSide * dMin));
+		};
+		let i = 0;
+		while (i < aValues.length) {
+			const dSide = Math.min(w, h);
+			let aRow = [aValues[i] * dScale];
+			let nEnd = i + 1;
+			while (nEnd < aValues.length) {
+				const aNext = aRow.concat([aValues[nEnd] * dScale]);
+				if (worst(aNext, dSide) > worst(aRow, dSide)) {
+					break;
+				}
+				aRow = aNext;
+				++nEnd;
+			}
+			let dRowArea = 0;
+			for (let r = 0; r < aRow.length; ++r) {
+				dRowArea += aRow[r];
+			}
+			if (w >= h) {
+				// a column along the height
+				const dColW = dRowArea / h;
+				let dY = y;
+				for (let r = 0; r < aRow.length; ++r) {
+					const dH = aRow[r] / dColW;
+					aRects.push({x: x, y: dY, w: dColW, h: dH});
+					dY += dH;
+				}
+				x += dColW;
+				w -= dColW;
+			} else {
+				// a row along the width
+				const dRowH = dRowArea / w;
+				let dX = x;
+				for (let r = 0; r < aRow.length; ++r) {
+					const dW = aRow[r] / dRowH;
+					aRects.push({x: dX, y: y, w: dW, h: dRowH});
+					dX += dW;
+				}
+				y += dRowH;
+				h -= dRowH;
+			}
+			i = nEnd;
+		}
+		return aRects;
+	}
+
+	/**
+	 * The tree and the layout of a treemap with several levels of categories.
+	 * @param {{idx: number, val: number}[]} aValues the values of the rows
+	 * @param {{pts: {idx: number, val: string}[]}[]} aLevels the levels, root first, without the empty points
+	 * @returns {{rects: {idx: number, x: number, y: number, w: number, h: number, branch: number}[],
+	 *            branches: {name: string, first: number, leaves: number[]}[], leafNames: Object}}
+	 *   the rectangles of the leaves (the row idx and the index of its top-level branch, in the order of the data) and
+	 *   the top-level branches; only the leaves are rectangles, a group (a stem) shares the area of its leaves
+	 */
+	function buildHierarchicalTreemap(aValues, aLevels, width, height) {
+		const aNames = aLevels.map(function (oLvl) {
+			const oMap = {};
+			oLvl.pts.forEach(function (oPt) {
+				oMap[oPt.idx] = String(oPt.val);
+			});
+			return oMap;
+		});
+		const oRoot = {children: [], value: 0};
+		const oLeafNames = {};
+		aValues.forEach(function (oRow) {
+			if (!(oRow.val > 0)) {
+				return;
+			}
+			const aPath = [];
+			for (let nLvl = 0; nLvl < aNames.length; ++nLvl) {
+				if (aNames[nLvl][oRow.idx] !== undefined) {
+					aPath.push(aNames[nLvl][oRow.idx]);
+				}
+			}
+			let oNode = oRoot;
+			for (let p = 0; p < aPath.length - 1; ++p) {
+				let oChild = null;
+				for (let c = 0; c < oNode.children.length; ++c) {
+					if (oNode.children[c].group && oNode.children[c].name === aPath[p]) {
+						oChild = oNode.children[c];
+						break;
+					}
+				}
+				if (!oChild) {
+					oChild = {name: aPath[p], group: true, children: [], value: 0, first: oRow.idx};
+					oNode.children.push(oChild);
+				}
+				oNode = oChild;
+			}
+			const sLeaf = aPath.length > 0 ? aPath[aPath.length - 1] : null;
+			oNode.children.push({name: sLeaf, idx: oRow.idx, value: oRow.val, first: oRow.idx});
+			if (sLeaf !== null) {
+				oLeafNames[oRow.idx] = sLeaf;
+			}
+		});
+		const fSum = function (oNode) {
+			if (!oNode.children) {
+				return oNode.value;
+			}
+			oNode.value = 0;
+			oNode.first = Infinity;
+			oNode.children.forEach(function (oChild) {
+				oNode.value += fSum(oChild);
+				oNode.first = Math.min(oNode.first, oChild.first);
+			});
+			return oNode.value;
+		};
+		fSum(oRoot);
+		const aBranches = oRoot.children.slice().sort(function (a, b) {
+			return a.first - b.first;
+		}).map(function (oNode) {
+			return {name: oNode.name, first: oNode.first, leaves: [], node: oNode};
+		});
+		const aRects = [];
+		const fLayout = function (oNode, x, y, w, h, nBranch) {
+			const aKids = oNode.children.slice().sort(function (a, b) {
+				return (b.value - a.value) || (a.first - b.first);
+			});
+			const aBoxes = squarifyTreemap(aKids.map(function (k) { return k.value; }), x, y, w, h);
+			aKids.forEach(function (oKid, k) {
+				const oBox = aBoxes[k];
+				const nKidBranch = nBranch === null ? aBranches.findIndex(function (b) { return b.node === oKid; }) : nBranch;
+				if (oKid.children) {
+					fLayout(oKid, oBox.x, oBox.y, oBox.w, oBox.h, nKidBranch);
+				} else {
+					aRects.push({idx: oKid.idx, x: oBox.x, y: oBox.y, w: oBox.w, h: oBox.h, branch: nKidBranch});
+					aBranches[nKidBranch].leaves.push(oKid.idx);
+				}
+			});
+		};
+		if (oRoot.children.length > 0 && oRoot.value > 0) {
+			fLayout(oRoot, 0, 0, width, height, null);
+		}
+		return {
+			rects: aRects,
+			branches: aBranches.map(function (b) {
+				return {name: b.node.group ? b.name : null, first: b.first, leaves: b.leaves, isGroup: !!b.node.group};
+			}),
+			leafNames: oLeafNames
+		};
+	}
+
 	function CCachedTreemap(type, seria, numLit, strLit, width, height) {
 		CCachedChartExData.call(this, seria.Id, type, []);
 		this._calculate(numLit, strLit, width, height);
@@ -20118,7 +20560,38 @@ CErrBarsDraw.prototype = {
 		}
 
 		const numArr = numLit.pts;
-		const lastLayer = getLastLayer(strLit)
+		// a point of the file with no text is an empty cell, not a label; a level with no text at all is no level
+		if (Array.isArray(strLit)) {
+			strLit = strLit.map(function (oLvl) {
+				return {ptCount: oLvl.ptCount, pts: oLvl.pts.filter(function (oPt) {
+					return oPt.val !== '' && oPt.val !== null && oPt.val !== undefined;
+				})};
+			}).filter(function (oLvl) {
+				return oLvl.pts.length > 0;
+			});
+		}
+		const lastLayer = getLastLayer(strLit);
+		if (lastLayer !== null) {
+			// several levels: the tree, level by level (the levels come root first, see CSeries.getCatLit)
+			const aRows = [];
+			const oVerified = {};
+			strLit.forEach(function (oLvl) {
+				oLvl.pts.forEach(function (oPt) {
+					oVerified[oPt.idx] = true;
+				});
+			});
+			numArr.forEach(function (oPt) {
+				if (oPt.val > 0 && oVerified[oPt.idx]) {
+					aRows.push({idx: oPt.idx, val: oPt.val});
+				}
+			});
+			const oResult = buildHierarchicalTreemap(aRows, strLit, width, height);
+			this.data = [];
+			this.rects = oResult.rects;
+			this.branches = oResult.branches;
+			this.leafNames = oResult.leafNames;
+			return;
+		}
 		const newNumArr = normalizeNumArr(numArr, strLit, lastLayer, width * height);
 		this.data = createTreemap(newNumArr, strLit, lastLayer, width, height);
 	}
@@ -20441,8 +20914,13 @@ CErrBarsDraw.prototype = {
 			}
 			const newStrLit = [];
 			for (let i = 0; i < strLit.length; i++) {
-				if (strLit[i].pts.length > 0) {
-					newStrLit.push(strLit[i]);
+				// a point of the file with no text (<cx:pt idx="5"></cx:pt>) is an empty cell, not a label: without
+				// it the leaf that has no stem would get a nameless segment in the outer ring
+				const aPts = strLit[i].pts.filter(function (oPt) {
+					return oPt.val !== '' && oPt.val !== null && oPt.val !== undefined;
+				});
+				if (aPts.length > 0) {
+					newStrLit.push(aPts.length === strLit[i].pts.length ? strLit[i] : {pts: aPts, ptCount: strLit[i].ptCount});
 				}
 			}
 			return newStrLit;

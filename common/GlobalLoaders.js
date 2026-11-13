@@ -457,10 +457,70 @@
             }
         };
 
+        this.isSvgUrl = function(url)
+        {
+            if (typeof url !== 'string')
+                return false;
+            var lowerUrl = url.toLowerCase();
+            if (0 === lowerUrl.indexOf('data:'))
+                return 0 === lowerUrl.indexOf('data:image/svg+xml');
+            lowerUrl = lowerUrl.split('#')[0].split('?')[0];
+            if (lowerUrl.length > 4 && lowerUrl.lastIndexOf('.svg') === lowerUrl.length - 4)
+                return true;
+            return lowerUrl.indexOf('image/svg+xml') >= 0;
+        };
+
+        this.canFixSvg = function()
+        {
+            return typeof XMLHttpRequest === 'function' && typeof DOMParser === 'function' &&
+                typeof XMLSerializer === 'function' && typeof Blob === 'function' &&
+                typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' &&
+                !!(window['AscCommon'] && window['AscCommon']['EoFixSvgHairlines']);
+        };
+
+        this.loadFixedSvgImage = function(image, url)
+        {
+            var request = new XMLHttpRequest();
+            request.open('GET', url, true);
+            request.responseType = 'text';
+            request.onload = function()
+            {
+                try
+                {
+                    if (request.status !== 0 && request.status !== 200)
+                        throw new Error('SVG load failed');
+                    var fixed = AscCommon.EoFixSvgHairlines(request.responseText);
+                    if (fixed === request.responseText)
+                    {
+                        image.src = url;
+                        return;
+                    }
+                    image.src = URL.createObjectURL(new Blob([fixed], {type: 'image/svg+xml'}));
+                }
+                catch (error)
+                {
+                    image.src = url;
+                }
+            };
+            request.onerror = function() { image.src = url; };
+            request.send();
+        };
+
         this.loadImageByUrl = function(image, url, isDisableCrypto)
         {
             if (this.isBlockchainSupport && (true !== isDisableCrypto))
                 image.preload_crypto(url);
+            else if (this.isSvgUrl(url) && this.canFixSvg())
+            {
+                try
+                {
+                    this.loadFixedSvgImage(image, url);
+                }
+                catch (error)
+                {
+                    image.src = url;
+                }
+            }
             else
                 image.src = url;
         };
