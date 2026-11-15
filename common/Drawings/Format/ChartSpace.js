@@ -5953,6 +5953,11 @@ function(window, undefined) {
 					}
 					pt.compiledDlb.recalculateInternal();
 				}
+				// the labels of a funnel sit on the bars: Office draws them white unless the file sets a text colour
+				if (chartType === AscFormat.SERIES_LAYOUT_FUNNEL && !(seria.dataLabels.txPr)) {
+					this.setSunburstLabelColor(pt.compiledDlb);
+					pt.compiledDlb.recalculateInternal();
+				}
 				if (cachedData.funnel && pt.compiledDlb.pt <= 0) {
 					pt.compiledDlb = default_lbl;
 				}
@@ -5998,12 +6003,46 @@ function(window, undefined) {
 			}, oThis, []);
 		});
 	};
+	/**
+	 * The fill of a bar of a waterfall chart: accent 1 for an increase, accent 2 for a decrease (a negative value),
+	 * accent 3 for a total (a point of the subtotals of the layout).
+	 */
+	CChartSpace.prototype.getWaterfallBrush = function (oSeries, oPt) {
+		const oSubtotals = oSeries.layoutPr && oSeries.layoutPr.subtotals;
+		const aSubtotals = oSubtotals && oSubtotals.idx ? oSubtotals.idx : [];
+		let nAccent = 0;
+		if (aSubtotals.indexOf(oPt.idx) !== -1) {
+			nAccent = 2;
+		} else if (oPt.val < 0) {
+			nAccent = 1;
+		}
+		return this.getBranchBrush(nAccent);
+	};
 	/** The fill of the top-level branch with the given index (accent 1, 2, 3... of the theme) in a sunburst or a treemap. */
 	CChartSpace.prototype.getBranchBrush = function (nBranch) {
 		const oBrush = AscFormat.CreateUnifillSolidFillSchemeColor(nBranch % 6, 0);
 		const oParents = this.getParentObjects();
 		oBrush.calculate(oParents.theme, oParents.slide, oParents.layout, oParents.master, {R: 0, G: 0, B: 0, A: 255}, this.clrMapOvr);
 		return oBrush;
+	};
+	/**
+	 * The legend of a waterfall chart lists the kinds of bars, not the series: Increase, Decrease and Total, with the
+	 * colours (accent 1, 2 and 3 of the theme) of Office.
+	 * @returns {null|{name: string}[]}
+	 */
+	CChartSpace.prototype.getWaterfallLegendEntries = function () {
+		if (!this.isChartEx()) {
+			return null;
+		}
+		const aSeries = this.chart.plotArea.plotAreaRegion.series;
+		const oSeries = aSeries && aSeries[0];
+		if (!oSeries || oSeries.layoutId !== AscFormat.SERIES_LAYOUT_WATERFALL) {
+			return null;
+		}
+		const tr = function (sName) {
+			return AscCommon.translateManager && AscCommon.translateManager.getValue ? AscCommon.translateManager.getValue(sName) : sName;
+		};
+		return [{name: tr("Increase")}, {name: tr("Decrease")}, {name: tr("Total")}];
 	};
 	/**
 	 * The top-level branches of a sunburst or a treemap with several levels, in the order of the data: the entries of its
@@ -7882,7 +7921,7 @@ function(window, undefined) {
 
 			let bSeriesLegend = aCharts.length > 1 || (bNoPieChart && (!((oFirstChart.varyColors || bHasCustomDPt) && series.length === 1) || bSurfaceChart || bRadarChart));
 			// a sunburst or a treemap with several levels: one entry per top-level branch, with its colour
-			const aBranchEntries = this.getHierarchyLegendEntries();
+			const aBranchEntries = this.getHierarchyLegendEntries() || this.getWaterfallLegendEntries();
 			if (aBranchEntries && aBranchEntries.length > 0 && series[0]) {
 				this.legendLength = aBranchEntries.length;
 				for (i = 0; i < aBranchEntries.length; ++i) {
@@ -9736,6 +9775,10 @@ function(window, undefined) {
 							let oPt = pts[nPt];
 							oPt.brush = oSeries.compiledSeriesBrush;
 							oPt.pen = oSeries.compiledSeriesPen;
+							if (oSeries.layoutId === AscFormat.SERIES_LAYOUT_WATERFALL && !(oSeries.spPr && oSeries.spPr.Fill && oSeries.spPr.Fill.fill)) {
+								// increase, decrease and total bars have the colours of the legend (a data point fill below wins)
+								oPt.brush = oChartSpace.getWaterfallBrush(oSeries, oPt);
+							}
 							if (Array.isArray(oSeries.dPt) && !(oSeries.getObjectType && oSeries.getObjectType() === AscDFH.historyitem_type_AreaSeries)) {
 								for (let nDpt = 0; nDpt < oSeries.dPt.length; ++nDpt) {
 									let oDpt = oSeries.dPt[nDpt];

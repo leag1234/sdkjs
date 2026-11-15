@@ -9761,6 +9761,51 @@ CPresentation.prototype.changeColorScheme = function (colorScheme) {
 	this.Document_UpdateInterfaceState();
 };
 
+// Theme fonts (Design > Variants > Fonts): sets the Latin heading (major) and body (minor) fonts
+// of every theme in use, or of the selected masters in master mode.
+CPresentation.prototype.changeFontScheme = function (sMajor, sMinor, sName) {
+	if (this.viewMode === true) {
+		return;
+	}
+	if (typeof sMajor !== "string" || typeof sMinor !== "string" || !sMajor || !sMinor) {
+		return;
+	}
+	if (!(this.Document_Is_SelectionLocked(AscCommon.changestype_Theme) === false))
+		return;
+
+	History.Create_NewPoint(AscDFH.historydescription_Presentation_ChangeColorScheme);
+
+	let aSlides;
+	if (!this.IsMasterMode()) {
+		aSlides = this.GetAllSlides();
+	} else {
+		aSlides = this.GetSelectedSlideObjects();
+	}
+	let oThemeMap = {};
+	for (let nIdx = 0; nIdx < aSlides.length; ++nIdx) {
+		let oTheme = aSlides[nIdx].getTheme();
+		if (oTheme && !oThemeMap[oTheme.Get_Id()]) {
+			oThemeMap[oTheme.Get_Id()] = oTheme;
+			let oCur = oTheme.themeElements.fontScheme;
+			if (oCur && oCur.majorFont.latin === sMajor && oCur.minorFont.latin === sMinor) {
+				continue;
+			}
+			let oScheme = new AscFormat.FontScheme();
+			oScheme.setName(sName || "");
+			oScheme.majorFont.setLatin(sMajor);
+			// keep the East Asian and complex script fonts of the current scheme
+			oScheme.majorFont.setEA(oCur && oCur.majorFont.ea || "");
+			oScheme.majorFont.setCS(oCur && oCur.majorFont.cs || "");
+			oScheme.minorFont.setLatin(sMinor);
+			oScheme.minorFont.setEA(oCur && oCur.minorFont.ea || "");
+			oScheme.minorFont.setCS(oCur && oCur.minorFont.cs || "");
+			oTheme.changeFontScheme(oScheme);
+		}
+	}
+	this.Recalculate();
+	this.Document_UpdateInterfaceState();
+};
+
 CPresentation.prototype.removeSlide = function (pos, bNoCheck) {
 	let oSlide = this.GetSlide(pos);
 	return this.removeSlideByObject(oSlide, bNoCheck, pos);

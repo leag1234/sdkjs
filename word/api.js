@@ -13336,6 +13336,29 @@ background-repeat: no-repeat;\
 
 		oLogicDocument.ChangeTextCase(nType);
 	};
+	/**
+	 * Describes the selection for Sort (mode, error code, columns, fields, default header)
+	 */
+	asc_docs_api.prototype.asc_GetSortInfo = function(oProps)
+	{
+		let oLogicDocument = this.private_GetLogicDocument();
+		if (!oLogicDocument)
+			return null;
+
+		return oLogicDocument.GetSortInfo(oProps);
+	};
+	/**
+	 * Sorts the selected paragraphs or table rows
+	 * @returns {string} 'ok' or an error code
+	 */
+	asc_docs_api.prototype.asc_Sort = function(oProps)
+	{
+		let oLogicDocument = this.private_GetLogicDocument();
+		if (!oLogicDocument)
+			return 'none';
+
+		return oLogicDocument.SortSelection(oProps);
+	};
 	asc_docs_api.prototype.asc_SetSmartParagraphSelection = function(isSmart)
 	{
 		let logicDocument = this.private_GetLogicDocument();
@@ -16638,6 +16661,8 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_AddCrossRefToCaption']                  = asc_docs_api.prototype.asc_AddCrossRefToCaption;
 
 	asc_docs_api.prototype['asc_ChangeTextCase']                        = asc_docs_api.prototype.asc_ChangeTextCase;
+	asc_docs_api.prototype['asc_GetSortInfo']                           = asc_docs_api.prototype.asc_GetSortInfo;
+	asc_docs_api.prototype['asc_Sort']                                  = asc_docs_api.prototype.asc_Sort;
 	asc_docs_api.prototype['asc_putSmartParagraphSelection']            = asc_docs_api.prototype.asc_SetSmartParagraphSelection;
 	asc_docs_api.prototype['asc_isSmartParagraphSelection']             = asc_docs_api.prototype.asc_IsSmartParagraphSelection;
 

@@ -5290,7 +5290,9 @@ function CBinaryFileWriter()
 
     this.WriteTableCellBorder = function(_border)
     {
-        if (_border.Value == border_None)
+        // Value 0 (AscWord.BorderType.nil) is what the table settings panel sends for "no border":
+        // it is not drawn, so it must be saved as a:noFill, never as a solid line.
+        if (_border.Value == border_None || _border.Value === AscWord.BorderType.nil)
         {
             oThis.StartRecord(0);
             oThis.WriteUChar(g_nodeAttributeStart);
@@ -5372,7 +5374,9 @@ function CBinaryFileWriter()
 
     this.WriteTableCellBorderLineStyle = function(_border)
     {
-        if (_border.Value == border_None)
+        // Value 0 (AscWord.BorderType.nil) is what the table settings panel sends for "no border":
+        // it is not drawn, so it must be saved as a:noFill, never as a solid line.
+        if (_border.Value == border_None || _border.Value === AscWord.BorderType.nil)
         {
             oThis.StartRecord(0);
             oThis.WriteUChar(g_nodeAttributeStart);

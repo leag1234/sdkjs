@@ -8071,7 +8071,10 @@
 			}
 			oBorder.Size = (this.w === null) ? 12700 : ((this.w) >> 0);
 			oBorder.Size /= 36000;
-			oBorder.Value = AscCommonWord.border_Single;
+			// a:noFill line (e.g. the saved "No Border" cells): the border does not exist; keeping it "single" with a
+			// no-fill colour made the table draw it in a default colour and report "single" through the API
+			const oFill = this.Fill && this.Fill.fill;
+			oBorder.Value = (oFill && oFill.type === c_oAscFill.FILL_TYPE_NOFILL) ? AscWord.BorderType.none : AscCommonWord.border_Single;
 		};
 		CLn.prototype.fromDocumentBorder = function(oBorder) {
 			this.Fill = oBorder.Unifill;

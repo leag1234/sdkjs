@@ -1458,11 +1458,13 @@
 		canvas.width  = w;
 		canvas.height = h;
 		let ctx = canvas.getContext("2d");
-		ctx.fillStyle = "#ffffff";
+		let bg = this.isDarkMode ? this.getPageBackgroundColor() : {R : 255, G : 255, B : 255};
+		ctx.fillStyle = "rgb(" + bg.R + "," + bg.G + "," + bg.B + ")";
 		ctx.fillRect(0, 0, w, h);
 		let g = new AscCommon.CGraphics();
 		g.init(ctx, w, h, page.width_mm, page.height_mm);
 		g.m_oFontManager = AscCommon.g_fontManager;
+		g.endGlobalAlphaColor = this.getPageBackgroundColor();
 		g.transform(1, 0, 0, 1, 0, 0);
 		if (this.isDarkMode)
 			g.setDarkMode();
@@ -1489,7 +1491,14 @@
 		if (!dd || dd.ElxRecalcWatched)
 			return;
 		dd.ElxRecalcWatched = true;
-		let onEnd = dd.OnEndRecalculate, api = this;
+		let api = this;
+		let onTarget = dd.UpdateTarget;
+		dd.UpdateTarget = function(x, y, pageIndex)
+		{
+			api.sendEvent("asc_onElxTarget", x, y, pageIndex, dd.m_dTargetSize);
+			return onTarget.apply(this, arguments);
+		};
+		let onEnd = dd.OnEndRecalculate;
 		dd.OnEndRecalculate = function()
 		{
 			let r = onEnd.apply(this, arguments);

@@ -1761,6 +1761,66 @@ function (window, undefined) {
 		this.displayTrendlinesEquation = v;
 	};
 
+	// Change Colors. The engine ships the Colorful palette (the six theme accents in turn, key 2638547519 in
+	// AscCommon.g_oColorsBinaries); the Monochromatic palettes are built from it: the six base colours become
+	// shades and tints of one accent (nAccent 0..5 is accent 1..6), the variations stay.
+	// getChartColorsAccent returns the accent of a monochromatic palette, -1 for another palette, null without one.
+	asc_ChartSettings.COLORFUL_PALETTE = 2638547519;
+	asc_ChartSettings.MONOCHROME_MODS = [[['shade', 76000]], [['shade', 88000]], [], [['tint', 77000]], [['tint', 60000]], [['tint', 45000]]];
+	asc_ChartSettings.prototype.getChartColorsAccent = function () {
+		const chartSpace = this.chartSpace;
+		if (!chartSpace || !chartSpace.chartColors) {
+			return null;
+		}
+		const bases = chartSpace.chartColors.getBaseColors();
+		const id = bases.length > 1 && bases[0].color && bases[0].color.id;
+		if (!AscFormat.isRealNumber(id)) {
+			return -1;
+		}
+		for (let i = 1; i < bases.length; ++i) {
+			if (!bases[i].color || bases[i].color.id !== id) {
+				return -1;
+			}
+		}
+		return id;
+	};
+	asc_ChartSettings.prototype.setChartColors = function (nAccent) {
+		const chartSpace = this.chartSpace;
+		const colors = chartSpace && AscFormat.g_oChartStyleCache.checkColors(asc_ChartSettings.COLORFUL_PALETTE);
+		if (!colors) {
+			return;
+		}
+		AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+		if (!chartSpace.chartStyle) {
+			// a chart without a chart style part: start from the first style of its type
+			const styles = AscCommon.g_oChartStyles[chartSpace.getChartType()];
+			styles && styles[0] && chartSpace.applyChartStyleByIds(styles[0]);
+		}
+		const palette = colors.createDuplicate();
+		if (nAccent >= 0) {
+			AscFormat.ExecuteNoHistory(function () {
+				const bases = palette.getBaseColors();
+				for (let i = 0; i < bases.length; ++i) {
+					const mods = new AscFormat.CColorModifiers();
+					(asc_ChartSettings.MONOCHROME_MODS[i % asc_ChartSettings.MONOCHROME_MODS.length] || []).forEach(function (m) {
+						const mod = new AscFormat.CColorMod();
+						mod.setName(m[0]);
+						mod.setVal(m[1]);
+						mods.addMod(mod);
+					});
+					bases[i].color.setId(nAccent);
+					bases[i].setMods(mods);
+				}
+			}, this, []);
+		}
+		chartSpace.setChartColors(palette);
+		chartSpace.resetToChartStyle();
+		this.updateChart();
+		const oLogicDocument = Asc.editor.getLogicDocument();
+		if (oLogicDocument) {
+			oLogicDocument.Recalculate();
+		}
+	};
 	asc_ChartSettings.prototype.setDisplayAxes = function (bShowPrimaryCatAx, bShowSecondaryCatAx, bShowPrimaryValAx, bShowSecondaryValAx, bShowSerAx) {
 		if (this.chartSpace) {
 			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
@@ -8498,6 +8558,8 @@ function (window, undefined) {
 	prot["setView3d"] = prot.setView3d;
 	prot["getDisplayTrendlinesEquation"] = prot.getDisplayTrendlinesEquation;
 	prot["putDisplayTrendlinesEquation"] = prot.putDisplayTrendlinesEquation;
+	prot["getChartColorsAccent"] = prot.getChartColorsAccent;
+	prot["setChartColors"] = prot.setChartColors;
 	prot["setDisplayAxes"] = prot.setDisplayAxes;
 	prot["setDisplayAxisTitles"] = prot.setDisplayAxisTitles;
 	prot["setDisplayChartTitle"] = prot.setDisplayChartTitle;

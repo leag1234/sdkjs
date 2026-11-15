@@ -1183,6 +1183,9 @@
 			case AscDFH.historydescription_Document_ChangeTextCase:
 				sString = "Document_ChangeTextCase";
 				break;
+			case AscDFH.historydescription_Document_SortSelection:
+				sString = "Document_SortSelection";
+				break;
 			case AscDFH.historydescription_Document_SetNumberingLvl:
 				sString = "Document_SetNumberingLvl";
 				break;
@@ -4811,6 +4814,7 @@
 	window['AscDFH'].historydescription_Spreadsheet_SetCellFormula					= 0x01fb;
 	window['AscDFH'].historydescription_Document_AddCheckBoxLabel                   = 0x01fc;
 	window['AscDFH'].historydescription_Document_StretchFormToCell                  = 0x01fd;
+	window['AscDFH'].historydescription_Document_SortSelection                      = 0x01fe;
 
 	// pdf
 	window['AscDFH'].historydescription_Pdf_AddAnnot			= 0x29a;

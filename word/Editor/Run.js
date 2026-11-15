@@ -5588,6 +5588,9 @@ ParaRun.prototype.Recalculate_Range_Spaces = function(PRSA, _CurLine, _CurRange,
                	var _CurPage = 0;
 				if (0 !== PageAbs && CurPage > ColumnAbs)
 					_CurPage = CurPage - ColumnAbs;
+				// A paragraph that moved wholesale to the next column leaves an empty piece behind: anchor against the first piece holding lines
+				while (_CurPage < CurPage && Para.Pages[_CurPage].EndLine < Para.Pages[_CurPage].StartLine)
+					++_CurPage;
 
 				var ColumnStartX, ColumnEndX;
 				if (0 === CurPage)

@@ -287,6 +287,7 @@
 			"word/Editor/Document.js",
 			"word/Editor/document-composite-input.js",
 			"word/Editor/ChangeCase.js",
+			"word/Editor/Sort.js",
 			"word/Editor/SelectedContent.js",
 			"word/Editor/DocumentOutline.js",
 			"word/Editor/DocumentChanges.js",

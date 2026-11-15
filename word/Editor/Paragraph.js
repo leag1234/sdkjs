@@ -12548,6 +12548,9 @@ Paragraph.prototype.Get_Layout = function(ContentPos, Drawing)
 			var _CurPage = 0;
 			if (0 !== PageAbs && CurPage > ColumnAbs)
 				_CurPage = CurPage - ColumnAbs;
+			// A paragraph that moved wholesale to the next column leaves an empty piece behind: anchor against the first piece holding lines
+			while (_CurPage < CurPage && this.Pages[_CurPage].EndLine < this.Pages[_CurPage].StartLine)
+				++_CurPage;
 
 			var ColumnStartX = (0 === CurPage ? this.X_ColumnStart : this.Pages[_CurPage].X     );
 			var ColumnEndX   = (0 === CurPage ? this.X_ColumnEnd : this.Pages[_CurPage].XLimit);

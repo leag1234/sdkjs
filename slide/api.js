@@ -5217,6 +5217,24 @@ background-repeat: no-repeat;\
 		this.WordControl.m_oDrawingDocument.CheckGuiControlColors();
 	};
 
+	asc_docs_api.prototype.asc_ChangeFontScheme = function(sMajorLatin, sMinorLatin, sName)
+	{
+		const oLogicDocument = this.WordControl && this.WordControl.m_oLogicDocument;
+		if (!oLogicDocument)
+			return;
+		oLogicDocument.changeFontScheme(sMajorLatin, sMinorLatin, sName);
+	};
+
+	// [heading font, body font] of the current theme, or null
+	asc_docs_api.prototype.asc_getThemeFonts = function()
+	{
+		const oTheme = this.getCurrentTheme();
+		const oScheme = oTheme && oTheme.themeElements && oTheme.themeElements.fontScheme;
+		if (!oScheme)
+			return null;
+		return [oScheme.majorFont.latin, oScheme.minorFont.latin];
+	};
+
 	/*----------------------------------------------------------------*/
 	asc_docs_api.prototype.asc_enableKeyEvents = function(value, isFromInput)
 	{
@@ -9847,6 +9865,8 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['sync_SendThemeColors']                = asc_docs_api.prototype.sync_SendThemeColors;
 	asc_docs_api.prototype['ChangeColorScheme']                   = asc_docs_api.prototype.ChangeColorScheme;
 	asc_docs_api.prototype['asc_ChangeColorSchemeByIdx']          = asc_docs_api.prototype.asc_ChangeColorSchemeByIdx;
+	asc_docs_api.prototype['asc_ChangeFontScheme']               = asc_docs_api.prototype.asc_ChangeFontScheme;
+	asc_docs_api.prototype['asc_getThemeFonts']                   = asc_docs_api.prototype.asc_getThemeFonts;
 	asc_docs_api.prototype['asc_enableKeyEvents']                 = asc_docs_api.prototype.asc_enableKeyEvents;
 	asc_docs_api.prototype['asc_showComments']                    = asc_docs_api.prototype.asc_showComments;
 	asc_docs_api.prototype['asc_hideComments']                    = asc_docs_api.prototype.asc_hideComments;

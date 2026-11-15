@@ -3035,7 +3035,8 @@
             }
             let bChartEx = this.isChartEx && this.isChartEx();
             if(this instanceof CTitle || this.parent instanceof CTitle) {
-                style.TextPr.Bold = true;
+                // the titles of extended charts are regular in Office (14 pt, grey); the other charts bold
+                style.TextPr.Bold = !(this.isChartEx && this.isChartEx());
                 if(this.parent instanceof CChart || (this.parent && (this.parent.parent instanceof CChart))) {
                     if(chart_text_pr && typeof chart_text_pr.FontSize === "number")
                         style.TextPr.FontSize = (chart_text_pr.FontSize * 1.2) >> 0;
