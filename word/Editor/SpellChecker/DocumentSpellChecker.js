@@ -278,6 +278,15 @@
 
 		return false;
 	};
+	/**
+	 * Is the paragraph still waiting for exactly this request (same words, languages and recalculation id)
+	 * @returns {boolean}
+	 */
+	CDocumentSpellChecker.prototype.IsWaitingRequest = function(oParagraph, arrWords, arrLangs, nRecalcId)
+	{
+		let oInfo = this.WaitingParagraphs[oParagraph.GetId()];
+		return !!oInfo && oInfo.IsEqual(arrWords, arrLangs, nRecalcId);
+	};
 	CDocumentSpellChecker.prototype.IsWaitingParagraph = function(oParagraph)
 	{
 		return (undefined !== this.WaitingParagraphs[oParagraph.GetId()]);

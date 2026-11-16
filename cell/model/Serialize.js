@@ -12528,6 +12528,7 @@
             }
             else if ( c_oSer_DrawingType.pptxDrawing == type )
             {
+                const nItemEnd = this.stream.cur + length;
                 oDrawing.graphicObject = this.ReadPptxDrawing();
 
                 if(oDrawing.graphicObject && !oDrawing.graphicObject.isSupported())
@@ -12546,6 +12547,13 @@
                             return c_oSerConstants.ReadUnknown;
                         });
                     }
+                }
+                // The item can hold more than the graphic object, e.g. the fallback shape of an extended chart
+                // (mc:AlternateContent). The readers of the items after this one go by the declared lengths and
+                // not by the position of the stream, so leave the stream at the end of the item: left behind, it
+                // misreads the next sheets of the workbook and they are lost.
+                if (this.stream.cur < nItemEnd) {
+                    this.stream.Seek2(nItemEnd);
                 }
             }
             else if( c_oSer_DrawingType.ClientData == type ) {

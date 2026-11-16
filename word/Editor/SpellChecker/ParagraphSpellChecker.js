@@ -187,9 +187,16 @@
 		endRun.AddSpellCheckerElement(new AscWord.SpellMarkEnd(oElement));
 		this.Elements.push(oElement);
 	};
-	CParagraphSpellChecker.prototype.SpellCheckResponse = function(nRecalcId, usrCorrect)
+	CParagraphSpellChecker.prototype.SpellCheckResponse = function(nRecalcId, usrCorrect, arrWords, arrLangs)
 	{
 		let oDocumentSpellChecker = this.GetDocumentSpellChecker();
+
+		// A restart (for example a change of the document language) drops the pending request of the paragraph, but the
+		// answer to it still arrives later with the same RecalcId. It describes words checked in the old language and
+		// must not be applied to the elements collected for the new one.
+		if (arrWords && arrLangs && !oDocumentSpellChecker.IsWaitingRequest(this.Paragraph, arrWords, arrLangs, nRecalcId))
+			return;
+
 		oDocumentSpellChecker.RemoveWaitingParagraph(this.Paragraph);
 
 		if (nRecalcId !== this.RecalcId)

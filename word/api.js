@@ -1896,7 +1896,7 @@ background-repeat: no-repeat;\
 			{
 				if ("spell" === Type)
 				{
-					Paragraph.SpellChecker.SpellCheckResponse(Obj["RecalcId"], Obj["usrCorrect"]);
+					Paragraph.SpellChecker.SpellCheckResponse(Obj["RecalcId"], Obj["usrCorrect"], Obj["usrWords"], Obj["usrLang"]);
 					Paragraph.ReDraw();
 				}
 				else if ("suggest" === Type)

@@ -1823,7 +1823,7 @@ function (window, undefined) {
 	};
 	asc_ChartSettings.prototype.setDisplayAxes = function (bShowPrimaryCatAx, bShowSecondaryCatAx, bShowPrimaryValAx, bShowSecondaryValAx, bShowSerAx) {
 		if (this.chartSpace) {
-			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			createChartPoint();
 			this.chartSpace.showAxesByTypes(bShowPrimaryCatAx, bShowSecondaryCatAx, bShowPrimaryValAx, bShowSecondaryValAx, bShowSerAx);
 			this.updateChart();
 			const oLogicDocument = Asc.editor.getLogicDocument();
@@ -1834,7 +1834,7 @@ function (window, undefined) {
 	};
 	asc_ChartSettings.prototype.setDisplayAxisTitles = function (bShowPrimaryCatAx, bShowSecondaryCatAx, bShowPrimaryValAx, bShowSecondaryValAx, bShowSerAx) {
 		if (this.chartSpace) {
-			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			createChartPoint();
 			this.chartSpace.showAxisTitlesByTypes(bShowPrimaryCatAx, bShowSecondaryCatAx, bShowPrimaryValAx, bShowSecondaryValAx, bShowSerAx);
 			this.updateChart();
 			const oLogicDocument = Asc.editor.getLogicDocument();
@@ -1845,7 +1845,7 @@ function (window, undefined) {
 	};
 	asc_ChartSettings.prototype.setDisplayChartTitle = function (bDisplay, bOverlay) {
 		if (this.chartSpace) {
-			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			createChartPoint();
 			this.chartSpace.showChartTitle(bDisplay, bOverlay);
 			this.updateChart();
 			const oLogicDocument = Asc.editor.getLogicDocument();
@@ -1856,7 +1856,7 @@ function (window, undefined) {
 	};
 	asc_ChartSettings.prototype.setDisplayDataLabels = function (bDisplay, nDataLabelPos) {
 		if (this.chartSpace) {
-			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			createChartPoint();
 			const selectedSeriesOnly = true;
 			this.chartSpace.showDataLabels(bDisplay, nDataLabelPos, selectedSeriesOnly);
 			this.updateChart();
@@ -1868,7 +1868,7 @@ function (window, undefined) {
 	};
 	asc_ChartSettings.prototype.setDisplayDataTable = function (bDisplayDataTable, bDisplayLegendKeys) {
 		if (this.chartSpace) {
-			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			createChartPoint();
 			this.chartSpace.showDataTable(bDisplayDataTable, bDisplayLegendKeys);
 			this.updateChart();
 			const oLogicDocument = Asc.editor.getLogicDocument();
@@ -1889,7 +1889,7 @@ function (window, undefined) {
 			return;
 		}
 
-		AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+		createChartPoint();
 		seriesToProcess.forEach(function (ser) {
 			bShowErrorBars
 				? ser.createAllErrBars(nErrorValueType)
@@ -1928,7 +1928,7 @@ function (window, undefined) {
 		const valueAxis = plotArea.valAx;
 
 		if (categoryAxis || valueAxis) {
-			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			createChartPoint();
 			if (categoryAxis) {
 				const catAxSettings = getGridlinesSetting(bShowVerMajor, bShowVerMinor);
 				categoryAxis.setGridlinesSetting(catAxSettings);
@@ -1950,7 +1950,7 @@ function (window, undefined) {
 			return;
 		}
 
-		AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+		createChartPoint();
 		const clearLegend = !bShow || nLegendPosition == null || nLegendPosition == Asc.c_oAscChartLegendShowSettings.none;
 		clearLegend
 			? this.chartSpace.chart.setLegend(null)
@@ -1968,7 +1968,7 @@ function (window, undefined) {
 			return;
 		}
 
-		AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+		createChartPoint();
 		const selectedSeriesOnly = true;
 		this.chartSpace.showTrendlines(bShow, nTrendlineType, nForecastForward, nForecastBackward, selectedSeriesOnly);
 		this.updateChart();
@@ -1993,7 +1993,7 @@ function (window, undefined) {
 			return;
 		}
 
-		AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+		createChartPoint();
 		bShow
 			? chart.createUpDownBars()
 			: chart.setUpDownBars(null);
@@ -2003,6 +2003,30 @@ function (window, undefined) {
 		const oLogicDocument = Asc.editor.getLogicDocument();
 		if (oLogicDocument) {
 			oLogicDocument.Recalculate();
+		}
+	};
+
+	// One undo step for several chart changes (Quick Layout of the chart ribbon): the setDisplay* calls made by
+	// the callback share the history point created here instead of one point each.
+	let nChartOneStepDepth = 0;
+	function createChartPoint() {
+		if (!nChartOneStepDepth) {
+			AscCommon.History.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+		}
+	}
+	asc_ChartSettings.prototype.runAsOneStep = function (fCallback) {
+		const oHistory = AscCommon.History;
+		if (!nChartOneStepDepth) {
+			oHistory.Create_NewPoint(AscDFH.historyitem_type_ChartSpace);
+			oHistory.StartTransaction();
+		}
+		++nChartOneStepDepth;
+		try {
+			fCallback.call(this);
+		} finally {
+			if (!--nChartOneStepDepth) {
+				oHistory.EndTransaction();
+			}
 		}
 	};
 
@@ -8570,6 +8594,7 @@ function (window, undefined) {
 	prot["setDisplayLegend"] = prot.setDisplayLegend;
 	prot["setDisplayTrendlines"] = prot.setDisplayTrendlines;
 	prot["setDisplayUpDownBars"] = prot.setDisplayUpDownBars;
+	prot["runAsOneStep"] = prot.runAsOneStep;
 
 	prot["getExternalReference"] = prot.getExternalReference;
 
