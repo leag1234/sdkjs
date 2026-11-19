@@ -1359,6 +1359,64 @@ Paragraph.prototype.private_RecalculateLineMetrics     = function(CurLine, CurPa
 
 	if (true === PRS.End && true !== PRS.EmptyLine && true !== PRS.TextOnLine && Math.abs(this.Lines[CurLine].Metrics.Descent - this.Lines[CurLine].Metrics.TextDescent) < 0.001)
 		this.Lines[CurLine].Metrics.Descent = 0;
+	
+	this.private_SnapLineToDocGrid(CurLine, PRS, ParaPr);
+};
+/**
+ * East Asian document grid (w:docGrid type lines/linesAndChars): the height of a line becomes a multiple of the
+ * line pitch of the section, as Word lays it out (measured with Word 16):
+ *  - single spacing: the natural height rounded up to a whole number of pitches, the text centered in the line;
+ *  - multiple spacing m: not less than m pitches (1.5 lines are 1.5 pitches, 3 lines 3 pitches), not less than the
+ *    single height; m < 1 does not shrink the line;
+ *  - exact and "at least" spacing are not snapped;
+ *  - paragraph spacing before/after is not snapped;
+ *  - paragraphs with snapToGrid=false are not snapped;
+ *  - lines in table cells snap only with the adjustLineHeightInTable compatibility option.
+ */
+Paragraph.prototype.private_SnapLineToDocGrid = function(CurLine, PRS, ParaPr)
+{
+	if (false === ParaPr.SnapToGrid)
+		return;
+	
+	let sectPr  = PRS.GetSectPr();
+	let docGrid = sectPr ? sectPr.GetDocGrid() : undefined;
+	if (!docGrid)
+		return;
+	
+	let pitch = docGrid.GetLinePitchMM();
+	if (pitch <= 0)
+		return;
+	
+	if (PRS.IsInTable() && !this.private_IsDocGridSnapInTable())
+		return;
+	
+	// Exact and "at least" spacing are not snapped (an "at least" line keeps its natural height)
+	let lineRule = ParaPr.Spacing.LineRule;
+	if (Asc.linerule_Auto !== lineRule)
+		return;
+	
+	let metrics = this.Lines[CurLine].Metrics;
+	let natural = metrics.Ascent + metrics.Descent;
+	if (natural <= 0.001)
+		return;
+	
+	let single = Math.max(1, Math.ceil(natural / pitch - 0.001)) * pitch;
+	let height = Math.max(single, pitch * ParaPr.Spacing.Line);
+	
+	// The free space is split evenly above and below the text
+	let extra = (height - natural) / 2;
+	metrics.Ascent += extra;
+	metrics.LineGap = extra;
+};
+Paragraph.prototype.private_IsDocGridSnapInTable = function()
+{
+	let logicDocument = this.GetLogicDocument();
+	let flags         = logicDocument && logicDocument.GetDocumentSettings ? logicDocument.GetDocumentSettings().CompatFlags : null;
+	if (!flags)
+		return false;
+	
+	// adjustLineHeightInTable (flags2 bit 2). Word 16 ignores doNotSnapToGridInCell (bit 10) in both states
+	return !!(flags[1] & (1 << 2));
 };
 
 Paragraph.prototype.private_RecalculateLinePosition    = function(CurLine, CurPage, PRS, ParaPr)

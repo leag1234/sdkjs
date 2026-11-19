@@ -50,6 +50,9 @@
 		this.Spacing   = 0;
 		this.AscFont   = false; // Специальный случай, когда используемый шрифт ASCW3, а не тот, что задан в настройках
 		
+		this.GridParagraph = null; // Paragraph for which GridSpacing is calculated
+		this.GridSpacing   = 0;    // Extra character spacing of the East Asian document grid (mm)
+		
 		this.MaskSymbol = null; // Символ, который используется для маскирования текста в полях ввода
 	}
 	CParagraphTextShaper.prototype = Object.create(AscFonts.CTextShaper.prototype);
@@ -64,6 +67,9 @@
 		this.Ligatures = Asc.LigaturesType.None;
 		this.Spacing   = 0;
 		this.AscFont   = false;
+		
+		this.GridParagraph = null;
+		this.GridSpacing   = 0;
 		
 		this.ClearBuffer();
 	};
@@ -314,9 +320,31 @@
 		this.Parent    = oRunParent;
 		this.TextPr    = oTextPr;
 		this.Hidden    = AscWord.IsHiddenText(oTextPr);
-		this.Spacing   = isCombForm ? 0 : oTextPr.Spacing;
+		this.Spacing   = isCombForm ? 0 : oTextPr.Spacing + this.private_GetDocGridSpacing(oTextPr);
 		this.Ligatures = isCombForm || Math.abs(this.Spacing) > 0.001 ? Asc.LigaturesType.None : oTextPr.Ligatures;
 		this.AscFont   = oRun.IsUseAscFont(oTextPr);
+	};
+	/**
+	 * East Asian document grid with character pitch (w:docGrid linesAndChars): Word adds charSpace (1/4096 pt) to the
+	 * advance of every character, except in runs with snapToGrid=false
+	 * @returns {number} extra character spacing in mm
+	 */
+	CParagraphTextShaper.prototype.private_GetDocGridSpacing = function(oTextPr)
+	{
+		if (false === oTextPr.SnapToGrid || !this.Paragraph)
+			return 0;
+		
+		if (this.GridParagraph !== this.Paragraph)
+		{
+			this.GridParagraph = this.Paragraph;
+			this.GridSpacing   = 0;
+			
+			let oSectPr  = this.Paragraph.Get_SectPr();
+			let oDocGrid = oSectPr ? oSectPr.GetDocGrid() : undefined;
+			if (oDocGrid && oDocGrid.IsChars() && oDocGrid.CharSpace)
+				this.GridSpacing = oDocGrid.CharSpace / 4096 * 25.4 / 72;
+		}
+		return this.GridSpacing;
 	};
 	CParagraphTextShaper.prototype.private_HandleNBSP = function(oItem)
 	{
@@ -410,6 +438,7 @@
 			&& t.RTL === oTextPr.RTL
 			&& t.Vanish === oTextPr.Vanish
 			&& t.Ligatures === oTextPr.Ligatures
+			&& t.SnapToGrid === oTextPr.SnapToGrid
 			&& t.RFonts.IsEqualSlot(oTextPr.RFonts, this.FontSlot));
 	};
 	CParagraphTextShaper.prototype.GetTextScript = function(nUnicode)

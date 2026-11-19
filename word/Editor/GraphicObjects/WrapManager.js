@@ -33,6 +33,7 @@ var WRAP_TEXT_SIDE_LEFT = 0x02;
 var WRAP_TEXT_SIDE_RIGHT = 0x03;
 
 var APPROXIMATE_ANGLE = 0.3;
+var WRAP_TOUCH_TOLERANCE = 0.01;
 function CWrapPolygon(wordGraphicObject)
 {
     this.calculatedPoints = [];
@@ -217,7 +218,11 @@ CWrapPolygon.prototype =
 
     getArrayWrapIntervals: function(x0, y0, x1, y1, LeftField, RightField, ret, bMathWrap)
     {
-        if(y1 - this.top < 0.0001 || this.bottom - y0 < 0.0001 || true !== this.wordGraphicObject.useWrap)
+        // A line that only touches the object is not wrapped. The line positions are rounded to twips while the
+        // paragraph top that the anchored object is placed at is the sum of the unrounded heights: after a few
+        // lines they differ by more than 0.0001 mm and the last line of the text above a picture was pushed under it.
+        // 0.01 mm is below a twip (0.0176 mm), so no visible overlap is ignored (#61).
+        if(y1 - this.top < WRAP_TOUCH_TOLERANCE || this.bottom - y0 < WRAP_TOUCH_TOLERANCE || true !== this.wordGraphicObject.useWrap)
             return ret;
 
         var ret2 = [];

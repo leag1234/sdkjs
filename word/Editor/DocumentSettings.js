@@ -69,6 +69,9 @@
 		// Raw flag words (w:compat legacy switches) as read from the file: [flags1, flags2, flags3] or null. The bits the
 		// editor does not model are written back unchanged
 		this.CompatFlags                      = null;
+		// compatSetting overrideTableStyleFontSizeAndJustification as read from the file; undefined for a new document
+		// (written as true). Word shows the Normal style font size in table cells only when it is true (#66).
+		this.OverrideTableStyleFontSizeAndJustification = undefined;
 	}
 	DocumentSettings.prototype.getCompatibilityMode = function()
 	{

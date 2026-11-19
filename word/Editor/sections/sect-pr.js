@@ -74,6 +74,7 @@ var section_footnote_RestartEachPage   = 0x02;
 		this.EndnotePr  = new AscWord.FootnotePr();
 		
 		this.LnNumType = undefined;
+		this.DocGrid   = undefined;
 		
 		// Добавляем данный класс в таблицу Id (обязательно в конце конструктора)
 		AscCommon.g_oTableId.Add(this, this.Id);
@@ -180,6 +181,8 @@ var section_footnote_RestartEachPage   = 0x02;
 		
 		if (Other.HaveLineNumbers())
 			this.SetLineNumbers(Other.GetLineNumbersCountBy(), Other.GetLineNumbersDistance(), Other.GetLineNumbersStart(), Other.GetLineNumbersRestart());
+		
+		this.SetDocGrid(Other.GetDocGrid());
 	};
 	SectPr.prototype.RemoveAllHdrFtr = function()
 	{
@@ -1317,6 +1320,29 @@ var section_footnote_RestartEachPage   = 0x02;
 	 * Есть ли нумерация строк
 	 * @returns {boolean}
 	 */
+	/**
+	 * East Asian document grid of the section (w:docGrid)
+	 * @param {?AscWord.SectionDocGrid} oDocGrid undefined or null removes the grid
+	 */
+	SectPr.prototype.SetDocGrid = function(oDocGrid)
+	{
+		if (!oDocGrid)
+			oDocGrid = undefined;
+		
+		if (oDocGrid === this.DocGrid || (oDocGrid && oDocGrid.IsEqual(this.DocGrid)))
+			return;
+		
+		let oNewGrid = oDocGrid ? oDocGrid.Copy() : undefined;
+		AscCommon.History.Add(new AscDFH.CChangesSectionDocGrid(this, this.DocGrid, oNewGrid));
+		this.DocGrid = oNewGrid;
+	};
+	/**
+	 * @returns {AscWord.SectionDocGrid | undefined}
+	 */
+	SectPr.prototype.GetDocGrid = function()
+	{
+		return this.DocGrid;
+	};
 	SectPr.prototype.HaveLineNumbers = function()
 	{
 		return (undefined !== this.LnNumType && undefined !== this.LnNumType.CountBy && this.LnNumType.GetStart() >= 0);

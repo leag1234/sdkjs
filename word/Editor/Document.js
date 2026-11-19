@@ -6938,6 +6938,14 @@ CDocument.prototype.SetParagraphShd = function(Shd)
  */
 CDocument.prototype.SetParagraphStyle = function(sName, isCheckLinkedStyle)
 {
+	// A character style is never a paragraph style: it is applied to the selection / the word at the caret
+	var oNamedStyle = this.Styles.Get(this.Styles.GetStyleIdByName(sName));
+	if (oNamedStyle && styletype_Character === oNamedStyle.GetType())
+	{
+		this.SetCharacterStyle(sName);
+		return;
+	}
+
 	if (isCheckLinkedStyle && this.IsSelectionUse())
 	{
 		var sStyleId = this.Styles.GetStyleIdByName(sName);
@@ -6973,6 +6981,68 @@ CDocument.prototype.SetParagraphStyle = function(sName, isCheckLinkedStyle)
 	this.Recalculate();
 	this.Document_UpdateSelectionState();
 	this.Document_UpdateInterfaceState();
+};
+/**
+ * Applies a character style to the selected text or, without a selection, to the word at the caret
+ * (or to the text typed next when the caret is not in a word), as Word does.
+ * @param {string} sName - name of the character style
+ * @returns {boolean}
+ */
+CDocument.prototype.SetCharacterStyle = function(sName)
+{
+	var sStyleId = this.Styles.GetStyleIdByName(sName);
+	var oStyle   = this.Styles.Get(sStyleId);
+	if (!oStyle || styletype_Character !== oStyle.GetType())
+		return false;
+
+	this.AddToParagraph(new AscCommonWord.ParaTextPr({RStyle : sStyleId}));
+	this.Recalculate();
+	this.Document_UpdateSelectionState();
+	this.Document_UpdateInterfaceState();
+	return true;
+};
+/**
+ * Makes a character style match the text properties of the selection (Word's "Update <style> to Match
+ * Selection"): the style gets the properties of the selected text that differ from its paragraph style.
+ * @param {string} sName - name of the character style
+ * @returns {boolean}
+ */
+CDocument.prototype.UpdateCharacterStyleFromSelection = function(sName)
+{
+	var sStyleId = this.Styles.GetStyleIdByName(sName);
+	var oStyle   = this.Styles.Get(sStyleId);
+	if (!oStyle || styletype_Character !== oStyle.GetType())
+		return false;
+
+	var oSelectionPr = this.GetCalculatedTextPr();
+	if (!oSelectionPr)
+		return false;
+
+	var sParaStyleId = this.GetCalculatedParaPr().PStyle;
+	if (!sParaStyleId || !this.Styles.Get(sParaStyleId))
+		sParaStyleId = this.Styles.Get_Default_Paragraph();
+	var oBasePr = this.Styles.Get_Pr(sParaStyleId, styletype_Paragraph).TextPr;
+
+	var oNewPr = oSelectionPr.GetDiff(oBasePr);
+	// not part of a style: the character style itself, highlight (as for a new style), revision marks
+	oNewPr.RStyle    = undefined;
+	oNewPr.HighLight = undefined;
+	oNewPr.PrChange  = undefined;
+	oNewPr.ReviewInfo = undefined;
+
+	if (false !== this.Document_Is_SelectionLocked(AscCommon.changestype_Document_Styles))
+		return false;
+
+	this.StartAction(AscDFH.historydescription_Document_AddNewStyle);
+	oStyle.Set_TextPr(oNewPr);
+	oStyle.GetRelatedParagraphs().forEach(function(oParagraph)
+	{
+		oParagraph.RecalcCompiledPr();
+	});
+	this.Recalculate();
+	this.UpdateInterface();
+	this.FinalizeAction();
+	return true;
 };
 CDocument.prototype.SetParagraphContextualSpacing = function(Value)
 {

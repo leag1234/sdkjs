@@ -5177,11 +5177,13 @@ ParaRun.prototype.Recalculate_LineMetrics = function(PRS, ParaPr, _CurLine, _Cur
 		
 		let metrics = textPr.GetTextMetrics(fontSlot, this.Paragraph.GetTheme());
 		
+		// the East Asian font that the text asks for: a substitute font gets its line height (#39)
+		let eastAsiaName = this.getRequestedEastAsianFontName(textPr);
 		for (let fontId in fontMap)
 		{
 			let fontName  = AscFonts.GetFontNameByFontId(fontId);
 			let fontStyle = AscFonts.GetFontStyleByFontId(fontId);
-			metrics.Update(fontName, fontMap[fontId], fontStyle);
+			metrics.Update(fontName, fontMap[fontId], fontStyle, eastAsiaName);
 		}
 		
 		let textDescent = metrics.Descent;
@@ -5225,6 +5227,31 @@ ParaRun.prototype.Recalculate_LineMetrics = function(PRS, ParaPr, _CurLine, _Cur
 		if (PRS.LineTextDescent < textDescent)
 			PRS.LineTextDescent = textDescent;
 	}
+};
+
+ParaRun.prototype.getRequestedEastAsianFontName = function(textPr)
+{
+	if (!textPr || !textPr.RFonts || !textPr.RFonts.EastAsia)
+		return "";
+	
+	let rFonts = textPr.RFonts;
+	if (rFonts.HaveThemeFonts() && this.Paragraph)
+	{
+		textPr = textPr.Copy();
+		textPr.ReplaceThemeFonts(this.Paragraph.GetTheme().themeElements.fontScheme);
+		rFonts = textPr.RFonts;
+	}
+	let name = rFonts.EastAsia ? rFonts.EastAsia.Name : "";
+	if (!name || "Arial" === name)
+	{
+		// The theme has no East Asian font of its own: Word uses the system font of the language (its line height is
+		// the one of MS Gothic / MingLiU / SimSun / Batang, 1.30 em)
+		let lang = textPr.Lang ? textPr.Lang.EastAsia : undefined;
+		// ja-JP, zh-TW, zh-CN, ko-KR, zh-HK, zh-SG, zh-MO
+		if ([0x0411, 0x0404, 0x0804, 0x0412, 0x0C04, 0x1004, 0x1404].includes(lang))
+			return "ＭＳ ゴシック";
+	}
+	return name;
 };
 
 ParaRun.prototype.Recalculate_Range_Width = function(PRSC, _CurLine, _CurRange)

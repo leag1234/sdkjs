@@ -41,7 +41,28 @@
 		return scale;
 	};
 
-	AscCommon['EoFixSvgHairlines'] = function(svgText)
+	// Width of a hairline in device pixels. Word writes the lines of a WMF/EMF drawing as hairlines of 0.14 pt in a
+	// PDF; on screen they are thinner than a 1 px line. 0.6 px matches the reporter's comparison with the table
+	// borders (#61); on high-density screens the width follows the pixel ratio.
+	var HAIRLINE_PX = 0.6;
+	// 0.14 pt (Word's hairline in a PDF) expressed in pixels of a raster of the given resolution
+	var HAIRLINE_PT = 0.14;
+
+	AscCommon['EoSvgHairlinePx'] = function()
+	{
+		var ratio = AscCommon.AscBrowser && AscCommon.AscBrowser.retinaPixelRatio;
+		return HAIRLINE_PX * (isFinite(ratio) && ratio >= 1 ? ratio : 1);
+	};
+
+	AscCommon['EoSvgHairlinePxForDpi'] = function(dpi)
+	{
+		return HAIRLINE_PT * dpi / 72;
+	};
+
+	// options.minPx: width of the hairline in destination pixels (default: EoSvgHairlinePx)
+	// options.destWidthPx: width in pixels at which the picture will be rasterized (default: the SVG size, scale 1)
+	// options.userUnits: write the width in the units of each element instead of vector-effect non-scaling-stroke
+	AscCommon['EoFixSvgHairlines'] = function(svgText, options)
 	{
 		try
 		{
@@ -59,6 +80,16 @@
 			if (viewBox.length === 4 && isFinite(width) && parseFloat(viewBox[2]) > 0)
 				factor = width / parseFloat(viewBox[2]);
 
+			var minPx = options && options.minPx > 0 ? options.minPx : AscCommon.EoSvgHairlinePx();
+			var destScale = 1;
+			if (options && options.destWidthPx > 0)
+			{
+				var intrinsicWidth = isFinite(width) && width > 0 ? width : parseFloat(viewBox[2]);
+				if (isFinite(intrinsicWidth) && intrinsicWidth > 0)
+					destScale = options.destWidthPx / intrinsicWidth;
+			}
+
+			var userUnits = !!(options && options.userUnits);
 			var elements = doc.getElementsByTagName('*');
 			var changed = false;
 			for (var index = 0; index < elements.length; index++)
@@ -69,7 +100,11 @@
 					stroke = element.style.stroke;
 				if (!stroke)
 					continue;
-				if (!stroke || stroke === 'none' || element.getAttribute('vector-effect'))
+				if (!stroke || stroke === 'none')
+					continue;
+				// non-scaling strokes are already fixed (or deliberate); the PDF writer ignores vector-effect, see below
+				var vectorEffect = element.getAttribute('vector-effect');
+				if (vectorEffect && (!userUnits || vectorEffect !== 'non-scaling-stroke'))
 					continue;
 
 				var widthValue = element.getAttribute('stroke-width');
@@ -86,11 +121,28 @@
 					if (transform)
 						transforms.unshift(transform);
 				}
-				if (strokeWidth * AscCommon.EoSvgEffectiveScale(transforms, factor) >= 1)
+				var effectiveScale = AscCommon.EoSvgEffectiveScale(transforms, factor);
+				if (userUnits)
+				{
+					// for renderers without vector-effect (the PDF writer): the width in the units of the element.
+					// A non-scaling stroke (the picture was already normalised for the screen) is a width in pixels:
+					// a hairline gets the PDF hairline width, a wider one keeps its pixel width.
+					var widthPx = vectorEffect ? (strokeWidth < 1 ? minPx : strokeWidth) : strokeWidth * effectiveScale * destScale;
+					if (!vectorEffect && widthPx >= minPx)
+						continue;
+					if (vectorEffect)
+						element.removeAttribute('vector-effect');
+					element.setAttribute('stroke-width', String(parseFloat((Math.max(widthPx, minPx) / (effectiveScale * destScale)).toPrecision(6))));
+				}
+				else if (strokeWidth * effectiveScale * destScale >= minPx)
+				{
 					continue;
-
-				element.setAttribute('vector-effect', 'non-scaling-stroke');
-				element.setAttribute('stroke-width', '1');
+				}
+				else
+				{
+					element.setAttribute('vector-effect', 'non-scaling-stroke');
+					element.setAttribute('stroke-width', String(Math.round(minPx * 1000) / 1000));
+				}
 				if (element.style)
 					element.style.removeProperty('stroke-width');
 				changed = true;
@@ -104,5 +156,7 @@
 	};
 
 	AscCommon['EoFixSvgHairlines'] = AscCommon.EoFixSvgHairlines;
+	AscCommon['EoSvgHairlinePx'] = AscCommon.EoSvgHairlinePx;
+	AscCommon['EoSvgHairlinePxForDpi'] = AscCommon.EoSvgHairlinePxForDpi;
 	AscCommon['EoSvgEffectiveScale'] = AscCommon.EoSvgEffectiveScale;
 })(window);

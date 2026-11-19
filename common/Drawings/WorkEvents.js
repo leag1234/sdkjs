@@ -351,13 +351,49 @@
 		return e;
 	}
 
+	// eo-macctrl:begin
+	// macOS secondary click: Control+click reports button 0 with ctrlKey (and a
+	// contextmenu event that the editors suppress), not button 2. Treat it as a
+	// right click, like native Mac apps. The decision is made on the press and kept
+	// for the matching release, because Control may be let go before the button.
+	var macCtrlClick = {active : false, upEvent : null};
+
+	function isMacCtrlClick(e)
+	{
+		return !!(AscCommon.AscBrowser.isMacOs && e.ctrlKey && !e.metaKey);
+	}
+
 	function getMouseButton(e)
 	{
 		if (-1 !== global_mouseEvent.ButtonOverride)
 			return global_mouseEvent.ButtonOverride;
 		var res = e.button;
-		return (res && -1 !== res) ? res : 0;
+		res = (res && -1 !== res) ? res : 0;
+		if (0 !== res || !AscCommon.AscBrowser.isMacOs)
+			return res;
+
+		var type = e.type;
+		if ("mousedown" === type || "pointerdown" === type)
+		{
+			macCtrlClick.active  = isMacCtrlClick(e);
+			macCtrlClick.upEvent = null;
+			return macCtrlClick.active ? 2 : 0;
+		}
+		if ("mouseup" === type || "pointerup" === type)
+		{
+			if (!macCtrlClick.active)
+				return 0;
+			if (null === macCtrlClick.upEvent)
+				macCtrlClick.upEvent = e;
+			if (macCtrlClick.upEvent === e)
+				return 2;
+			// a later release that has no matching press here
+			macCtrlClick.active  = false;
+			macCtrlClick.upEvent = null;
+		}
+		return 0;
 	}
+	// eo-macctrl:end
 
 	function check_MouseUpEvent(e)
 	{
@@ -385,6 +421,8 @@
 
 		global_mouseEvent.Type   = g_mouse_event_type_up;
 		global_mouseEvent.Button = getMouseButton(e);
+		if (AscCommon.AscBrowser.isMacOs && 2 === global_mouseEvent.Button && 0 === e.button)
+			global_mouseEvent.CtrlKey = global_keyboardEvent.CtrlKey = false;
 
 		var lockedElement = null;
 
@@ -466,6 +504,8 @@
 		global_mouseEvent.Type   = g_mouse_event_type_down;
 		let oldButton = global_mouseEvent.Button;
 		global_mouseEvent.Button = getMouseButton(e);
+		if (AscCommon.AscBrowser.isMacOs && 2 === global_mouseEvent.Button && 0 === e.button)
+			global_mouseEvent.CtrlKey = global_keyboardEvent.CtrlKey = false;
 
 		if (!global_mouseEvent.IsLocked || !global_mouseEvent.Sender)
 			global_mouseEvent.Sender = (e.srcElement) ? e.srcElement : e.target;

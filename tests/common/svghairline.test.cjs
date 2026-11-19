@@ -22,3 +22,20 @@ test('malformed SVG is returned unchanged', () => {
 	const malformed = '<svg><polyline stroke="black"';
 	assert.equal(win.AscCommon.EoFixSvgHairlines(malformed), malformed);
 });
+
+test('hairline width is 0.6 px, scaled by the pixel ratio', () => {
+	assert.equal(win.AscCommon.EoSvgHairlinePx(), 0.6);
+	win.AscCommon.AscBrowser = {retinaPixelRatio: 2};
+	assert.equal(win.AscCommon.EoSvgHairlinePx(), 1.2);
+	delete win.AscCommon.AscBrowser;
+});
+
+test('PDF hairline is 0.14 pt (Word) at the raster resolution', () => {
+	assert.ok(Math.abs(win.AscCommon.EoSvgHairlinePxForDpi(300) - 0.5833) < 0.001);
+	assert.ok(Math.abs(win.AscCommon.EoSvgHairlinePxForDpi(72) - 0.14) < 1e-9);
+});
+
+test('the PDF export applies the hairline fix to SVG pictures', () => {
+	const pdf = fs.readFileSync(path.join(root, 'common/clientpdf/clientpdf.js'), 'utf8');
+	assert.ok(pdf.includes('AscCommon.EoFixSvgHairlines(svgText, { minPx: AscCommon.EoSvgHairlinePxForDpi(300), destWidthPx: w })'));
+});

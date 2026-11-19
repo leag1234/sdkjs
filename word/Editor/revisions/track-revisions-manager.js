@@ -36,7 +36,13 @@
 		let logicDocument = element.GetLogicDocument();
 		if (!element.GetLogicDocument())
 		{
-			elementToCheck[element.GetId()] = element;
+			// Only the document editor flushes this queue (see ContinueTrackRevisions). In the spreadsheet and
+			// presentation editors the paragraphs of chart labels, shapes and cells have no logic document, and
+			// queueing them kept every one of them, with its whole object tree, for as long as the editor stayed
+			// open (each recalculation of a chart left the labels of its axes behind).
+			let editorId = window.Asc && Asc.editor && Asc.editor.editorId;
+			if (editorId !== AscCommon.c_oEditorId.Spreadsheet && editorId !== AscCommon.c_oEditorId.Presentation)
+				elementToCheck[element.GetId()] = element;
 			return;
 		}
 		

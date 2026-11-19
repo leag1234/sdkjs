@@ -234,12 +234,21 @@
 		var isSvg = /svg/i.test(blob.type) || (bytes[0] === 0x3C /* < */);
 		var src, w, h;
 		if (isSvg) {
-			var burl = URL.createObjectURL(new Blob([bytes], { type: 'image/svg+xml' }));
-			try { src = await loadElement(burl); } finally { URL.revokeObjectURL(burl); }
 			// vector images are rasterized at 300 dpi of their size on the page (capped)
 			var scale = 300 / 25.4;
 			w = Math.max(1, Math.min(4000, Math.round((wMm || 50) * scale)));
 			h = Math.max(1, Math.min(4000, Math.round((hMm || 50) * scale)));
+			var svgBytes = bytes;
+			try {
+				// sub-pixel strokes (WMF/EMF drawings saved as SVG by Word) get Word's 0.14 pt hairline (#61)
+				if (AscCommon.EoFixSvgHairlines) {
+					var svgText = new TextDecoder().decode(bytes);
+					var fixedText = AscCommon.EoFixSvgHairlines(svgText, { minPx: AscCommon.EoSvgHairlinePxForDpi(300), destWidthPx: w });
+					if (fixedText !== svgText) svgBytes = new TextEncoder().encode(fixedText);
+				}
+			} catch (e) { svgBytes = bytes; }
+			var burl = URL.createObjectURL(new Blob([svgBytes], { type: 'image/svg+xml' }));
+			try { src = await loadElement(burl); } finally { URL.revokeObjectURL(burl); }
 		} else {
 			src = await createImageBitmap(blob, { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
 			w = src.width; h = src.height;
@@ -259,10 +268,23 @@
 		return { kind: 'raw', width: w, height: h, rgb: rgb, alpha: opaque ? null : alpha };
 	}
 
+	// Word draws the lines of a WMF/EMF drawing that it saved as SVG as 0.14 pt hairlines. The native PDF writer scales
+	// the stroke width of such an SVG (about 0.02 px) down to an invisible line: write Word's width instead (#61).
+	// The SVG is assumed to be placed at its own size (1 px = 0.75 pt).
+	function fixSvgHairlinesForPdf(bytes) {
+		try {
+			if (!AscCommon.EoFixSvgHairlines || bytes[0] !== 0x3C) return bytes;
+			var text = new TextDecoder().decode(bytes);
+			if (text.indexOf('<svg') < 0) return bytes;
+			var fixed = AscCommon.EoFixSvgHairlines(text, { minPx: AscCommon.EoSvgHairlinePxForDpi(72) / 0.75, userUnits: true });
+			return fixed === text ? bytes : new TextEncoder().encode(fixed);
+		} catch (e) { return bytes; }
+	}
+
 	async function getRawImage(path) {
 		var response = await fetch(imageUrl(path), { credentials: 'same-origin', cache: 'force-cache' });
 		if (!response.ok) return null;
-		return { bytes: new Uint8Array(await response.arrayBuffer()) };
+		return { bytes: fixSvgHairlinesForPdf(new Uint8Array(await response.arrayBuffer())) };
 	}
 
 	function checkCancelled(signal){if(signal&&signal.aborted)throw Object.assign(new Error('PDF export cancelled'),{name:'AbortError',code:'aborted'});}

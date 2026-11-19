@@ -593,7 +593,13 @@ var c_oSerProp_secPrType = {
 	footnotePr: 10,
 	endnotePr: 11,
 	rtlGutter: 12,
-	lnNumType: 13
+	lnNumType: 13,
+	docGrid: 14
+};
+var c_oSerProp_DocGrid = {
+	Type: 0,
+	CharSpace: 1,
+	LinePitch: 2
 };
 var c_oSerProp_secPrSettingsType = {
     titlePg: 0,
@@ -2800,6 +2806,12 @@ function Binary_pPrWriter(memory, oNumIdMap, oBinaryHeaderFooterTableWriter, sav
 			this.memory.WriteByte(c_oSerPropLenType.Long);
 			this.memory.WriteLong(pPr.OutlineLvl);
 		}
+		if(null != pPr.SnapToGrid)
+		{
+			this.memory.WriteByte(c_oSerProp_pPrType.SnapToGrid);
+			this.memory.WriteByte(c_oSerPropLenType.Byte);
+			this.memory.WriteBool(pPr.SnapToGrid);
+		}
 		if(null != pPr.SuppressLineNumbers)
 		{
 			this.memory.WriteByte(c_oSerProp_pPrType.SuppressLineNumbers);
@@ -3068,6 +3080,8 @@ function Binary_pPrWriter(memory, oNumIdMap, oBinaryHeaderFooterTableWriter, sav
 			this.bs.WriteItem(c_oSerProp_secPrType.pageNumType, function(){oThis.WritePageNumType(sectPr);});
 		if(undefined !== sectPr.LnNumType)
 			this.bs.WriteItem(c_oSerProp_secPrType.lnNumType, function(){oThis.WriteLineNumType(sectPr.LnNumType);});
+		if(undefined !== sectPr.DocGrid)
+			this.bs.WriteItem(c_oSerProp_secPrType.docGrid, function(){oThis.WriteDocGrid(sectPr.DocGrid);});
 		if(null != sectPr.Columns)
 			this.bs.WriteItem(c_oSerProp_secPrType.cols, function(){oThis.WriteColumns(sectPr.Columns);});
 		if(null != sectPr.Borders && !sectPr.Borders.IsEmptyBorders())
@@ -3262,6 +3276,17 @@ function Binary_pPrWriter(memory, oNumIdMap, oBinaryHeaderFooterTableWriter, sav
 		if (undefined !== sectPr.GetPageNumChapSep())
 			this.bs.WriteItem(c_oSerProp_secPrPageNumType.chapSep, function(){oThis.memory.WriteByte(sectPr.GetPageNumChapSep());});
 	}
+	this.WriteDocGrid = function(docGrid)
+	{
+		var oThis = this;
+		this.bs.WriteItem(c_oSerProp_DocGrid.Type, function(){oThis.memory.WriteByte(docGrid.Type);});
+		if(undefined !== docGrid.CharSpace){
+			this.bs.WriteItem(c_oSerProp_DocGrid.CharSpace, function(){oThis.memory.WriteLong(docGrid.CharSpace);});
+		}
+		if(undefined !== docGrid.LinePitch){
+			this.bs.WriteItem(c_oSerProp_DocGrid.LinePitch, function(){oThis.memory.WriteLong(docGrid.LinePitch);});
+		}
+	};
 	this.WriteLineNumType = function(lineNum)
 	{
 		var oThis = this;
@@ -3691,6 +3716,12 @@ function Binary_rPrWriter(memory, saveParams)
 			}
         }
 
+		if (undefined !== rPr.SnapToGrid)
+		{
+			this.memory.WriteByte(c_oSerProp_rPrType.SnapToGrid);
+			this.memory.WriteByte(c_oSerPropLenType.Byte);
+			this.memory.WriteBool(rPr.SnapToGrid);
+		}
 		if (undefined !== rPr.Ligatures)
 		{
 			this.memory.WriteByte(c_oSerProp_rPrType.Ligatures);
@@ -7661,7 +7692,7 @@ function BinarySettingsTableWriter(memory, doc, saveParams)
 		var oThis = this;
 		var compatibilityMode =  false === this.saveParams.isCompatible ? AscCommon.document_compatibility_mode_Word15 : oThis.Document.GetCompatibilityMode();
 		this.bs.WriteItem(c_oSerCompat.CompatSetting, function() {oThis.WriteCompatSetting("compatibilityMode", "http://schemas.microsoft.com/office/word", compatibilityMode.toString());});
-		this.bs.WriteItem(c_oSerCompat.CompatSetting, function() {oThis.WriteCompatSetting("overrideTableStyleFontSizeAndJustification", "http://schemas.microsoft.com/office/word", "1");});
+		this.bs.WriteItem(c_oSerCompat.CompatSetting, function() {oThis.WriteCompatSetting("overrideTableStyleFontSizeAndJustification", "http://schemas.microsoft.com/office/word", false === oThis.Document.GetDocumentSettings().OverrideTableStyleFontSizeAndJustification ? "0" : "1");});
 		this.bs.WriteItem(c_oSerCompat.CompatSetting, function() {oThis.WriteCompatSetting("enableOpenTypeFeatures", "http://schemas.microsoft.com/office/word", "1");});
 		this.bs.WriteItem(c_oSerCompat.CompatSetting, function() {oThis.WriteCompatSetting("doNotFlipMirrorIndents", "http://schemas.microsoft.com/office/word", "1");});
 		let oSettings = oThis.Document.GetDocumentSettings();
@@ -9790,6 +9821,9 @@ function Binary_pPrReader(doc, oReadResult, stream)
 			case c_oSerProp_pPrType.outlineLvl:
 				pPr.OutlineLvl = this.stream.GetLongLE();
 				break;
+			case c_oSerProp_pPrType.SnapToGrid:
+				pPr.SnapToGrid = this.stream.GetBool();
+				break;
 			case c_oSerProp_pPrType.SuppressLineNumbers:
 				pPr.SuppressLineNumbers = this.stream.GetBool();
 				break;
@@ -10114,6 +10148,14 @@ function Binary_pPrReader(doc, oReadResult, stream)
 			});
 			oSectPr.SetLineNumbers(lineNum.nCountBy, lineNum.nDistance, lineNum.nStart, lineNum.nRestartType);
 		}
+		else if( c_oSerProp_secPrType.docGrid === type )
+		{
+			var docGrid = new AscWord.SectionDocGrid();
+			res = this.bcr.Read1(length, function(t, l) {
+				return oThis.Read_docGrid(t, l, docGrid);
+			});
+			oSectPr.SetDocGrid(docGrid);
+		}
         else if( c_oSerProp_secPrType.sectPrChange === type )
             res = c_oSerConstants.ReadUnknown;//todo
         else if( c_oSerProp_secPrType.cols === type ) {
@@ -10381,6 +10423,19 @@ function Binary_pPrReader(doc, oReadResult, stream)
 		else if (c_oSerProp_secPrPageNumType.chapSep === type)
 			sectPr.SetPageNumChapSep(this.stream.GetByte());
 		else
+			res = c_oSerConstants.ReadUnknown;
+		return res;
+	}
+	this.Read_docGrid = function(type, length, docGrid)
+	{
+		var res = c_oSerConstants.ReadOk;
+		if( c_oSerProp_DocGrid.Type === type ) {
+			docGrid.Type = this.stream.GetUChar();
+		} else if( c_oSerProp_DocGrid.CharSpace === type ) {
+			docGrid.CharSpace = this.stream.GetLongLE();
+		} else if( c_oSerProp_DocGrid.LinePitch === type ) {
+			docGrid.LinePitch = this.stream.GetLongLE();
+		} else
 			res = c_oSerConstants.ReadUnknown;
 		return res;
 	}
@@ -10779,6 +10834,9 @@ function Binary_rPrReader(doc, oReadResult, stream)
 				} else {
 					res = c_oSerConstants.ReadUnknown;
 				}
+				break;
+			case c_oSerProp_rPrType.SnapToGrid:
+				rPr.SnapToGrid = this.stream.GetBool();
 				break;
 			case c_oSerProp_rPrType.Ligatures:
 				rPr.Ligatures = this.stream.GetByte();
@@ -16970,9 +17028,15 @@ function Binary_SettingsTableReader(doc, oReadResult, stream)
     this.Read = function()
     {
         var oThis = this;
-        return this.bcr.ReadTable(function(t, l){
+        var res = this.bcr.ReadTable(function(t, l){
                 return oThis.ReadSettingsContent(t,l);
             });
+        // A file without the compatibility setting uses Word's default for its compatibility mode (true from Word 2013),
+        // and the saved file has to say the same (#66)
+        var Settings = this.Document.Settings;
+        if (undefined === Settings.OverrideTableStyleFontSizeAndJustification)
+            Settings.OverrideTableStyleFontSizeAndJustification = Settings.CompatibilityMode >= AscCommon.document_compatibility_mode_Word15;
+        return res;
     };
     this.ReadSettingsContent = function(type, length)
     {
@@ -17574,6 +17638,8 @@ function Binary_SettingsTableReader(doc, oReadResult, stream)
 			});
 			if ("compatibilityMode" === compat.name && "http://schemas.microsoft.com/office/word" === compat.url) {
 				Settings.CompatibilityMode = parseInt(compat.value);
+			} else if ("overrideTableStyleFontSizeAndJustification" === compat.name && "http://schemas.microsoft.com/office/word" === compat.url) {
+				Settings.OverrideTableStyleFontSizeAndJustification = /^(1|true|on)$/i.test(String(compat.value).trim());
 			}
 		} else if (c_oSerCompat.Flags1 === type) {
 			var flags1 = this.stream.GetULong(length);

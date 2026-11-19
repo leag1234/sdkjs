@@ -361,6 +361,7 @@
 			"word/Editor/sections/document-sections.js",
 			"word/Editor/sections/footnote-pr.js",
 			"word/Editor/sections/line-numbering.js",
+			"word/Editor/sections/doc-grid.js",
 			"word/Editor/sections/sect-pr.js",
 			"word/Editor/sections/sect-pr-changes.js",
 			"word/Editor/sections/section-columns.js",

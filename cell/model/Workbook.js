@@ -3180,9 +3180,11 @@
 		this.App = null;
 		this.Core = null;
 
+		// A snapshot or a pasted workbook (isMainLogicDocument === false) must not be registered in the table of ids:
+		// the table lives as long as the editor, and what is registered there keeps the whole workbook alive.
 		AscFormat.ExecuteNoHistory(function () {
 			this.CustomProperties = new AscCommon.CCustomProperties();
-		}, this, [], true);
+		}, this, [], false !== isMainLogicDocument);
 
 		this.theme = null;
 		this.clrSchemeMap = null;
@@ -3238,7 +3240,7 @@
 		} else {
 			AscFormat.ExecuteNoHistory(function () {
 				this.customXmlManager = new AscWord.CustomXmlManager(this);
-			}, this, [], true);
+			}, this, [], false !== isMainLogicDocument);
 		}
 
 		this.oGoalSeek = null;

@@ -4605,7 +4605,10 @@ background-repeat: no-repeat;\
 
 	asc_docs_api.prototype.put_Style    = function(sName)
 	{
-		if (false === this.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(changestype_Paragraph_Properties))
+		let logicDocument = this.WordControl.m_oLogicDocument;
+		let namedStyle    = logicDocument.GetStyles().Get(logicDocument.GetStyles().GetStyleIdByName(sName));
+		let lockType      = namedStyle && Asc.c_oAscStyleType.Character === namedStyle.GetType() ? AscCommon.changestype_Paragraph_TextProperties : changestype_Paragraph_Properties;
+		if (false === this.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(lockType))
 		{
 			this.WordControl.m_oLogicDocument.StartAction(AscDFH.historydescription_Document_SetParagraphStyle, null, null, sName);
 			this.WordControl.m_oLogicDocument.SetParagraphStyle(sName, true);
@@ -10154,6 +10157,15 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype.asc_AddNewStyle            = function(oStyle)
 	{
 		this.WordControl.m_oLogicDocument.Add_NewStyle(oStyle);
+	};
+	/**
+	 * "Update <style> to Match Selection" for a character style.
+	 * @param {string} sName
+	 * @returns {boolean}
+	 */
+	asc_docs_api.prototype.asc_UpdateCharacterStyleFromSelection = function(sName)
+	{
+		return this.WordControl.m_oLogicDocument.UpdateCharacterStyleFromSelection(sName);
 	};
 	asc_docs_api.prototype.asc_RemoveStyle            = function(sName)
 	{
@@ -16452,6 +16464,7 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_GetMailMergeFiledValue']                = asc_docs_api.prototype.asc_GetMailMergeFiledValue;
 	asc_docs_api.prototype['asc_GetStyleFromFormatting']                = asc_docs_api.prototype.asc_GetStyleFromFormatting;
 	asc_docs_api.prototype['asc_AddNewStyle']                           = asc_docs_api.prototype.asc_AddNewStyle;
+	asc_docs_api.prototype['asc_UpdateCharacterStyleFromSelection']     = asc_docs_api.prototype.asc_UpdateCharacterStyleFromSelection;
 	asc_docs_api.prototype['asc_RemoveStyle']                           = asc_docs_api.prototype.asc_RemoveStyle;
 	asc_docs_api.prototype['asc_RemoveAllCustomStyles']                 = asc_docs_api.prototype.asc_RemoveAllCustomStyles;
 	asc_docs_api.prototype['asc_IsStyleDefault']                        = asc_docs_api.prototype.asc_IsStyleDefault;

@@ -1485,6 +1485,76 @@
 		doc.UpdateSelection();
 		doc.UpdateInterface();
 	};
+	/**
+	 * A mouse event of the second pane placed in the document. kind is "down", "move" or "up"; clickCount is the
+	 * number of the click in a series (1 to 3) and stays the same for the whole gesture, so a double click selects
+	 * a word and a drag that follows it goes on word by word, a triple click selects a paragraph, and a drag selects
+	 * text. The upper pane is not scrolled by these events (the page locks scroll-to-target while it uses them).
+	 */
+	api["asc_MouseInPage"] = api.asc_MouseInPage = function(kind, pageIndex, x, y, clickCount, shift, ctrl)
+	{
+		let doc = this.private_GetLogicDocument();
+		if (!doc || !(pageIndex >= 0))
+			return;
+		let e = new AscCommon.CMouseEventHandler();
+		e.Button     = AscCommon.g_mouse_button_left;
+		e.ClickCount = Math.max(1, Math.min(3, clickCount | 0));
+		e.ShiftKey   = !!shift;
+		e.CtrlKey    = !!ctrl;
+		e.IsLocked   = kind !== "up";
+		if (kind === "down")
+		{
+			e.Type = AscCommon.g_mouse_event_type_down;
+			// a click inside the selected text only starts a drag-and-drop in the upper pane; here it is a new click
+			if (e.ClickCount === 1 && !e.ShiftKey && doc.IsTextSelectionUse())
+				doc.RemoveSelection();
+			doc.OnMouseDown(e, x, y, pageIndex);
+			// dragging the selected text from the lower pane is not offered; the drag selects
+			if (doc.Selection && doc.Selection.DragDrop)
+			{
+				doc.Selection.DragDrop.Flag = 0;
+				doc.Selection.DragDrop.Data = null;
+			}
+		}
+		else if (kind === "move")
+		{
+			e.Type = AscCommon.g_mouse_event_type_move;
+			doc.OnMouseMove(e, x, y, pageIndex);
+		}
+		else
+		{
+			e.Type = AscCommon.g_mouse_event_type_up;
+			doc.OnMouseUp(e, x, y, pageIndex);
+		}
+		doc.UpdateSelection();
+		doc.UpdateInterface();
+	};
+	/**
+	 * The rectangles (millimetres, page coordinates) of the text selection on one page, for the second pane to paint.
+	 */
+	api["asc_GetSelectionRects"] = api.asc_GetSelectionRects = function(pageIndex)
+	{
+		let doc = this.private_GetLogicDocument();
+		let dd  = this.WordControl && this.WordControl.m_oDrawingDocument;
+		if (!doc || !dd || !doc.IsTextSelectionUse || !doc.IsTextSelectionUse() || doc.IsSelectionEmpty())
+			return [];
+		let rects = [];
+		let add   = dd.AddPageSelection;
+		dd.AddPageSelection = function(page, x, y, w, h)
+		{
+			if (page === pageIndex)
+				rects.push({"x" : x, "y" : y, "w" : w, "h" : h});
+		};
+		try
+		{
+			doc.DrawSelectionOnPage(pageIndex);
+		}
+		finally
+		{
+			dd.AddPageSelection = add;
+		}
+		return rects;
+	};
 	api["asc_WatchRecalculation"] = api.asc_WatchRecalculation = function()
 	{
 		let dd = this.WordControl && this.WordControl.m_oDrawingDocument;

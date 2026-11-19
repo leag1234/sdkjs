@@ -13068,6 +13068,7 @@ function CTextPr()
 	this.Border     = undefined;
     this.Vanish     = undefined;
 	this.Ligatures  = undefined;
+	this.SnapToGrid = undefined;
 
     this.TextOutline    = undefined;
     this.TextFill       = undefined;
@@ -13111,6 +13112,7 @@ CTextPr.prototype.Clear = function()
 	this.Border         = undefined;
 	this.Vanish         = undefined;
 	this.Ligatures      = undefined;
+	this.SnapToGrid     = undefined;
 	this.TextOutline    = undefined;
 	this.TextFill       = undefined;
 	this.HighlightColor = undefined;
@@ -13179,6 +13181,7 @@ CTextPr.prototype.Copy = function(bCopyPrChange, oPr)
 
 	TextPr.Vanish    = this.Vanish;
 	TextPr.Ligatures = this.Ligatures;
+	TextPr.SnapToGrid = this.SnapToGrid;
 
 	if (true === bCopyPrChange && undefined !== this.PrChange)
 	{
@@ -13218,6 +13221,7 @@ CTextPr.prototype.createDuplicateForSmartArt = function(oPr)
 
 	TextPr.Vanish    = this.Vanish;
 	TextPr.Ligatures = this.Ligatures;
+	TextPr.SnapToGrid = this.SnapToGrid;
 
 	if (oPr.custT) {
 		TextPr.FontSize = this.FontSize;
@@ -13376,6 +13380,9 @@ CTextPr.prototype.Merge = function(TextPr)
 
 	if (undefined !== TextPr.Ligatures && null !== TextPr.Ligatures)
 		this.Ligatures = TextPr.Ligatures;
+	
+	if (undefined !== TextPr.SnapToGrid && null !== TextPr.SnapToGrid)
+		this.SnapToGrid = TextPr.SnapToGrid;
 
 	if (TextPr.TextOutline)
 		this.TextOutline = TextPr.TextOutline.createDuplicate();
@@ -13561,6 +13568,11 @@ CTextPr.prototype.Apply = function(textPr)
 	else if (undefined !== textPr.Ligatures)
 		this.Ligatures = textPr.Ligatures;
 	
+	if (null === textPr.SnapToGrid)
+		this.SnapToGrid = undefined;
+	else if (undefined !== textPr.SnapToGrid)
+		this.SnapToGrid = textPr.SnapToGrid;
+	
 	if (null === textPr.FontScale)
 		this.FontScale = undefined;
 	else if (undefined !== textPr.FontScale)
@@ -13599,6 +13611,7 @@ CTextPr.prototype.InitDefault = function(nCompatibilityMode)
 	this.Border  = undefined;
 	this.Vanish  = false;
 	this.Ligatures  = Asc.LigaturesType.None;
+	this.SnapToGrid = true;
 
 	this.TextOutline    = undefined;
 	this.TextFill       = undefined;
@@ -13687,6 +13700,7 @@ CTextPr.prototype.Set_FromObject = function(TextPr, isUndefinedToNull)
 
 	this.Vanish         = CheckUndefinedToNull(isUndefinedToNull, TextPr.Vanish);
 	this.Ligatures      = CheckUndefinedToNull(isUndefinedToNull, TextPr.Ligatures);
+	this.SnapToGrid     = CheckUndefinedToNull(isUndefinedToNull, TextPr.SnapToGrid);
 	this.Unifill        = CheckUndefinedToNull(isUndefinedToNull, TextPr.Unifill);
 	this.FontRef        = CheckUndefinedToNull(isUndefinedToNull, TextPr.FontRef);
 	this.TextFill       = CheckUndefinedToNull(isUndefinedToNull, TextPr.TextFill);
@@ -13803,6 +13817,9 @@ CTextPr.prototype.Compare = function(TextPr)
 
 	if (undefined !== this.Ligatures && this.Ligatures !== TextPr.Ligatures)
 		this.Ligatures = undefined;
+
+	if (undefined !== this.SnapToGrid && this.SnapToGrid !== TextPr.SnapToGrid)
+		this.SnapToGrid = undefined;
 
 	if (undefined !== this.FontScale && this.FontScale !== TextPr.FontScale)
 		this.FontScale = undefined;
@@ -14185,15 +14202,20 @@ CTextPr.prototype.Write_ToBinary = function(Writer)
 	// All 32 flag bits are taken. Bit 31 keeps its old meaning (one byte follows) and without a border the byte is
 	// exactly the old Ligatures value (0..15). With a border the byte carries two extra markers old files never
 	// have (bit 6: Ligatures undefined, bit 7: the border follows), so old data reads identically.
-	if (undefined !== this.Ligatures || undefined !== this.Border)
+	// Bit 5 of the byte tells that the snapToGrid flag follows the border
+	if (undefined !== this.Ligatures || undefined !== this.Border || undefined !== this.SnapToGrid)
 	{
 		var nLigByte = undefined !== this.Ligatures ? this.Ligatures : 0x40;
 		if (undefined !== this.Border)
 			nLigByte |= 0x80;
+		if (undefined !== this.SnapToGrid)
+			nLigByte |= 0x20;
 
 		Writer.WriteByte(nLigByte);
 		if (undefined !== this.Border)
 			this.Border.Write_ToBinary(Writer);
+		if (undefined !== this.SnapToGrid)
+			Writer.WriteBool(this.SnapToGrid);
 
 		Flags |= (1 << 31);
 	}
@@ -14370,13 +14392,16 @@ CTextPr.prototype.Read_FromBinary = function(Reader)
 	{
 		var nLigByte = Reader.GetByte();
 		if (!(nLigByte & 0x40))
-			this.Ligatures = nLigByte & 0x3F;
+			this.Ligatures = nLigByte & 0x1F;
 
 		if (nLigByte & 0x80)
 		{
 			this.Border = new CDocumentBorder();
 			this.Border.Read_FromBinary(Reader);
 		}
+
+		if (nLigByte & 0x20)
+			this.SnapToGrid = Reader.GetBool();
 	}
 };
 CTextPr.prototype.Check_NeedRecalc = function()
@@ -14645,6 +14670,9 @@ CTextPr.prototype.Is_Equal = function(TextPr)
 	if (this.Ligatures !== TextPr.Ligatures)
 		return false;
 
+	if (this.SnapToGrid !== TextPr.SnapToGrid)
+		return false;
+
 	if (!IsEqualStyleObjects(this.Shd, TextPr.Shd))
 		return false;
 
@@ -14699,6 +14727,7 @@ CTextPr.prototype.Is_Empty = function()
 		|| undefined !== this.Border
 		|| undefined !== this.Vanish
 		|| undefined !== this.Ligatures
+		|| undefined !== this.SnapToGrid
 		|| undefined !== this.TextOutline
 		|| undefined !== this.TextFill
 		|| undefined !== this.HighlightColor)
@@ -14811,6 +14840,9 @@ CTextPr.prototype.GetDiff = function(oTextPr)
 
 	if (this.Ligatures !== oTextPr.Ligatures)
 		oResultTextPr.Ligatures = this.Ligatures;
+
+	if (this.SnapToGrid !== oTextPr.SnapToGrid)
+		oResultTextPr.SnapToGrid = this.SnapToGrid;
 
 	if (this.Shd && !this.Shd.IsEqual(oTextPr.Shd))
 		oResultTextPr.Shd = this.Shd.Copy();
@@ -15361,13 +15393,69 @@ CTextMetrics.prototype.UpdateByFontInfo = function(fontInfo)
 {
 	this.Update(fontInfo.Name, fontInfo.Size, fontInfo.Style);
 };
-CTextMetrics.prototype.Update = function(fontName, fontSize, fontStyle)
+/**
+ * Line height of a single-spaced line divided by the font size, as Word 16 lays out East Asian text in these fonts
+ * (measured on a Windows PC: one paragraph per font, line pitch of 12 pt text). The bundled substitute font
+ * (Noto Sans CJK) is 1.88, which makes the lines of a document set in SimSun and similar fonts 45% taller than in
+ * Word and moves the page breaks (#39). The keys are lower case, without spaces, NFKC-normalised.
+ */
+var CJK_LINE_HEIGHT_FACTORS = {};
+(function()
+{
+	function add(factor, names)
+	{
+		for (let i = 0; i < names.length; ++i)
+			CJK_LINE_HEIGHT_FACTORS[names[i]] = factor;
+	}
+	// SimSun family, MS Mincho / Gothic / PMincho, MingLiU / PMingLiU, Korean Batang (measured with Word 16 at 10.5-22 pt)
+	add(1.30, ['simsun', 'nsimsun', '宋体', '宋體', '新宋体', 'simhei', '黑体', '黑體', 'kaiti', '楷体', '楷体_gb2312', 'fangsong',
+		'仿宋', '仿宋_gb2312', 'mingliu', '細明體', '细明体', 'mspmincho', 'msp明朝', 'batang', '바탕',
+		'msmincho', 'ms明朝', 'msgothic', 'msゴシック', 'mspgothic', 'mspゴシック', 'pmingliu', '新細明體', '新细明体']);
+	// DengXian
+	add(1.36, ['dengxian', '等线']);
+	// YaHei, JhengHei, DFKai-SB (Word substitutes YaHei when DFKai-SB is missing), Gulim, Malgun Gothic
+	add(1.73, ['microsoftyahei', '微软雅黑', '微軟雅黑',
+		'microsoftjhenghei', '微軟正黑體', 'dfkai-sb', '標楷體', '楷體', 'gulim', '굴림', 'malgungothic', '맑은고딕']);
+	add(1.68, ['yumincho', '游明朝', 'yugothic', '游ゴシック']);
+	add(1.95, ['meiryo', 'メイリオ']);
+})();
+
+function GetCjkLineHeightFactor(requestedName)
+{
+	if (!requestedName || 'string' !== typeof requestedName)
+		return 0;
+	let key = requestedName.normalize ? requestedName.normalize('NFKC') : requestedName;
+	key = key.toLowerCase().replace(/[\s　]+/g, '');
+	return CJK_LINE_HEIGHT_FACTORS[key] || 0;
+}
+AscWord.GetCjkLineHeightFactor = GetCjkLineHeightFactor;
+
+/**
+ * @param {string} fontName name of the font that the engine measures (the loaded font)
+ * @param {number} fontSize in points
+ * @param {number} fontStyle
+ * @param {string} [requestedName] East Asian font name of the text: when the engine substitutes Noto Sans CJK for it, the
+ * line metrics get the proportions of the requested font as Word lays it out
+ */
+CTextMetrics.prototype.Update = function(fontName, fontSize, fontStyle, requestedName)
 {
 	g_oTextMeasurer.SetFontInternal(fontName, fontSize, fontStyle);
 	
 	let nHeight  = g_oTextMeasurer.GetHeight();
 	let nAscent  = g_oTextMeasurer.GetAscender();
 	let nDescent = Math.abs(g_oTextMeasurer.GetDescender());
+	
+	if (requestedName && 'string' === typeof fontName && /^Noto Sans CJK/i.test(fontName) && nHeight > 0)
+	{
+		let factor = GetCjkLineHeightFactor(requestedName);
+		if (factor)
+		{
+			let scale = factor * fontSize * 25.4 / 72 / nHeight;
+			nHeight  *= scale;
+			nAscent  *= scale;
+			nDescent *= scale;
+		}
+	}
 	
 	let _nHeight  = nHeight;
 	let _nDescent = nDescent;
@@ -16296,6 +16384,7 @@ function CParaPr()
 	this.ReviewInfo        = undefined;
 
 	this.SuppressLineNumbers = undefined;
+	this.SnapToGrid        = undefined;
 	this.AutoSpaceDE       = undefined;
 	this.AutoSpaceDN       = undefined;
 }
@@ -16405,6 +16494,8 @@ CParaPr.prototype.Copy = function(bCopyPrChange, oPr)
 
 	if (undefined !== this.SuppressLineNumbers)
 		ParaPr.SuppressLineNumbers = this.SuppressLineNumbers;
+	if (undefined !== this.SnapToGrid)
+		ParaPr.SnapToGrid = this.SnapToGrid;
 	ParaPr.AutoSpaceDE = this.AutoSpaceDE;
 	ParaPr.AutoSpaceDN = this.AutoSpaceDN;
 
@@ -16582,6 +16673,8 @@ CParaPr.prototype.Merge = function(ParaPr)
 
 	if (undefined !== ParaPr.SuppressLineNumbers)
 		this.SuppressLineNumbers = ParaPr.SuppressLineNumbers;
+	if (undefined !== ParaPr.SnapToGrid)
+		this.SnapToGrid = ParaPr.SnapToGrid;
 	if (undefined !== ParaPr.AutoSpaceDE)
 		this.AutoSpaceDE = ParaPr.AutoSpaceDE;
 	if (undefined !== ParaPr.AutoSpaceDN)
@@ -16621,6 +16714,7 @@ CParaPr.prototype.InitDefault = function(nCompatibilityMode)
 	this.FramePr                   = undefined;
 	this.OutlineLvl                = undefined;
 	this.SuppressLineNumbers       = false;
+	this.SnapToGrid                = true;
 	this.AutoSpaceDE               = true;
 	this.AutoSpaceDN               = true;
 
@@ -16756,6 +16850,8 @@ CParaPr.prototype.Set_FromObject = function(ParaPr)
 
 	if (undefined !== ParaPr.SuppressLineNumbers)
 		this.SuppressLineNumbers = ParaPr.SuppressLineNumbers;
+	if (undefined !== ParaPr.SnapToGrid)
+		this.SnapToGrid = ParaPr.SnapToGrid;
 	this.AutoSpaceDE = ParaPr.AutoSpaceDE;
 	this.AutoSpaceDN = ParaPr.AutoSpaceDN;
 };
@@ -16892,6 +16988,8 @@ CParaPr.prototype.Compare = function(ParaPr)
 
 	if (this.SuppressLineNumbers === ParaPr.SuppressLineNumbers)
 		Result_ParaPr.SuppressLineNumbers = this.SuppressLineNumbers;
+	if (this.SnapToGrid === ParaPr.SnapToGrid)
+		Result_ParaPr.SnapToGrid = this.SnapToGrid;
 	if (this.AutoSpaceDE === ParaPr.AutoSpaceDE)
 		Result_ParaPr.AutoSpaceDE = this.AutoSpaceDE;
 	if (this.AutoSpaceDN === ParaPr.AutoSpaceDN)
@@ -17061,6 +17159,11 @@ CParaPr.prototype.Write_ToBinary = function(Writer)
 		Writer.WriteBool(this.Bidi);
 		Flags |= (1 << 25);
 	}
+	if (undefined !== this.SnapToGrid)
+	{
+		Writer.WriteBool(this.SnapToGrid);
+		Flags |= (1 << 28);
+	}
 	if (undefined !== this.AutoSpaceDE)
 	{
 		Writer.WriteBool(this.AutoSpaceDE);
@@ -17206,6 +17309,8 @@ CParaPr.prototype.Read_FromBinary = function(Reader)
 	
 	if (Flags & (1 << 25))
 		this.Bidi = Reader.GetBool();
+	if (Flags & (1 << 28))
+		this.SnapToGrid = Reader.GetBool();
 	if (Flags & (1 << 26))
 		this.AutoSpaceDE = Reader.GetBool();
 	if (Flags & (1 << 27))
@@ -17257,6 +17362,7 @@ CParaPr.prototype.Is_Equal = function(ParaPr)
 		|| true !== IsEqualStyleObjects(this.FramePr, ParaPr.FramePr)
 		|| this.OutlineLvl !== ParaPr.OutlineLvl
 		|| this.SuppressLineNumbers !== ParaPr.SuppressLineNumbers
+		|| this.SnapToGrid !== ParaPr.SnapToGrid
 		|| this.Bidi !== ParaPr.Bidi
 		|| this.AutoSpaceDE !== ParaPr.AutoSpaceDE
 		|| this.AutoSpaceDN !== ParaPr.AutoSpaceDN
@@ -17337,6 +17443,8 @@ CParaPr.prototype.GetDiff = function(oParaPr)
 
 	if (this.SuppressLineNumbers !== oParaPr.SuppressLineNumbers)
 		oResultParaPr.SuppressLineNumbers = this.SuppressLineNumbers;
+	if (this.SnapToGrid !== oParaPr.SnapToGrid)
+		oResultParaPr.SnapToGrid = this.SnapToGrid;
 	if (this.AutoSpaceDE !== oParaPr.AutoSpaceDE)
 		oResultParaPr.AutoSpaceDE = this.AutoSpaceDE;
 	if (this.AutoSpaceDN !== oParaPr.AutoSpaceDN)
@@ -17476,6 +17584,7 @@ CParaPr.prototype.Is_Empty = function(oPr)
 		|| undefined !== this.PStyle
 		|| undefined !== this.OutlineLvl
 		|| undefined !== this.SuppressLineNumbers
+		|| undefined !== this.SnapToGrid
 		|| undefined !== this.AutoSpaceDE
 		|| undefined !== this.AutoSpaceDN
 		|| undefined !== this.Bidi
