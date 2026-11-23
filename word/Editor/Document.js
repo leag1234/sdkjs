@@ -177,6 +177,10 @@ function CDocumentRecalculateHdrFtrPageCountState()
 	this.Id        = null;
 	this.PageIndex = 0;
 	this.PageCount = -1;
+	
+	// STYLEREF header
+	this.StyleRefOnly     = false;
+	this.StyleRefRestarts = 0;
 }
 
 function Document_Recalculate_Page()
@@ -3127,6 +3131,7 @@ CDocument.prototype.private_Recalculate = function(_RecalcData, isForceStrictRec
 	}
 
 	this.HdrFtrRecalc.PageCount = -1;
+	this.HdrFtrRecalc.StyleRefRestarts = 0;
 
     // Очищаем данные пересчета
     this.RecalcInfo.Reset();
@@ -3319,6 +3324,10 @@ CDocument.prototype.private_RecalculateFastRunRange = function(arrChanges, nStar
 		|| !oRun.GetParagraph().IsUseInDocument())
 		return false;
 
+	// STYLEREF header: typing in a paragraph shown in a header needs the regular pass, which updates the headers
+	if (this.HdrFtr.IsStyleRefSource(oRun.GetParagraph()))
+		return false;
+	
 	var oParaPos = oRun.GetSimpleChangesRange(arrChanges, _nStartIndex, _nEndIndex);
 	if (oParaPos)
 	{
@@ -3423,6 +3432,10 @@ CDocument.prototype.private_RecalculateFastParagraph = function(arrChanges, nSta
 			if (!docPos.length || (docPos[0].Class === this && docPos[0].Position >= this.FullRecalc.StartIndex))
 				return false;
 		}
+		
+		// STYLEREF header: see private_RecalculateFastRunRange
+		if (this.HdrFtr.IsStyleRefSource(para))
+			return false;
 		
 		let _pages = para.Recalculate_FastWholeParagraph();
 		if (!_pages || _pages.length <= 0)
@@ -4328,16 +4341,25 @@ CDocument.prototype.Recalculate_PageColumn                   = function()
 			// изменением метрик колонтитула, новое количество страниц стало меньше, чем раньше, тогда мы не пересчитываем
 			// дальше, чтобы избежать зацикливаний.
 
+			var nPageCountStartPage = -1;
 			if (-1 === this.HdrFtrRecalc.PageCount || this.HdrFtrRecalc.PageCount < this.Pages.length)
 			{
 				this.HdrFtrRecalc.PageCount = this.Pages.length;
-				var nPageCountStartPage     = this.HdrFtr.HavePageCountElement();
-				if (-1 !== nPageCountStartPage)
-				{
-					this.DrawingDocument.OnStartRecalculate(nPageCountStartPage);
-					this.HdrFtrRecalc.PageIndex = nPageCountStartPage;
-					this.private_RecalculateHdrFtrPageCountUpdate();
-				}
+				nPageCountStartPage         = this.HdrFtr.HavePageCountElement();
+			}
+			
+			// STYLEREF header: the value depends on the body of each page, check it once the body is laid out
+			var nStyleRefStartPage = this.HdrFtrRecalc.StyleRefRestarts < 3 ? this.HdrFtr.HaveStyleRefElement() : -1;
+			var nHdrFtrStartPage   = nPageCountStartPage;
+			if (-1 !== nStyleRefStartPage && (-1 === nHdrFtrStartPage || nStyleRefStartPage < nHdrFtrStartPage))
+				nHdrFtrStartPage = nStyleRefStartPage;
+			
+			if (-1 !== nHdrFtrStartPage)
+			{
+				this.HdrFtrRecalc.StyleRefOnly = (-1 === nPageCountStartPage);
+				this.DrawingDocument.OnStartRecalculate(nHdrFtrStartPage);
+				this.HdrFtrRecalc.PageIndex = nHdrFtrStartPage;
+				this.private_RecalculateHdrFtrPageCountUpdate();
 			}
 		}
 	}
@@ -5005,7 +5027,7 @@ CDocument.prototype.private_RecalculateHdrFtrPageCountUpdate = function()
 
 	while (nPageAbs < nPagesCount)
 	{
-		var Result = this.HdrFtr.RecalculatePageCountUpdate(nPageAbs, nPagesCount);
+		var Result = this.HdrFtr.RecalculatePageCountUpdate(nPageAbs, nPagesCount, this.HdrFtrRecalc.StyleRefOnly);
 		if (null === Result)
 		{
 			nPageAbs++;
@@ -5045,6 +5067,11 @@ CDocument.prototype.private_RecalculateHdrFtrPageCountUpdate = function()
 		else
 		{
 			this.DrawingDocument.OnEndRecalculate(false);
+			
+			// STYLEREF header: a header whose height follows its STYLEREF value could move a heading to another page
+			// and back; stop after a few full passes
+			if (this.HdrFtrRecalc.StyleRefOnly)
+				this.HdrFtrRecalc.StyleRefRestarts++;
 			
 			for (var nCurPage = nPageAbs + 1; nCurPage < nPagesCount; ++nCurPage)
 			{

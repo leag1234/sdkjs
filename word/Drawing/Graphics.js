@@ -557,6 +557,26 @@
 		return (img.Status === AscFonts.ImageLoadStatus.Loading);
 	};
 
+	// #61: drawImage applies the context scale (millimetres to pixels) to the non-scaling strokes of an SVG, so the
+	// 0.6 px hairlines of converted WMF/EMF drawings became about 2 px of solid black. Without rotation, skew or
+	// flip, draw the SVG in device pixels so its hairlines stay as thin as Word draws them on screen.
+	CGraphics.prototype.eoDrawSvgInDevicePixels = function(img, x, y, w, h)
+	{
+		var _ft = this.m_oFullTransform;
+		if (!_ft || Math.abs(_ft.shx) > 1e-9 || Math.abs(_ft.shy) > 1e-9 || !(_ft.sx > 0) || !(_ft.sy > 0))
+			return false;
+		var xx = _ft.TransformPointX(x, y);
+		var yy = _ft.TransformPointY(x, y);
+		var ww = _ft.TransformPointX(x + w, y + h) - xx;
+		var hh = _ft.TransformPointY(x + w, y + h) - yy;
+		if (!(ww > 0) || !(hh > 0))
+			return false;
+		this.m_oContext.setTransform(1, 0, 0, 1, 0, 0);
+		this.m_oContext.drawImage(img, xx, yy, ww, hh);
+		this.m_oContext.setTransform(_ft.sx, _ft.shy, _ft.shx, _ft.sy, _ft.tx, _ft.ty);
+		return true;
+	};
+
 	CGraphics.prototype.drawImage2 = function(img,x,y,w,h,alpha,srcRect)
 	{
 		if (srcRect)
@@ -581,7 +601,12 @@
 			if (!srcRect)
 			{
 				// тут нужно проверить, можно ли нарисовать точно. т.е. может картинка ровно такая, какая нужна.
-				if (!global_MatrixTransformer.IsIdentity2(this.m_oTransform) ||
+				if (this.isVectorImage(img) && global_MatrixTransformer.IsIdentity2(this.m_oTransform) &&
+					this.eoDrawSvgInDevicePixels(img, x, y, w, h))
+				{
+					// #61: drawn in device pixels
+				}
+				else if (!global_MatrixTransformer.IsIdentity2(this.m_oTransform) ||
 					this.isVectorImage(img))
 				{
 					this.m_oContext.drawImage(img,x,y,w,h);

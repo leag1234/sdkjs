@@ -62,6 +62,11 @@ function CHeaderFooter(Parent, oLogicDocument, DrawingDocument, Type)
 	};
 
 	this.PageCountElements = [];
+	
+	// STYLEREF header: field end chars and the value laid out for each page
+	this.StyleRefElements = [];
+	this.StyleRefText     = {};
+	this.StyleRefPage     = -1;
 
     // Добавляем данный класс в таблицу Id (обязательно в конце конструктора)
     AscCommon.g_oTableId.Add( this, this.Id );
@@ -194,6 +199,7 @@ CHeaderFooter.prototype =
         this.Content.PrepareRecalculateObject();
 
 		this.Clear_PageCountElements();
+		this.Clear_StyleRefElements(Page_abs);
 		this.LogicDocument.GetDrawingObjects().resetHdrFtrDrawingArrays(Page_abs);
 		
 		this.RecalculateDrawingsWithFields();
@@ -1447,6 +1453,43 @@ CHeaderFooter.prototype.Update_PageCountElements = function(nPageCount)
 	{
 		this.PageCountElements[nIndex].UpdatePageCount(nPageCount);
 	}
+};
+CHeaderFooter.prototype.Clear_StyleRefElements = function(nPageAbs)
+{
+	this.StyleRefElements = [];
+	this.StyleRefPage     = nPageAbs;
+	this.StyleRefText[nPageAbs] = [];
+};
+CHeaderFooter.prototype.Add_StyleRefElement = function(oElement)
+{
+	if (-1 !== this.StyleRefElements.indexOf(oElement))
+		return;
+	
+	this.StyleRefElements.push(oElement);
+	if (this.StyleRefText[this.StyleRefPage])
+		this.StyleRefText[this.StyleRefPage].push(oElement.numText);
+};
+CHeaderFooter.prototype.Have_StyleRefElement = function()
+{
+	return this.StyleRefElements.length > 0;
+};
+/**
+ * STYLEREF header: true when a STYLEREF value of this page differs from the one laid out
+ * @param nPageAbs {number}
+ * @returns {boolean}
+ */
+CHeaderFooter.prototype.Check_StyleRefElements = function(nPageAbs)
+{
+	let arrText = this.StyleRefText[nPageAbs];
+	if (!arrText || arrText.length !== this.StyleRefElements.length)
+		return true;
+	
+	for (let nIndex = 0, nCount = this.StyleRefElements.length; nIndex < nCount; ++nIndex)
+	{
+		if (this.StyleRefElements[nIndex].GetStyleRefText(nPageAbs) !== arrText[nIndex])
+			return true;
+	}
+	return false;
 };
 CHeaderFooter.prototype.ForceRecalculate = function(nPageAbs)
 {
@@ -2895,7 +2938,7 @@ CHeaderFooterController.prototype.GetHdrFtr = function(nPageAbs, isHeader)
 	let oPage = this.Pages[nPageAbs];
 	return oPage ? (isHeader ? oPage.Header : oPage.Footer) : null;
 };
-CHeaderFooterController.prototype.RecalculatePageCountUpdate = function(nPageAbs, nPageCount)
+CHeaderFooterController.prototype.RecalculatePageCountUpdate = function(nPageAbs, nPageCount, isStyleRefOnly)
 {
 	var oPage = this.Pages[nPageAbs];
 	if (!oPage)
@@ -2905,15 +2948,28 @@ CHeaderFooterController.prototype.RecalculatePageCountUpdate = function(nPageAbs
 	var oFooter = oPage.Footer;
 
 	var bNeedRecalc = false;
-	if (oHeader && oHeader.Have_PageCountElement())
+	if (!isStyleRefOnly && oHeader && oHeader.Have_PageCountElement())
 	{
 		oHeader.Update_PageCountElements(nPageCount);
 		bNeedRecalc = true;
 	}
 
-	if (oFooter && oFooter.Have_PageCountElement())
+	if (!isStyleRefOnly && oFooter && oFooter.Have_PageCountElement())
 	{
 		oFooter.Update_PageCountElements(nPageCount);
+		bNeedRecalc = true;
+	}
+	
+	// STYLEREF header: lay the header out again only when the value for this page changed
+	if (oHeader && oHeader.Have_StyleRefElement() && oHeader.Check_StyleRefElements(nPageAbs))
+	{
+		oHeader.ForceRecalculate(nPageAbs);
+		bNeedRecalc = true;
+	}
+	
+	if (oFooter && oFooter.Have_StyleRefElement() && oFooter.Check_StyleRefElements(nPageAbs))
+	{
+		oFooter.ForceRecalculate(nPageAbs);
 		bNeedRecalc = true;
 	}
 
@@ -2937,6 +2993,57 @@ CHeaderFooterController.prototype.UpdatePagesCount = function(nPageAbs, nPageCou
 	if (oFooter && oFooter.Have_PageCountElement())
 		oFooter.Update_PageCountElements(nPageCount);
 
+};
+/**
+ * STYLEREF header: first page whose header or footer has a STYLEREF field, -1 if none
+ * @returns {number}
+ */
+CHeaderFooterController.prototype.HaveStyleRefElement = function()
+{
+	var nPagesCount = this.LogicDocument.Pages.length;
+	for (var nPageAbs = 0; nPageAbs < nPagesCount; ++nPageAbs)
+	{
+		var oPage = this.Pages[nPageAbs];
+		if (oPage
+			&& ((oPage.Header && oPage.Header.Have_StyleRefElement())
+				|| (oPage.Footer && oPage.Footer.Have_StyleRefElement())))
+			return nPageAbs;
+	}
+	return -1;
+};
+/**
+ * STYLEREF header: true when the paragraph is the source of a STYLEREF field of a header or footer
+ * @param oParagraph {Paragraph}
+ * @returns {boolean}
+ */
+CHeaderFooterController.prototype.IsStyleRefSource = function(oParagraph)
+{
+	var arrChecked = [];
+	var nPagesCount = this.LogicDocument.Pages.length;
+	for (var nPageAbs = 0; nPageAbs < nPagesCount; ++nPageAbs)
+	{
+		var oPage = this.Pages[nPageAbs];
+		if (!oPage)
+			continue;
+		
+		var arrHdrFtr = [oPage.Header, oPage.Footer];
+		for (var nIndex = 0; nIndex < 2; ++nIndex)
+		{
+			var oHdrFtr = arrHdrFtr[nIndex];
+			if (!oHdrFtr || !oHdrFtr.Have_StyleRefElement() || -1 !== arrChecked.indexOf(oHdrFtr))
+				continue;
+			
+			arrChecked.push(oHdrFtr);
+			for (var nElement = 0, nCount = oHdrFtr.StyleRefElements.length; nElement < nCount; ++nElement)
+			{
+				var oComplexField = oHdrFtr.StyleRefElements[nElement].GetComplexField();
+				var oInstruction  = oComplexField ? oComplexField.GetInstruction() : null;
+				if (oInstruction && oInstruction.IsHdrFtrSource && oInstruction.IsHdrFtrSource(oParagraph, this.LogicDocument))
+					return true;
+			}
+		}
+	}
+	return false;
 };
 CHeaderFooterController.prototype.HavePageCountElement = function()
 {

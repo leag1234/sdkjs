@@ -338,11 +338,41 @@ ParaFieldChar.prototype.UpdatePageCount = function(pageCount)
 		this.SetNumValue(pageCount, this.GetNumFormat());
 	}
 };
+/**
+ * STYLEREF header: sets the value of a STYLEREF field of a header/footer for the given page
+ * @param nPageAbs {number}
+ */
+ParaFieldChar.prototype.UpdateStyleRef = function(nPageAbs)
+{
+	let cf = this.ComplexField;
+	let instruction = cf ? cf.GetInstruction() : null;
+	if (!instruction || AscWord.fieldtype_STYLEREF !== instruction.GetType() || !instruction.GetHdrFtrText)
+		return;
+	
+	let text = instruction.GetHdrFtrText(nPageAbs);
+	if (text !== this.numText)
+		this.SetFormulaValue(text);
+};
+ParaFieldChar.prototype.GetStyleRefText = function(nPageAbs)
+{
+	let cf = this.ComplexField;
+	let instruction = cf ? cf.GetInstruction() : null;
+	if (!instruction || AscWord.fieldtype_STYLEREF !== instruction.GetType() || !instruction.GetHdrFtrText)
+		return null;
+	
+	return instruction.GetHdrFtrText(nPageAbs);
+};
 ParaFieldChar.prototype.private_UpdateWidth = function()
 {
 	let totalWidth = 0;
 	
-	if (this.numText)
+	if ("" === this.numText)
+	{
+		// STYLEREF header: an empty value draws nothing
+		this.graphemes = [];
+		this.widths    = [];
+	}
+	else if (this.numText)
 	{
 		AscWord.stringShaper.Shape(this.numText.codePointsArray(), this.textPr);
 		

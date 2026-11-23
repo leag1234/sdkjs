@@ -329,7 +329,7 @@
 	};
 	HdrFtrFieldChecker.prototype.checkFieldType = function(type)
 	{
-		if (AscWord.fieldtype_PAGE === type || AscWord.fieldtype_NUMPAGES === type)
+		if (AscWord.fieldtype_PAGE === type || AscWord.fieldtype_NUMPAGES === type || AscWord.fieldtype_STYLEREF === type)
 		{
 			this.haveField = true;
 			this.stop();

@@ -39,3 +39,11 @@ test('the PDF export applies the hairline fix to SVG pictures', () => {
 	const pdf = fs.readFileSync(path.join(root, 'common/clientpdf/clientpdf.js'), 'utf8');
 	assert.ok(pdf.includes('AscCommon.EoFixSvgHairlines(svgText, { minPx: AscCommon.EoSvgHairlinePxForDpi(300), destWidthPx: w })'));
 });
+
+test('the screen draws SVG pictures in device pixels when not rotated (#61)', () => {
+	const src = fs.readFileSync(path.join(root, 'word/Drawing/Graphics.js'), 'utf8');
+	const helper = src.indexOf('CGraphics.prototype.eoDrawSvgInDevicePixels = function');
+	assert.ok(helper > 0);
+	assert.match(src.slice(helper, helper + 900), /setTransform\(1, 0, 0, 1, 0, 0\)[\s\S]*drawImage\(img, xx, yy, ww, hh\)[\s\S]*setTransform\(_ft\.sx, _ft\.shy, _ft\.shx, _ft\.sy, _ft\.tx, _ft\.ty\)/);
+	assert.match(src, /this\.isVectorImage\(img\) && global_MatrixTransformer\.IsIdentity2\(this\.m_oTransform\) &&\s+this\.eoDrawSvgInDevicePixels\(img, x, y, w, h\)/);
+});

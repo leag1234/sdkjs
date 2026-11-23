@@ -4783,6 +4783,7 @@ ParaRun.prototype.Recalculate_Range = function(PRS, ParaPr, Depth)
 							&& oInstruction
 							&& (AscWord.fieldtype_NUMPAGES === oInstruction.GetType()
 								|| AscWord.fieldtype_PAGE === oInstruction.GetType()
+								|| AscWord.fieldtype_STYLEREF === oInstruction.GetType()
 								|| AscWord.fieldtype_FORMULA === oInstruction.GetType()));
 						
 						Item.SetHiddenValue(isHiddenValue);
@@ -4810,6 +4811,7 @@ ParaRun.prototype.Recalculate_Range = function(PRS, ParaPr, Depth)
 							&& oInstruction
 							&& (AscWord.fieldtype_NUMPAGES === oInstruction.GetType()
 								|| AscWord.fieldtype_PAGE === oInstruction.GetType()
+								|| AscWord.fieldtype_STYLEREF === oInstruction.GetType()
 								|| AscWord.fieldtype_FORMULA === oInstruction.GetType()))
 						{
 							if (AscWord.fieldtype_NUMPAGES === oInstruction.GetType())
@@ -4830,6 +4832,13 @@ ParaRun.prototype.Recalculate_Range = function(PRS, ParaPr, Depth)
 								let sectPr        = logicDocument.GetSections().GetSectPrByIndex(sectInfo.SectIndex);
 								let numFormat     = oInstruction.haveNumericFormat() ? oInstruction.getNumericFormat() : sectPr.GetPageNumFormat();
 								Item.SetNumValue(sectInfo.CurPage, numFormat);
+							}
+							else if (AscWord.fieldtype_STYLEREF === oInstruction.GetType())
+							{
+								// STYLEREF header: value from the body of this page. The header is laid out before the
+								// body of its page, so the value is checked again once the document is laid out.
+								Item.UpdateStyleRef(Para.GetAbsolutePage(PRS.Page));
+								oHdrFtr.Add_StyleRefElement(Item);
 							}
 							else
 							{

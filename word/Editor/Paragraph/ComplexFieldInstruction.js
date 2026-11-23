@@ -1189,6 +1189,96 @@ CFieldInstructionSTYLEREF.prototype.GetText = function()
 	}
     return AscCommon.translateManager.getValue(sDefaultMessage);
 };
+/**
+ * STYLEREF header: in a header or footer Word uses the body of the page: the first paragraph with the style on that
+ * page (the last one with \l), else the last one before the page, else the first one after it.
+ * @param nPageAbs {number}
+ * @returns {string}
+ */
+CFieldInstructionSTYLEREF.prototype.GetHdrFtrText = function(nPageAbs)
+{
+	const sDefaultMessage = "Error! No text of specified style in document.";
+	let logicDocument = this.ParentParagraph ? this.ParentParagraph.GetLogicDocument() : null;
+	if (!logicDocument || !logicDocument.IsDocumentEditor || !logicDocument.IsDocumentEditor())
+		return AscCommon.translateManager.getValue(sDefaultMessage);
+	
+	let fCheckParagraph = this.private_GetHdrFtrChecker(logicDocument);
+	if (!fCheckParagraph)
+		return AscCommon.translateManager.getValue(sDefaultMessage);
+	
+	let oFirst = null, oLast = null, oBefore = null, oAfter = null;
+	let arrParagraphs = logicDocument.GetAllParagraphs({OnlyMainDocument : true, All : true}); // body only, like Word
+	for (let nIndex = 0, nCount = arrParagraphs.length; nIndex < nCount; ++nIndex)
+	{
+		let oParagraph = arrParagraphs[nIndex];
+		if (!fCheckParagraph(oParagraph))
+			continue;
+		
+		// pages where the paragraph really has lines (a paragraph moved to the next page keeps an empty page)
+		let nStart = -1, nEnd = -1;
+		for (let nCurPage = 0, nPages = oParagraph.GetPagesCount(); nCurPage < nPages; ++nCurPage)
+		{
+			if (oParagraph.IsEmptyPage(nCurPage))
+				continue;
+			
+			let nAbs = oParagraph.GetAbsolutePage(nCurPage);
+			if (-1 === nStart)
+				nStart = nAbs;
+			nEnd = nAbs;
+		}
+		if (-1 === nStart)
+			continue;
+		if (nStart <= nPageAbs && nPageAbs <= nEnd)
+		{
+			if (!oFirst)
+				oFirst = oParagraph;
+			oLast = oParagraph;
+		}
+		else if (nEnd < nPageAbs)
+		{
+			oBefore = oParagraph;
+		}
+		else if (!oAfter)
+		{
+			oAfter = oParagraph;
+		}
+	}
+	
+	let oParagraph = (this.L ? oLast : oFirst) || oBefore || oAfter;
+	if (!oParagraph)
+		return AscCommon.translateManager.getValue(sDefaultMessage);
+	
+	if (this.N || this.R || this.W || this.S)
+		return oParagraph.IsNumberedNumbering() ? oParagraph.GetNumberingText(true) : "0";
+	
+	oParagraph.ApplyToAll = true;
+	let sText = oParagraph.GetSelectedText(true, {});
+	oParagraph.ApplyToAll = false;
+	return sText.replace(/[\r\n]+$/, ""); // without the paragraph mark
+};
+CFieldInstructionSTYLEREF.prototype.private_GetHdrFtrChecker = function(logicDocument)
+{
+	if (this.StyleName)
+	{
+		let sStyleId = logicDocument.GetStyles().GetStyleIdByName(this.StyleName);
+		if (sStyleId)
+			return function(oParagraph) { return oParagraph.GetParagraphStyle() === sStyleId; };
+	}
+	else if (this.OutlineLvl !== null)
+	{
+		let nOutlineLvl = this.OutlineLvl - 1;
+		return function(oParagraph) { return oParagraph.GetOutlineLvl() === nOutlineLvl; };
+	}
+	return null;
+};
+/**
+ * STYLEREF header: true when the paragraph can be the source of this field
+ */
+CFieldInstructionSTYLEREF.prototype.IsHdrFtrSource = function(oParagraph, logicDocument)
+{
+	let fCheckParagraph = this.private_GetHdrFtrChecker(logicDocument);
+	return !!(fCheckParagraph && fCheckParagraph(oParagraph));
+};
 CFieldInstructionSTYLEREF.prototype.SetStyleName = function(v)
 {
 	this.StyleName = v;
