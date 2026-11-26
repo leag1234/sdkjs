@@ -1289,6 +1289,22 @@
 			yPos += offset.Y;
 		}
 
+		// On Linux desktop the container offset cached by onResize (FixedPosCheckElementX/Y) can be stale: the word
+		// editor passes "id_main" (native viewer mode) while the caret lives in "id_main_view", which is shifted by the
+		// rulers. The hidden textarea then lands above the caret and the IME candidate window (IBus/Fcitx) covers the
+		// preedit text. Take the offset from the caret's own offset parent instead.
+		if (AscCommon.AscBrowser.isChrome && AscCommon.AscBrowser.isLinuxOS &&
+			this.Api.editorId === AscCommon.c_oEditorId.Document)
+		{
+			var oContainer = oTarget.offsetParent || oTarget.parentNode;
+			if (oContainer)
+			{
+				var oContainerRect = AscCommon.UI.getBoundingClientRect(oContainer);
+				this.FixedPosCheckElementX = oContainerRect.left;
+				this.FixedPosCheckElementY = oContainerRect.top;
+			}
+		}
+
 		this.HtmlDiv.style.left = xPos + this.FixedPosCheckElementX + "px";
 		this.HtmlDiv.style.top  = yPos + this.FixedPosCheckElementY + this.TargetOffsetY + this.HtmlAreaOffset + "px";
 

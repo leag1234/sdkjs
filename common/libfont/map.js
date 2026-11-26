@@ -192,7 +192,7 @@
 		// line breaks and pagination stay those of Word.
 		this.FD_Substitutes = {
 			"Calibri"           : ["Carlito"],
-			"Calibri Light"     : ["Carlito"],
+			"Calibri Light"     : ["Calibri Light Metric", "Carlito"],
 			"Cambria"           : ["Caladea"],
 			// Math text (equations): Caladea has no mathematical alphanumeric glyphs, so letters vanished.
 			"Cambria Math"      : ["STIX Two Math", "DejaVu Math TeX Gyre"],
@@ -208,6 +208,10 @@
 			"Comic Sans MS"     : ["Comic Relief Metric", "Comic Relief", "Comic Neue"],
 			"Arial Black"       : ["Archivo Black Metric", "Archivo Black"],
 			"Segoe UI"          : ["Selawik"],
+			// Segoe UI weights are separate families in Office documents; without these lines they fell to Verdana Metric by panose.
+			"Segoe UI Light"     : ["Selawik Light"],
+			"Segoe UI Semilight" : ["Selawik Semilight"],
+			"Segoe UI Semibold"  : ["Selawik Semibold"],
 			"Book Antiqua"      : ["Palatino Linotype", "Palatino", "P052"],
 			"Palatino Linotype" : ["Palatino", "P052"],
 			"Palatino"          : ["P052"],

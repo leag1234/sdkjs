@@ -260,6 +260,8 @@ function isAllowPasteLink(pastedWb) {
 		this.descender = 0;
 
 		this._heightForPrint = null;
+		this._customHeightForPrint = false;
+		this._autofitForPrint = false;
 	}
 
 	CacheRow.prototype.setHeight = function (val) {
@@ -610,6 +612,14 @@ function isAllowPasteLink(pastedWb) {
 		var tmSpace = this._roundTextMetrics(this.stringRender.measureString(" "));
 		if (tmSpace) {
 			this.defaultSpaceWidth = tmSpace.width;
+		}
+
+		// The default row height stored in the file (sheetFormatPr@defaultRowHeight, not custom) is replaced below by the
+		// height of the Normal font; keep it for the print layout.
+		var allRowStored = this.model.oSheetFormatPr.oAllRow;
+		if (undefined === this.model.storedDefaultRowHeightPt) {
+			this.model.storedDefaultRowHeightPt = (allRowStored && !allRowStored.getCustomHeight() && allRowStored.h > 0) ?
+				allRowStored.h : 0;
 		}
 
 		// ToDo refactoring
@@ -1024,7 +1034,13 @@ function isAllowPasteLink(pastedWb) {
 	};
 
 
+	WorksheetView.prototype.modelColWidthToColWidthForPrint = function (mcw) {
+		var mdw = this.maxDigitWidthForPrint;
+		return Asc.floor(((256 * mcw + Asc.floor(128 / mdw)) / 256) * mdw);
+	};
+
 	WorksheetView.prototype._initWorksheetDefaultWidthForPrint = function () {
+		this._autofitRowsForPrint = null;
 		var defaultPpi = 96;
 		var truePPIX = this.drawingCtx.ppiX;
 		var truePPIY = this.drawingCtx.ppiY;
@@ -1041,17 +1057,59 @@ function isAllowPasteLink(pastedWb) {
 		var defaultColWidthChars = this.model.charCountToModelColWidth(this.model.getBaseColWidth());
 		var defaultColWidthPx = this.model.modelColWidthToColWidth(defaultColWidthChars);
 
-		this.maxDigitWidthForPrint = this.model.workbook.maxDigitWidth;
-		this.defaultColWidthPxForPrint = asc_ceil(defaultColWidthPx / 8) * 8;
+		// Excel lays printed pages out at printer resolution, not at 96 dpi: the maximum digit width is taken from the
+		// default font at a 600 dpi device (em size rounded to whole device pixels, as GDI does) and is not rounded to
+		// whole 96 dpi pixels. Calibri 11 gives 7.5 instead of 7, Arial 10 gives 7.4.
+		var printDpi = 600;
+		var fontSizePt = AscCommonExcel.g_oDefaultFormat.Font.getSize() || 11;
+		printDpi = Math.max(1, Math.round(fontSizePt * printDpi / 72)) * 72 / fontSizePt;
+		var printK = printDpi / defaultPpi;
+		// Keep the caller's pixel ratio: on HiDPI screens needReplacePpi can be false while the ratio is not 1.
+		var savedRetinaPixelRatio = AscBrowser.retinaPixelRatio;
+		this.drawingCtx.ppiY = printDpi;
+		this.drawingCtx.ppiX = printDpi;
+		AscBrowser.retinaPixelRatio = 1;
+		this._setDefaultFont();
+		this.stringRender.measureString("0123456789", new AscCommonExcel.CellFlags());
+		var mdwDev = Asc.round(this.stringRender.getWidestCharWidth());
+		this.drawingCtx.ppiY = defaultPpi;
+		this.drawingCtx.ppiX = defaultPpi;
+		AscBrowser.retinaPixelRatio = savedRetinaPixelRatio;
+		this._setDefaultFont();
+
+		this.maxDigitWidthForPrint = mdwDev > 0 ? mdwDev / printK : this.model.workbook.maxDigitWidth;
+		var printWidthScale = this.maxDigitWidthForPrint / this.model.workbook.maxDigitWidth;
+		this.defaultColWidthPxForPrint = asc_ceil(defaultColWidthPx / 8) * 8 * printWidthScale;
 
 		var defaultColWidth = this.model.getDefaultWidth();
 		if (null !== defaultColWidth) {
-			this.defaultColWidthPxForPrint = this.model.modelColWidthToColWidth(defaultColWidth);
+			this.defaultColWidthPxForPrint = this.modelColWidthToColWidthForPrint(defaultColWidth);
 		}
 
 		var tm = this._roundTextMetrics(this.stringRender.measureString("A"));
 		var headersHeightByFont = tm.height;
-		this.defaultRowHeightForPrintPt = Math.min(Asc.c_oAscMaxRowHeight, this.model.getDefaultHeight() || AscCommonExcel.convertPxToPt(headersHeightByFont));
+		var defaultRowHeightPt = this.model.getDefaultHeight();
+		if (!defaultRowHeightPt) {
+			var storedDefault = this.model.storedDefaultRowHeightPt;
+			var fontDefault = this._calcDefaultRowHeightForPrintPt(fontSizePt);
+			if (!fontDefault) {
+				fontDefault = AscCommonExcel.convertPxToPt(headersHeightByFont);
+			}
+			if (storedDefault > 0) {
+				var storedPt = Math.max(1, Math.ceil(storedDefault * 96 / 72 - 0.01)) * 0.75 * 0.968;
+				defaultRowHeightPt = storedPt > fontDefault + 1.5 ? storedPt : fontDefault;
+			} else {
+				defaultRowHeightPt = fontDefault;
+			}
+		}
+		this.defaultRowHeightForPrintPt = Math.min(Asc.c_oAscMaxRowHeight, defaultRowHeightPt);
+
+		// Excel converts every row height (not only the default one) with the same printer-to-screen ratio: a Calibri 11
+		// sheet prints the default row at 14.52 pt instead of 15 pt and an explicit 22.5 pt row (30 screen pixels) at
+		// 21.78 pt. The ratio is the same for the fonts measured (Calibri 11: 14.52/15 = 0.968, Arial 10: 12.36/12.75 =
+		// 0.969) and does not depend on the default height stored by the authoring application. Measured with Excel 16
+		// on rows of 12.75-30 pt (pitch = whole 96 dpi pixels * 0.726 pt).
+		this.printRowHeightPxPt = this.model.getDefaultHeight() ? 0 : 0.75 * 0.968;
 
 		if (needReplacePpi) {
 			this.drawingCtx.ppiY = truePPIY;
@@ -1059,6 +1117,102 @@ function isAllowPasteLink(pastedWb) {
 			AscBrowser.retinaPixelRatio = retinaPixelRatio;
 			//this.workbook._calcMaxDigitWidth();
 		}
+	};
+
+	// Printed row height in 600 dpi device pixels for fonts whose hinted GDI metrics cannot be derived from the font
+	// tables, indexed by (em size in device pixels - 50), em = 50..233 (about 6 to 28 pt). Measured as GDI text height
+	// (ascent + descent + external leading) plus 8 pixels of padding, which reproduces Excel 16 PDF output exactly.
+	// Liberation fonts are metric compatible with the Microsoft originals.
+	var printRowHeightPx600 = {
+		"sans": [67,68,70,70,71,73,75,75,76,76,77,78,79,81,82,83,84,85,86,87,89,90,91,92,92,93,94,98,98,99,100,102,102,103,105,107,107,108,110,111,110,112,114,115,115,117,118,119,120,122,123,124,126,126,127,129,130,131,132,134,135,135,137,138,140,140,142,143,144,145,146,148,149,149,150,151,153,153,155,156,158,159,159,161,162,163,164,166,168,168,169,170,171,173,174,175,176,178,178,179,181,181,182,183,185,186,187,187,189,190,191,192,193,194,195,197,199,200,201,202,203,204,206,206,207,208,209,210,211,212,215,217,217,218,219,220,220,222,224,225,225,226,227,228,229,231,232,234,234,236,238,239,240,241,242,243,244,244,245,247,249,250,251,252,254,254,256,257,258,258,259,260,262,262,265,266,267,267,268,269,271,274,274,275],
+		"serif": [67,67,70,71,71,72,74,75,77,78,79,80,81,82,84,85,86,87,88,89,91,92,92,94,95,96,97,99,100,101,101,103,105,106,107,109,110,110,112,113,115,115,116,117,119,120,121,122,123,124,126,127,128,129,130,130,134,135,136,136,138,139,140,141,143,144,144,145,146,149,149,150,151,153,153,155,156,157,158,159,161,163,164,165,166,167,168,170,170,172,173,174,174,177,178,179,179,180,182,183,184,183,185,185,187,189,191,191,192,193,194,196,197,198,199,200,201,203,204,205,206,206,206,209,210,210,211,214,215,216,217,219,220,220,221,224,224,225,226,228,228,230,231,233,233,234,236,237,238,240,241,242,244,245,246,247,249,250,250,251,253,255,255,256,258,259,259,261,263,263,264,265,267,268,270,271,273,273,274,276,276,278,279,280],
+		"mono": [61,64,65,66,67,68,68,70,70,71,73,74,75,76,77,78,79,79,81,82,83,84,85,86,87,88,89,89,91,93,93,94,95,96,97,97,101,103,103,104,106,106,107,107,109,110,111,113,114,114,115,117,117,118,118,121,122,122,124,125,125,126,127,128,130,131,132,133,133,135,137,138,139,141,142,143,144,145,146,146,148,148,150,151,152,153,154,155,156,156,157,159,160,161,162,163,164,164,166,167,167,169,171,171,174,174,176,177,177,179,181,181,182,184,184,185,185,187,188,189,191,192,192,193,194,195,196,196,199,200,200,202,202,203,204,205,206,208,211,212,213,213,215,215,216,217,219,220,221,222,223,223,224,226,226,228,229,230,231,231,233,234,234,235,238,238,239,239,241,242,242,244,247,248,249,251,251,252,252,254,255,255,257,259]
+	};
+	var printRowHeightPx600Fonts = {
+		"arial": "sans", "liberation sans": "sans",
+		"times new roman": "serif", "liberation serif": "serif",
+		"courier new": "mono", "liberation mono": "mono"
+	};
+
+	/**
+	 * Default row height (pt) of a printed page as Microsoft Excel lays it out: at a 600 dpi device the font em is
+	 * rounded to whole device pixels, the row is the GDI text height of that font (rounded windows ascent + rounded
+	 * windows descent + external leading, which is the hhea line gap not already covered by the windows metrics)
+	 * plus 8 device pixels of padding. The result is a whole number of device pixels (0.12 pt).
+	 * Calibrated against Excel 16 PDF exports for Calibri, Cambria, Arial, Times New Roman, Tahoma, Georgia,
+	 * Courier New, Consolas and Trebuchet MS (sizes 8 to 20). Arial, Times New Roman and Courier New use the measured
+	 * table above because their GDI metrics are hinted.
+	 * @param {number} fontSizePt
+	 * @param {string} [opt_fontName] default font of the sheet when omitted
+	 * @returns {number} height in points, or 0 when the font has no usable metrics
+	 */
+	WorksheetView.prototype._calcDefaultRowHeightForPrintPt = function (fontSizePt, opt_fontName) {
+		var defaultName = AscCommonExcel.g_oDefaultFormat.Font.getName();
+		var fontName = opt_fontName || defaultName;
+		if (!fontSizePt) {
+			return 0;
+		}
+		var printDpi = 600, padding = 8;
+		var em = Math.floor(fontSizePt * printDpi / 72 + 0.5);
+		var lowerName = fontName ? fontName.toLowerCase() : "";
+		var table = printRowHeightPx600[printRowHeightPx600Fonts[lowerName]];
+		if (table && em >= 50 && em < 50 + table.length) {
+			return table[em - 50] * 72 / printDpi;
+		}
+		// The font tables are only at hand for the default font of the sheet (loaded in the drawing context).
+		if (lowerName !== (defaultName ? defaultName.toLowerCase() : "")) {
+			return 0;
+		}
+		var fm = this.drawingCtx && this.drawingCtx.fmgrGraphics && this.drawingCtx.fmgrGraphics[3];
+		var face = fm && fm.m_pFont && fm.m_pFont.m_pFaceInfo;
+		if (!face || !face.units_per_EM || face.os2_version === 0xFFFF) {
+			return 0;
+		}
+		var upm = face.units_per_EM;
+		var winA = face.os2_usWinAscent, winD = face.os2_usWinDescent;
+		if (!(winA + winD)) {
+			return 0;
+		}
+		var hheaA = face.ascender, hheaD = -face.descender;
+		var hheaGap = Math.max(0, face.height - (hheaA + hheaD));
+		var extLeading = Math.max(0, hheaGap - ((winA + winD) - (hheaA + hheaD)));
+		var px = Math.floor(winA * em / upm + 0.5) + Math.floor(winD * em / upm + 0.5) +
+			Math.floor(extLeading * em / upm + 0.5) + padding;
+		return px * 72 / printDpi;
+	};
+
+	/**
+	 * Printed height (pt) of a row that has no stored height: Excel autofits such a row to the largest font used by
+	 * its non-empty cells (an Arial 10 sheet with a Calibri 11 Normal style prints 12.36 pt rows, not 14.52 pt).
+	 * Computed once per print layout for the whole sheet and cached per font and size. Returns 0 when the row has no
+	 * content or a font whose printed height is not known (the caller then keeps the default row height).
+	 * @param {number} row
+	 * @returns {number}
+	 */
+	WorksheetView.prototype._getAutofitRowHeightForPrintPt = function (row) {
+		var map = this._autofitRowsForPrint;
+		if (!map) {
+			map = this._autofitRowsForPrint = {};
+			var t = this, cache = {};
+			this.model.getRange3(0, 0, gc_nMaxRow - 1, gc_nMaxCol - 1)._foreachNoEmpty(function (cell, r) {
+				if (cell.isNullText() || map[r] === 0) {
+					return;
+				}
+				var xf = cell.getCompiledStyle();
+				var font = xf && xf.font;
+				if (!font) {
+					return;
+				}
+				var key = font.getName() + "|" + font.getSize();
+				var h = cache[key];
+				if (undefined === h) {
+					h = cache[key] = t._calcDefaultRowHeightForPrintPt(font.getSize(), font.getName());
+				}
+				// unknown font height: leave the row on the default height
+				map[r] = h ? Math.max(map[r] || 0, h) : 0;
+			});
+		}
+		return map[row] || 0;
 	};
 
 	WorksheetView.prototype._initRowsCount = function () {
@@ -1501,14 +1655,29 @@ function isAllowPasteLink(pastedWb) {
 		var height;
 		if (i < this.rows.length) {
 			height = this.rows[i]._heightForPrint !== null ? this.rows[i]._heightForPrint : this.defaultRowHeightForPrintPt;
+			if (this.rows[i]._heightForPrint === null && this.rows[i]._autofitForPrint) {
+				// autofit to the cell fonts, but not below the default row height stored in the sheet (rounded up to whole
+				// pixels: 12.5 pt -> 17 px, 14.5 pt -> 20 px, as printed by Excel)
+				var autofitPt = this._getAutofitRowHeightForPrintPt(i);
+				if (autofitPt) {
+					var stored = this.model.storedDefaultRowHeightPt;
+					var storedPt = stored > 0 ? Math.max(1, Math.ceil(stored * 96 / 72 - 0.01)) * 0.75 * 0.968 : 0;
+					// never taller than the default row of the Normal font: the stored default is a screen value of the
+					// authoring machine and may exceed it (13.2 pt stored for an Arial 10 Normal style)
+					height = Math.min(height, Math.max(autofitPt, storedPt));
+				}
+			}
+			if (this.rows[i]._heightForPrint && this.rows[i]._customHeightForPrint && this.printRowHeightPxPt) {
+				// explicit (custom) height: whole screen pixels at the printed size of one pixel row. Automatic rows keep the
+				// stored height (measured: a 47.25 pt wrapped row is printed unscaled).
+				height = Math.max(1, Math.round(height * 96 / 72)) * this.printRowHeightPxPt;
+			}
 		} else {
 			height = (!this.model.isDefaultHeightHidden()) * this.defaultRowHeightForPrintPt;
 		}
 
-		let realretinaPixelRatio = this.getRetinaPixelRatio();
-		AscBrowser.retinaPixelRatio = 1;
-		height = AscCommonExcel.convertPtToPx(height);
-		AscBrowser.retinaPixelRatio = realretinaPixelRatio;
+		// Not truncated to whole 96 dpi pixels: printed rows are laid out at printer resolution (0.12 pt steps at 600 dpi).
+		height = height * 96 / 72;
 		return height * this.getZoom();
 	};
 
@@ -2900,8 +3069,7 @@ function isAllowPasteLink(pastedWb) {
 		if (!w) {
 			this.cols[i]._widthForPrint = 0;
 		} else {
-			this.cols[i]._widthForPrint = isDefaultWidth ? this.defaultColWidthPxForPrint : column && Asc.floor(
-				((256 * column.width + Asc.floor(128 / this.maxDigitWidthForPrint)) / 256) * this.maxDigitWidthForPrint);
+			this.cols[i]._widthForPrint = isDefaultWidth ? this.defaultColWidthPxForPrint : column && this.modelColWidthToColWidthForPrint(column.width);
 		}
 		
 		this.updateColumnsStart = Math.min(i, this.updateColumnsStart);
@@ -2920,7 +3088,7 @@ function isAllowPasteLink(pastedWb) {
 	};
 
 	WorksheetView.prototype._calcHeightRow = function (y, i) {
-		var r, hR;
+		var r, hR, isDefaultForPrint = false, isCustomForPrint = false, hasOwnHeight = false, t = this;
 		this.model._getRowNoEmptyWithAll(i, function (row) {
 			if (!row) {
 				hR = -1; // Будет использоваться дефолтная высота строки
@@ -2930,8 +3098,20 @@ function isAllowPasteLink(pastedWb) {
 				// Берем высоту из модели, если она custom(баг 15618), либо дефолтную
 				if (row.h > 0 && (row.getCustomHeight() || row.getCalcHeight())) {
 					hR = row.h;
+					isCustomForPrint = !!row.getCustomHeight();
+					if (!row.getCustomHeight()) {
+						// Excel does not trust the cached height of an automatic row when printing: a row that only
+						// carries the sheet default height prints with the default row height of the print metrics.
+						var sheetDefault = t.model.oSheetFormatPr.oAllRow ? t.model.oSheetFormatPr.oAllRow.h : 0;
+						isDefaultForPrint = Math.abs(hR - AscCommonExcel.oDefaultMetrics.RowHeight) < 0.2 ||
+							(sheetDefault > 0 && Math.abs(hR - sheetDefault) < 0.01);
+					}
 				} else {
 					hR = -1;
+					// A height that differs from the sheet default was stored by the authoring application (the flag
+					// that marks it as calculated may be missing): such a row is not autofitted for printing.
+					var allRowH = t.model.oSheetFormatPr.oAllRow ? t.model.oSheetFormatPr.oAllRow.h : 0;
+					hasOwnHeight = row.h > 0 && Math.abs(row.h - allRowH) > 0.01;
 				}
 			}
 		});
@@ -2947,7 +3127,9 @@ function isAllowPasteLink(pastedWb) {
 		if (!hR) {
 			r._heightForPrint = 0;
 		} else {
-			r._heightForPrint = isDefaultHeight ? null : hR;
+			r._heightForPrint = (isDefaultHeight || isDefaultForPrint) ? null : hR;
+			r._customHeightForPrint = isCustomForPrint;
+			r._autofitForPrint = isDefaultHeight && !hasOwnHeight && !this.model.getDefaultHeight();
 		}
 		r.descender = this.defaultRowDescender;
 	};
@@ -3200,6 +3382,7 @@ function isAllowPasteLink(pastedWb) {
 	};
 
     WorksheetView.prototype._calcPagesPrint = function(range, pageOptions, indexWorksheet, arrPages, printScale, adjustPrint, bPrintArea, opt_prepareTextMetrics) {
+		this._autofitRowsForPrint = null;
         if (0 > range.r2 || 0 > range.c2) {
 			// Ничего нет
             return;
@@ -4041,6 +4224,60 @@ function isAllowPasteLink(pastedWb) {
 		oRangeSizes.height += 3;
 		return oRangeSizes;
 	};
+	/**
+	 * Printed pages are paginated with the print metrics (_getWidthForPrint/_getHeightForPrint) but the cells are
+	 * positioned from the screen cache. Swap the cache to the print metrics while a page is drawn so that both agree
+	 * (Excel lays out printed pages with the same, printer resolution, metrics).
+	 * @returns {function} restores the screen cache
+	 */
+	WorksheetView.prototype._applyPrintMetricsToCache = function () {
+		var t = this, i, w, h;
+		var saved = {
+			cols: [], rows: [], defaultColWidthPx: this.defaultColWidthPx, defaultRowHeightPx: this.defaultRowHeightPx,
+			updateColumnsStart: this.updateColumnsStart
+		};
+		for (i = 0; i < this.cols.length; ++i) {
+			saved.cols[i] = this.cols[i].width;
+			w = this._getWidthForPrint(i);
+			if (w) {
+				this.cols[i].width = w;
+			}
+		}
+		for (i = 0; i < this.rows.length; ++i) {
+			saved.rows[i] = this.rows[i].height;
+			h = this._getHeightForPrint(i);
+			if (h) {
+				this.rows[i].height = h;
+			}
+		}
+		if (this.defaultColWidthPxForPrint) {
+			this.defaultColWidthPx = this.defaultColWidthPxForPrint;
+		}
+		if (this.defaultRowHeightForPrintPt) {
+			this.defaultRowHeightPx = this.defaultRowHeightForPrintPt * 96 / 72;
+		}
+		this.updateColumnsStart = 0;
+		this._updateColumnPositions();
+		this._updateRowPositions();
+		return function () {
+			for (var i = 0; i < t.cols.length; ++i) {
+				if (undefined !== saved.cols[i]) {
+					t.cols[i].width = saved.cols[i];
+				}
+			}
+			for (i = 0; i < t.rows.length; ++i) {
+				if (undefined !== saved.rows[i]) {
+					t.rows[i].height = saved.rows[i];
+				}
+			}
+			t.defaultColWidthPx = saved.defaultColWidthPx;
+			t.defaultRowHeightPx = saved.defaultRowHeightPx;
+			t.updateColumnsStart = 0;
+			t._updateColumnPositions();
+			t._updateRowPositions();
+		};
+	};
+
 	WorksheetView.prototype.drawForPrint = function (drawingCtx, printPagesData, indexPrintPage, pages) {
 		let t = this;
 		let countPrintPages = pages && pages.length;
@@ -4129,6 +4366,7 @@ function isAllowPasteLink(pastedWb) {
 			this._setDefaultFont(drawingCtx);
 
 			this.usePrintScale = true;
+			let restorePrintMetrics = this._applyPrintMetricsToCache();
 
 			//draw header/footer
 			this.drawHeaderFooter(drawingCtx, printPagesData, indexPrintPage, countPrintPages);
@@ -4419,6 +4657,7 @@ function isAllowPasteLink(pastedWb) {
 			}
 
 			this.usePrintScale = false;
+			restorePrintMetrics();
 
 			if(this.groupWidth || this.groupHeight) {
 				this.ignoreGroupSize = false;
@@ -4644,6 +4883,7 @@ function isAllowPasteLink(pastedWb) {
 	};
 
 	WorksheetView.prototype.calcPrintScale = function(width, height, _selection, ignorePrintArea) {
+		this._autofitRowsForPrint = null;
 		//TODO для печати не нужно учитывать размер группы
 		if(this.groupWidth || this.groupHeight) {
 			this.ignoreGroupSize = true;
@@ -4735,12 +4975,12 @@ function isAllowPasteLink(pastedWb) {
 		let _cellsLeft = this.cellsLeft;
 		let _cellsTop = this.cellsTop;
 
-		//TODO ms считает именно так - каждый раз прибаляются размеры заголовков к полям. необходимо перепроверить!
-		//if (pageHeadings) {
-		// Рисуем заголовки, нужно чуть сдвинуться
-		leftFieldInPx += _cellsLeft;
-		topFieldInPx += _cellsTop;
-		//}
+		//The row/column headings only take space on the page when they are printed (the pagination in
+		//_calcPagesPrint does the same). Reserving them always made the fit-to-page scale 2-7% too small.
+		if (pageHeadings) {
+			leftFieldInPx += _cellsLeft;
+			topFieldInPx += _cellsTop;
+		}
 
 		//TODO при сравнении резальтатов рассчета страниц в зависимости от scale - LO выдаёт похожие результаты, MS - другие. Необходимо пересмотреть!
 		var pageWidthWithFieldsHeadings = ((pageWidth - pageRightField) / vector_koef - leftFieldInPx) /*/ scale*/;
@@ -4856,13 +5096,17 @@ function isAllowPasteLink(pastedWb) {
 
 		//TODO revert old version for standardtester on hotfix
 		//up commented code is true, after release need change
+		//Excel takes the largest whole percent that still fits (never rounds up past the page)
+		var floorScale = function (val) {
+			return Math.floor(val + 1e-6);
+		};
 		var minScale;
 		if(width && height) {
-			minScale = Math.min(Math.round(wScale), Math.round(hScale));
+			minScale = Math.min(floorScale(wScale), floorScale(hScale));
 		} else if(width) {
-			minScale = Math.round(wScale);
+			minScale = floorScale(wScale);
 		} else {
-			minScale = Math.round(hScale);
+			minScale = floorScale(hScale);
 		}
 
 		if(minScale < 10) {
